@@ -1,0 +1,131 @@
+@import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,300..900;1,300..900&family=Geist:wght@100..900&display=swap');
+@import url('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
+@import "tailwindcss";
+
+:root {
+  --color-brand-primary: #0041a7;
+  --color-brand-primary-light: #0055d4;
+  --color-brand-primary-container: #dae2ff;
+  --color-brand-secondary: #725c00;
+  --color-brand-accent: #fdd000;
+  --color-brand-accent-light: #ffe07c;
+  --color-brand-bg: #f7f9fd;
+  --color-brand-card: #ffffff;
+  --color-brand-text: #181c1f;
+  --color-brand-text-variant: #424654;
+  --color-brand-gray-border: #eceef2;
+  --color-brand-gray-hover: #f2f4f8;
+  --shadow-color: rgba(0, 87, 217, 0.04);
+  --shadow-color-hover: rgba(0, 87, 217, 0.08);
+
+  --color-status-success-bg: #ecfdf5;
+  --color-status-success-text: #047857;
+  --color-status-success-border: #d1fae5;
+  
+  --color-status-error-bg: #fef2f2;
+  --color-status-error-text: #b91c1c;
+  --color-status-error-border: #fee2e2;
+
+  --color-status-warning-bg: #fffbeb;
+  --color-status-warning-text: #b45309;
+  --color-status-warning-border: #fef3c7;
+
+  --color-status-info-bg: #eff6ff;
+  --color-status-info-text: #1d4ed8;
+  --color-status-info-border: #dbeafe;
+}
+
+.dark {
+  --color-brand-primary: #3b82f6;
+  --color-brand-primary-light: #60a5fa;
+  --color-brand-primary-container: #1e3a8a;
+  --color-brand-secondary: #fdd000;
+  --color-brand-accent: #fdd000;
+  --color-brand-accent-light: #ffe07c;
+  --color-brand-bg: #0f172a;
+  --color-brand-card: #1e293b;
+  --color-brand-text: #f8fafc;
+  --color-brand-text-variant: #cbd5e1;
+  --color-brand-gray-border: #334155;
+  --color-brand-gray-hover: #1e293b;
+  --shadow-color: rgba(0, 0, 0, 0.3);
+  --shadow-color-hover: rgba(0, 0, 0, 0.5);
+
+  --color-status-success-bg: #064e3b;
+  --color-status-success-text: #34d399;
+  --color-status-success-border: #065f46;
+  
+  --color-status-error-bg: #7f1d1d;
+  --color-status-error-text: #f87171;
+  --color-status-error-border: #991b1b;
+
+  --color-status-warning-bg: #78350f;
+  --color-status-warning-text: #fbbf24;
+  --color-status-warning-border: #92400e;
+
+  --color-status-info-bg: #1e3a8a;
+  --color-status-info-text: #60a5fa;
+  --color-status-info-border: #1e40af;
+}
+
+@theme {
+  --font-sans: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  
+  --color-brand-primary: var(--color-brand-primary);
+  --color-brand-primary-light: var(--color-brand-primary-light);
+  --color-brand-primary-container: var(--color-brand-primary-container);
+  --color-brand-secondary: var(--color-brand-secondary);
+  --color-brand-accent: var(--color-brand-accent);
+  --color-brand-accent-light: var(--color-brand-accent-light);
+  --color-brand-bg: var(--color-brand-bg);
+  --color-brand-card: var(--color-brand-card);
+  --color-brand-text: var(--color-brand-text);
+  --color-brand-text-variant: var(--color-brand-text-variant);
+  --color-brand-gray-border: var(--color-brand-gray-border);
+  --color-brand-gray-hover: var(--color-brand-gray-hover);
+
+  --color-status-success-bg: var(--color-status-success-bg);
+  --color-status-success-text: var(--color-status-success-text);
+  --color-status-success-border: var(--color-status-success-border);
+  
+  --color-status-error-bg: var(--color-status-error-bg);
+  --color-status-error-text: var(--color-status-error-text);
+  --color-status-error-border: var(--color-status-error-border);
+
+  --color-status-warning-bg: var(--color-status-warning-bg);
+  --color-status-warning-text: var(--color-status-warning-text);
+  --color-status-warning-border: var(--color-status-warning-border);
+
+  --color-status-info-bg: var(--color-status-info-bg);
+  --color-status-info-text: var(--color-status-info-text);
+  --color-status-info-border: var(--color-status-info-border);
+  
+  --shadow-ambient: 0 4px 20px -2px var(--shadow-color), 0 2px 6px -1px var(--shadow-color);
+  --shadow-ambient-hover: 0 10px 30px -3px var(--shadow-color-hover), 0 4px 12px -2px var(--shadow-color-hover);
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-brand-bg);
+  color: var(--color-brand-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbars for a premium look */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
