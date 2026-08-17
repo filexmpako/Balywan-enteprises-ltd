@@ -197,9 +197,13 @@ export function classifyServicingRows(
   // Persist classification audit records to IndexedDB. put() by
   // transactionId means re-classifying the same transaction overwrites
   // its prior entry instead of duplicating it — no cap needed.
-  saveClassificationAuditRecords(auditRecords).catch((e) => {
-    console.warn('Could not persist classification audit records:', e);
-  });
+  // Browser only: the offline audit cache. On the server the caller persists
+  // the same records to Postgres (classification_audit_records).
+  if (typeof indexedDB !== 'undefined') {
+    saveClassificationAuditRecords(auditRecords).catch((e) => {
+      console.warn('Could not persist classification audit records:', e);
+    });
+  }
 
   return classified;
 }

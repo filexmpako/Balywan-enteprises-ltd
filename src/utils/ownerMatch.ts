@@ -1,3 +1,4 @@
+import { kvGet, kvSet } from '../lib/hasidadi/kv';
 import { Owner } from '../types';
 import { logNameResolution } from './nameResolutionLog';
 import { invalidateClassificationCache } from './classificationCache';
@@ -100,7 +101,7 @@ export function addNameAlias(ownerId: string, alias: string): void {
   const trimmedAlias = alias.trim();
   if (!trimmedAlias) return;
   try {
-    const saved = localStorage.getItem('ownersList');
+    const saved = kvGet('ownersList');
     if (!saved) return;
     const owners: Owner[] = JSON.parse(saved);
     const updated = owners.map(o => {
@@ -112,7 +113,7 @@ export function addNameAlias(ownerId: string, alias: string): void {
       if (alreadyPresent) return o;
       return { ...o, nameAliases: [...existingAliases, trimmedAlias] };
     });
-    localStorage.setItem('ownersList', JSON.stringify(updated));
+    kvSet('ownersList', JSON.stringify(updated));
     invalidateClassificationCache();
   } catch (e) {
     console.error('Failed to add name alias:', e);
