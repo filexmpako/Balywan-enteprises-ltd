@@ -1630,7 +1630,7 @@ function WakalaManagementSection({
       msisdn: cleanNum,
       region: iopRegion.trim(),
       dateAdded: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-      location: iopLocation || undefined
+      location: (iopLocation as WakalaEntry['location']) || undefined
     };
 
     const updatedIop = [...(localOwner.iopWakalas || []), newWakala];

@@ -433,7 +433,7 @@ export default function PeopleManagementView({
       opts.push({ id: o.id, name: o.name, type: 'Owner' });
     });
     personnel.forEach(p => {
-      opts.push({ id: p.id || p._id, name: p.name, type: 'Personnel' });
+      opts.push({ id: p.id || p._id || '', name: p.name, type: 'Personnel' });
     });
     return opts;
   }, [owners, personnel]);
