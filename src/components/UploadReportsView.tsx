@@ -57,6 +57,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { recalculateAllPerformances, mapTransactions, formatToISODate } from '../utils/mappingEngine';
 import { classifyServicingRows, summarizeClassification } from '../utils/classification';
+import { ingestClassified } from '../lib/ingest';
 import { invalidateClassificationCache } from '../utils/classificationCache';
 import { saveMonthlyServicingData, clearMonthlyServicingData, getServicingRows, getServicingColumns, saveWeeklyServicingData, clearWeeklyServicingData, getWeeklyServicingRows, getWeeklyServicingColumns, saveDailyServicingData, getDailyServicingRows, clearDailyServicingData } from '../utils/indexedDB';
 import { useReportingMetadata } from '../hooks/useReportingMetadata';
@@ -1782,13 +1783,14 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
           await saveDailyServicingData(newServicingRows);
           invalidateClassificationCache();
 
-          // Run Transaction Classification Engine
-          const saTillRegistry = JSON.parse(localStorage.getItem('saTillRegistry') || '[]');
-          const baseWakalaIndex = JSON.parse(localStorage.getItem('baseWakalaIndex') || '[]');
-          const tillsList = JSON.parse(localStorage.getItem('tillsList') || '[]');
-          const ownersList = JSON.parse(localStorage.getItem('ownersList') || '[]');
-          const classified = classifyServicingRows(newServicingRows, saTillRegistry, baseWakalaIndex, tillsList, ownersList);
-          const classSummary = summarizeClassification(classified);
+          // Run Transaction Classification Engine (server-authoritative)
+          const ingestResult = await ingestClassified(newServicingRows, {
+            fileName: selectedFile?.name || 'Daily_MGT_Report.csv',
+            reportType: 'Daily MGT',
+            fileSize: selectedFile?.size,
+            uploadedByName: lastUploadedBy,
+          });
+          const classSummary = ingestResult.summary;
           localStorage.setItem('lastClassificationSummary', JSON.stringify(classSummary));
           setLastClassificationSummary(classSummary);
 

@@ -34,6 +34,7 @@ import {
   recalculateAllPerformances
 } from '../utils/mappingEngine';
 import { classifyServicingRows, summarizeClassification } from '../utils/classification';
+import { ingestClassified } from '../lib/ingest';
 
 interface DailyMgtMappingEngineProps {
   transactions: any[];
@@ -228,13 +229,12 @@ export default function DailyMgtMappingEngine({
 
       await saveDailyServicingData(newServicingRows);
 
-      // Run Transaction Classification Engine
-      const saTillRegistry = JSON.parse(localStorage.getItem('saTillRegistry') || '[]');
-      const baseWakalaIndex = JSON.parse(localStorage.getItem('baseWakalaIndex') || '[]');
-      const tillsList = JSON.parse(localStorage.getItem('tillsList') || '[]');
-      const ownersList = JSON.parse(localStorage.getItem('ownersList') || '[]');
-      const classified = classifyServicingRows(newServicingRows, saTillRegistry, baseWakalaIndex, tillsList, ownersList);
-      const classSummary = summarizeClassification(classified);
+      // Run Transaction Classification Engine (server-authoritative)
+      const ingestResult = await ingestClassified(newServicingRows, {
+        fileName: 'Daily_MGT_Report',
+        reportType: 'Daily MGT',
+      });
+      const classSummary = ingestResult.summary;
       localStorage.setItem('lastClassificationSummary', JSON.stringify(classSummary));
 
       // 2. Save daily summaries to localStorage
