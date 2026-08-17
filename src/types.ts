@@ -190,7 +190,7 @@ export interface Owner {
   lastSyncDate?: string;
   baseWakalas?: WakalaEntry[];
   iopWakalas?: WakalaEntry[];
-  workLocation?: { lat: number; lng: number; address?: string; capturedAt: string };
+  workLocation?: { lat: number; lng: number; address?: string; capturedAt?: string; accuracy?: number };
   workPhotoIds?: string[];
   avatarPhotoId?: string;
   // Daily MGT Metrics
@@ -227,6 +227,8 @@ export interface AuditReport {
 
 export interface Personnel {
   id: string;
+  _id?: string;
+  assignedTill?: string;
   name: string;
   title: string;
   location: string;

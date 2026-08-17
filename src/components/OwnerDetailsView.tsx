@@ -181,7 +181,7 @@ export default function OwnerDetailsView({
     return ownersList;
   }, []);
 
-  const [localOwner, setLocalOwner] = useState<Owner | undefined>(owner);
+  const [localOwner, setLocalOwner] = useState<Owner>(owner as Owner);
   const [activeTab, setActiveTab] = useState<'overview' | 'wakalas' | 'location' | 'float'>('overview');
 
   const [tillsList, setTillsList] = useState<any[]>([]);

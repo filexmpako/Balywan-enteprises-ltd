@@ -364,7 +364,8 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
       });
     } catch (e: any) {
       console.error("Error loading wakala stats:", e);
-      setWakalaStats({
+      setWakalaStats(prev => ({
+        ...prev,
         total: 0,
         active: 0,
         inactive: 0,
@@ -372,7 +373,7 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
         inactivePercent: '0',
         loading: false,
         error: `Error loading wakala data: ${e.message || e}`
-      });
+      }));
     }
   };
 
