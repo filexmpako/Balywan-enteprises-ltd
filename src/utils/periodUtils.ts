@@ -1,3 +1,4 @@
+import { kvGet, kvSet } from '../lib/hasidadi/kv';
 /**
  * Utility functions for parsing, formatting, matching, and auto-deriving reporting periods.
  * Supports ISO format ("YYYY-MM"), full month names ("July 2026"), and short month names ("Jul 2026").
@@ -127,7 +128,7 @@ export function getAvailableReportingPeriods(): string[] {
 
   // 1. agentTargets
   try {
-    const raw = localStorage.getItem('agentTargets');
+    const raw = kvGet('agentTargets');
     if (raw) {
       const list = JSON.parse(raw);
       if (Array.isArray(list)) {
@@ -140,7 +141,7 @@ export function getAvailableReportingPeriods(): string[] {
 
   // 2. manualOwnerTargets
   try {
-    const raw = localStorage.getItem('manualOwnerTargets');
+    const raw = kvGet('manualOwnerTargets');
     if (raw) {
       const list = JSON.parse(raw);
       if (Array.isArray(list)) {
@@ -153,7 +154,7 @@ export function getAvailableReportingPeriods(): string[] {
 
   // 3. kpiWorkbookHistory
   try {
-    const raw = localStorage.getItem('kpiWorkbookHistory');
+    const raw = kvGet('kpiWorkbookHistory');
     if (raw) {
       const list = JSON.parse(raw);
       if (Array.isArray(list)) {
@@ -167,7 +168,7 @@ export function getAvailableReportingPeriods(): string[] {
 
   // 4. monthlyTargetUploads
   try {
-    const raw = localStorage.getItem('monthlyTargetUploads');
+    const raw = kvGet('monthlyTargetUploads');
     if (raw) {
       const list = JSON.parse(raw);
       if (Array.isArray(list)) {

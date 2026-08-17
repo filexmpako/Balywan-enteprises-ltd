@@ -1,3 +1,4 @@
+import { kvGet, kvSet } from '../lib/hasidadi/kv';
 import { ManualOwnerTarget, PriorityWakala } from '../types';
 import { normalizeMsisdn } from './msisdn';
 
@@ -37,7 +38,7 @@ export function isWakalaPriority(
     return Boolean(manualFlags[norm]);
   }
   try {
-    const rawManual = localStorage.getItem('manualPriorityWakalas');
+    const rawManual = kvGet('manualPriorityWakalas');
     if (rawManual) {
       const parsedMap = JSON.parse(rawManual);
       const periodKey = `${norm}_${period}`;
@@ -52,7 +53,7 @@ export function isWakalaPriority(
   let pList = priorityWakalas;
   if (!pList) {
     try {
-      const rawList = localStorage.getItem('priorityWakalaList');
+      const rawList = kvGet('priorityWakalaList');
       if (rawList) {
         pList = JSON.parse(rawList);
       }
@@ -78,7 +79,7 @@ export function isWakalaPriority(
  */
 export function getSavedManualOwnerTargets(): ManualOwnerTarget[] {
   try {
-    const saved = localStorage.getItem('manualOwnerTargets');
+    const saved = kvGet('manualOwnerTargets');
     return saved ? JSON.parse(saved) : [];
   } catch (e) {
     return [];
@@ -103,7 +104,7 @@ export function saveManualOwnerTarget(target: ManualOwnerTarget): ManualOwnerTar
       setAt: new Date().toISOString()
     });
   }
-  localStorage.setItem('manualOwnerTargets', JSON.stringify(current));
+  kvSet('manualOwnerTargets', JSON.stringify(current));
   return current;
 }
 
@@ -125,7 +126,7 @@ export function clearManualOwnerTargetKpi1Override(ownerId: string, period: stri
       current.splice(existingIdx, 1);
     }
   }
-  localStorage.setItem('manualOwnerTargets', JSON.stringify(current));
+  kvSet('manualOwnerTargets', JSON.stringify(current));
   return current;
 }
 
@@ -147,6 +148,6 @@ export function clearManualOwnerTargetKpi2Override(ownerId: string, period: stri
       current.splice(existingIdx, 1);
     }
   }
-  localStorage.setItem('manualOwnerTargets', JSON.stringify(current));
+  kvSet('manualOwnerTargets', JSON.stringify(current));
   return current;
 }
