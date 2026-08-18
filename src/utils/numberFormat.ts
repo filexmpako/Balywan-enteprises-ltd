@@ -8,6 +8,9 @@
  */
 
 export function formatNumberWithAbbreviation(num: number): string {
+  // Tolerate missing/legacy values so a stale cached record can't blank a page.
+  if (num === null || num === undefined || isNaN(Number(num))) return '0';
+  num = Number(num);
   if (num >= 1e9) {
     return `${Number((num / 1e9).toFixed(2))}B`;
   } else if (num >= 1e6) {
