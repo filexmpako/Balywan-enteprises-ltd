@@ -5,6 +5,7 @@ import { buildOwnerWakalaMap } from '../utils/wakalaMapping';
 import { ownersList } from '../data';
 import WorkLocationSection from './WorkLocationSection';
 import TransactionHistorySection from './TransactionHistorySection';
+import OwnerWeeklyCheckpoints from './OwnerWeeklyCheckpoints';
 import { getAvatarUrl } from '../utils/avatar';
 import OwnerAvatar from './OwnerAvatar';
 import { savePhoto, getPhoto, deletePhoto } from '../utils/db';
