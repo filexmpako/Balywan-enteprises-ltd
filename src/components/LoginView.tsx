@@ -27,17 +27,11 @@ export default function LoginView({
   const isFloatManager = portalType === 'float-manager';
   const isOwner = portalType === 'owner';
 
-  const defaultUsername = isFloatManager
-    ? 'floatmanager'
-    : isOwner
-    ? 'owner1'
-    : 'admin';
+  // Only the admin account exists out of the box; owner / float manager
+  // credentials are issued by the admin, so nothing is pre-filled for them.
+  const defaultUsername = isFloatManager || isOwner ? '' : 'admin';
 
-  const defaultPassword = isFloatManager
-    ? 'FloatManagerPassword123!'
-    : isOwner
-    ? 'OwnerPassword123!'
-    : 'AdminPassword123!';
+  const defaultPassword = isFloatManager || isOwner ? '' : 'AdminPassword123!';
 
   const portalHeading = isFloatManager
     ? 'Float Manager Portal'
