@@ -9,6 +9,8 @@ import { getSavedManualOwnerTargets } from '../utils/targetResolution';
 import { isKpi1RowName, isKpi2RowName } from '../utils/kpiRowMatch';
 import { formatNumberWithAbbreviation } from '../utils/numberFormat';
 import { getDailyServicingRows } from '../utils/indexedDB';
+import { refreshWeeklyStatsHistory, readWeeklyStatsHistory } from '../utils/weeklyHistory';
+import { withCumulativeValue, weekNumberOf, paceLabel, type WeeklyStatsEntry } from '../utils/weeklyKpiEngine';
 
 import { 
   Users, 
