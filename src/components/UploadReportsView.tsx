@@ -388,7 +388,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
       const districtKeys = ['district', 'location district', 'region/district'];
       const creationDateKeys = ['creation_date', 'creation date', 'created at', 'date created', 'date'];
       const altNoKeys = ['altern no', 'alternate no', 'alternate phone', 'alt msisdn', 'alternate number', 'altern_no', 'alt phone', 'alternno'];
-      const ownerKeys = ['owner', 'owner name', 'ownername', 'master agent name', 'owner_name'];
+      const ownerKeys = ['owner', 'owner name', 'ownername', 'master agent name', 'master agent', 'owner_name', 'sa owner', 'sa_owner', 'agent owner', 'owner code', 'ownerid', 'owner id'];
 
       const masterOwners = getMasterOwners();
       const existingMsisdnSet = new Set(baseWakalas.map(b => normalizeMsisdn(b.msisdn)));

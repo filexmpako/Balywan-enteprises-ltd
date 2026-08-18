@@ -217,42 +217,40 @@ export default function BaseWakalaIndexView() {
 
       const seenInBatch = new Set<string>();
 
+      // Header lookup is normalized (case/spacing/punctuation-insensitive) so
+      // files with headers like "OWNER", "owner_name" or "Master Agent Name"
+      // still resolve to their owner instead of landing as "Unassigned".
+      const pick = (row: any, aliases: string[]): string => {
+        const norm = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        const wanted = aliases.map(norm);
+        for (const k of Object.keys(row)) {
+          if (wanted.includes(norm(k))) {
+            const val = String(row[k] ?? '').trim();
+            if (val) return val;
+          }
+        }
+        return '';
+      };
+
       jsonRows.forEach((row, idx) => {
-        const rawCode = String(
-          row['Wakala Code'] || row['WakalaCode'] || row['CODE'] || row['Terminal Code'] || row['TerminalCode'] || ''
-        ).trim();
+        const rawCode = pick(row, ['Wakala Code', 'WakalaCode', 'CODE', 'Terminal Code', 'TerminalCode', 'Agent Code']);
 
-        const rawName = String(
-          row['Wakala Name'] || row['WakalaName'] || row['Full_Name'] || row['FULL NAME'] || row['NAME'] || ''
-        ).trim();
+        const rawName = pick(row, ['Wakala Name', 'WakalaName', 'Full_Name', 'Full Name', 'NAME', 'Agent Name']);
 
-        const rawMsisdn = String(
-          row['MSISDN'] || row['Msisdn'] || row['Phone'] || row['Mobile'] || row['Phone Number'] || ''
-        ).trim();
+        const rawMsisdn = pick(row, ['MSISDN', 'Phone', 'Mobile', 'Phone Number', 'Till', 'Till MSISDN']);
 
-        const rawOwnerId = String(
-          row['Owner ID'] || row['OwnerID'] || row['Owner Id'] || ''
-        ).trim();
+        const rawOwnerId = pick(row, ['Owner ID', 'OwnerID', 'Owner Code', 'Master Agent ID', 'MA ID']);
 
-        const rawOwnerName = String(
-          row['Owner Name'] || row['OwnerName'] || row['OWNER NAME'] || row['Owner'] || ''
-        ).trim();
+        const rawOwnerName = pick(row, ['Owner Name', 'Owner', 'OWNER', 'Master Agent Name', 'Master Agent', 'SA Owner', 'Owner_Name']);
 
-        const rawWard = String(
-          row['Ward'] || row['Site Ward'] || row['siteWard'] || row['Seward'] || ''
-        ).trim();
+        const rawWard = pick(row, ['Ward', 'Site Ward', 'siteWard', 'Seward']);
 
-        const rawDistrict = String(
-          row['District'] || row['DISTRICT'] || ''
-        ).trim();
+        const rawDistrict = pick(row, ['District']);
 
-        const rawRegion = String(
-          row['Region'] || row['REGION'] || ''
-        ).trim();
+        const rawRegion = pick(row, ['Region']);
 
-        const rawAltMsisdn = String(
-          row['Alt MSISDN'] || row['AltMSISDN'] || row['Alternate Number'] || row['ALTERN NO'] || row['Alt Phone'] || ''
-        ).trim();
+        const rawAltMsisdn = pick(row, ['Alt MSISDN', 'AltMSISDN', 'Alternate Number', 'ALTERN NO', 'Alt Phone']);
+
 
         const normalizedMsisdn = normalizeMsisdn(rawMsisdn);
         if (!normalizedMsisdn && !rawCode) return; // Skip invalid rows lacking both code & msisdn
