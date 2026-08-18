@@ -66,7 +66,7 @@ export default function KPIExecutiveSummary({ parsedKpis }: KPIExecutiveSummaryP
     let averageCount = 0;
     let criticalCount = 0;
 
-    parsedKpis.forEach(k => {
+    kpis.forEach(k => {
       const p = k.performance;
       sumPerf += p;
 
@@ -79,21 +79,21 @@ export default function KPIExecutiveSummary({ parsedKpis }: KPIExecutiveSummaryP
       totalAchieved += parseVal(k.achieved);
     });
 
-    const overallCompanyPerf = totalTarget > 0 ? (totalAchieved / totalTarget) * 100 : sumPerf / parsedKpis.length;
+    const overallCompanyPerf = totalTarget > 0 ? (totalAchieved / totalTarget) * 100 : sumPerf / kpis.length;
     
     let companyStatus = 'Critical';
     if (overallCompanyPerf >= 95) companyStatus = 'Excellent';
     else if (overallCompanyPerf >= 85) companyStatus = 'Good';
     else if (overallCompanyPerf >= 70) companyStatus = 'Average';
 
-    const sortedKpis = [...parsedKpis].sort((a, b) => b.performance - a.performance);
+    const sortedKpis = [...kpis].sort((a, b) => b.performance - a.performance);
     const highestKpi = sortedKpis[0] || null;
     const lowestKpi = sortedKpis[sortedKpis.length - 1] || null;
 
     return {
       overallCompanyPerf,
       companyStatus,
-      totalKpis: parsedKpis.length,
+      totalKpis: kpis.length,
       excellentCount,
       goodCount,
       averageCount,
@@ -102,7 +102,7 @@ export default function KPIExecutiveSummary({ parsedKpis }: KPIExecutiveSummaryP
       lowestKpi,
       rankedKpis: sortedKpis
     };
-  }, [parsedKpis]);
+  }, [kpis]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -263,7 +263,7 @@ export default function KPIExecutiveSummary({ parsedKpis }: KPIExecutiveSummaryP
         </h4>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {parsedKpis.map(kpi => {
+          {kpis.map(kpi => {
             const calculatedStatus = getKpiStatus(kpi.performance);
             const colors = getStatusColor(calculatedStatus);
             const targetNum = parseVal(kpi.target);
