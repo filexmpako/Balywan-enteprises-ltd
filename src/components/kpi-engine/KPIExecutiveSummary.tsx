@@ -28,9 +28,22 @@ export default function KPIExecutiveSummary({ parsedKpis }: KPIExecutiveSummaryP
     return String(str || '').toUpperCase().includes('TZS') || String(str || '').includes('$');
   };
 
+  // Always derive performance from (achieved / target) * 100 when a target exists,
+  // so the ratio never shows a stale/hardcoded value from the uploaded sheet.
+  const kpis = useMemo(() => {
+    return (parsedKpis || []).map(k => {
+      const targetNum = typeof k.targetVal === 'number' && !isNaN(k.targetVal) ? k.targetVal : parseVal(k.target);
+      const achievedNum = typeof k.achievedVal === 'number' && !isNaN(k.achievedVal) ? k.achievedVal : parseVal(k.achieved);
+      const performance = targetNum > 0
+        ? (achievedNum / targetNum) * 100
+        : (Number(k.performance) || 0);
+      return { ...k, performance };
+    });
+  }, [parsedKpis]);
+
   // Compute stats
   const stats = useMemo(() => {
-    if (!parsedKpis || parsedKpis.length === 0) {
+    if (!kpis || kpis.length === 0) {
       return {
         overallCompanyPerf: 0,
         companyStatus: 'Critical',
