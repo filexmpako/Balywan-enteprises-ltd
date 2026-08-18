@@ -95,8 +95,9 @@ export const ingestServicingRows = createServerFn({ method: 'POST' })
     const summary = engine.summarizeClassification(classified);
 
     const uploadId = `UPL-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    const counts = await persistClassifiedRows(supabase, uploadId, classified as any);
 
+    // The archive row must exist first: transactions and audit records carry an
+    // upload_id foreign key back to it.
     await recordUpload(supabase, {
       uploadId,
       fileName: data.fileName || 'Daily_MGT_Report',
@@ -107,6 +108,9 @@ export const ingestServicingRows = createServerFn({ method: 'POST' })
       uploadedBy: context.userId,
       uploadedByName: data.uploadedByName,
     });
+
+    const counts = await persistClassifiedRows(supabase, uploadId, classified as any);
+
 
     await append(supabase, {
       userId: context.userId,
