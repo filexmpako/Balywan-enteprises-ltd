@@ -295,8 +295,7 @@ export default function PeopleManagementView({
     name: '',
     title: 'Branch Manager',
     location: 'Dar es Salaam',
-    status: 'Active' as Personnel['status'],
-    assignedTill: ''
+    status: 'Active' as Personnel['status']
   });
 
   const startEditOwner = (owner: Owner) => {
@@ -879,7 +878,8 @@ export default function PeopleManagementView({
     name: '',
     title: 'Branch Manager',
     location: 'Dar es Salaam',
-    status: 'Active' as Personnel['status']
+    status: 'Active' as Personnel['status'],
+    assignedTill: ''
   });
 
   const handleAddPersonnelSubmit = (e: React.FormEvent) => {
