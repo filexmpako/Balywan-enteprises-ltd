@@ -60,6 +60,7 @@ import { classifyServicingRows, summarizeClassification } from '../utils/classif
 import { ingestClassified } from '../lib/ingest';
 import { invalidateClassificationCache } from '../utils/classificationCache';
 import { saveMonthlyServicingData, clearMonthlyServicingData, getServicingRows, getServicingColumns, saveWeeklyServicingData, clearWeeklyServicingData, getWeeklyServicingRows, getWeeklyServicingColumns, saveDailyServicingData, getDailyServicingRows, clearDailyServicingData } from '../utils/indexedDB';
+import { persistWeeklyServicing } from '../utils/weeklyStore';
 import { useReportingMetadata } from '../hooks/useReportingMetadata';
 
 // Executive KPI Analysis Engine Modular Subcomponents
