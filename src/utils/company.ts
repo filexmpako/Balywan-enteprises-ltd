@@ -1,4 +1,4 @@
-export const DEFAULT_COMPANY_NAME = "Hasidadi Enterprises";
+export const DEFAULT_COMPANY_NAME = "BALYWAN ENTEPRISES";
 export const COMPANY_NAME_KEY = "companyName";
 
 export function getCompanyName(): string {
