@@ -912,7 +912,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
       {weeklyStats.length > 0 && (() => {
         const series = withCumulativeValue(weeklyStats);
         const latest = series[series.length - 1];
-        const target = monthlyGoal || 0;
+        const target = monthlyGoal?.hasAny ? monthlyGoal.total : 0;
         const progress = target > 0 ? (latest.cumulativeValue / target) * 100 : 0;
         const pace = paceLabel(progress, weekNumberOf(latest.reportingWeek) || series.length);
         const toneClass =
