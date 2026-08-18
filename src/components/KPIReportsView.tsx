@@ -84,17 +84,7 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
     return [];
   });
 
-  const [weeklyWakalaStatsHistory, setWeeklyWakalaStatsHistory] = useState<Array<{
-    reportingWeek: string;
-    uploadedAt: string;
-    total: number;
-    active: number;
-    inactive: number;
-    served: number;
-    notServed: number;
-    servedPercent: string;
-    notServedPercent: string;
-  }>>(() => {
+  const [weeklyWakalaStatsHistory, setWeeklyWakalaStatsHistory] = useState<WeeklyStatsEntry[]>(() => {
     try {
       const saved = localStorage.getItem('weeklyWakalaStatsHistory');
       return saved ? JSON.parse(saved) : [];
