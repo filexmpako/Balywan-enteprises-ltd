@@ -121,6 +121,11 @@ export const COLLECTIONS: CollectionMapper[] = [
       creationDate: 'creation_date',
     },
     makeId: (b) => String(b.msisdn || '').trim(),
+    finalizeRow: (row) => {
+      if (row.owner_id === undefined || row.owner_id === null || String(row.owner_id).trim() === '') {
+        row.owner_id = null;
+      }
+    },
   }),
   define({
     key: 'priorityWakalaList',

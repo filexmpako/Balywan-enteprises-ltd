@@ -48,12 +48,51 @@ export function workspaceToSnapshot(ws: Workspace): KvSnapshot {
   return snapshot;
 }
 
+async function clearUnresolvedBaseWakalaOwners(
+  supabase: DB,
+  rows: Record<string, any>[],
+): Promise<void> {
+  const referencedOwnerIds = Array.from(
+    new Set(
+      rows
+        .map((row) => row.owner_id)
+        .filter((ownerId) => ownerId !== null && ownerId !== undefined && String(ownerId).trim() !== '')
+        .map((ownerId) => String(ownerId).trim()),
+    ),
+  );
+  if (!referencedOwnerIds.length) return;
+
+  const existingOwnerIds = new Set<string>();
+  for (const ownerIds of chunk(referencedOwnerIds, 500)) {
+    const { data, error } = await supabase.from('owners').select('owner_id').in('owner_id', ownerIds);
+    if (error) throw new Error(`owners lookup: ${error.message}`);
+    for (const owner of data ?? []) existingOwnerIds.add(String(owner.owner_id));
+  }
+
+  for (const row of rows) {
+    if (row.owner_id === null || row.owner_id === undefined) continue;
+    const sourceOwnerId = String(row.owner_id).trim();
+    if (existingOwnerIds.has(sourceOwnerId)) continue;
+
+    row.owner_id = null;
+    row.extras = {
+      ...(row.extras && typeof row.extras === 'object' ? row.extras : {}),
+      sourceOwnerId,
+    };
+  }
+}
+
 /** Full replace of a collection (upsert everything, delete what disappeared). */
 export async function saveCollection(supabase: DB, key: string, items: any[]): Promise<number> {
   const mapper = getMapper(key);
   if (!mapper) throw new Error(`Unknown collection: ${key}`);
 
   const rows = items.map((item, index) => toRow(mapper, item, index)).filter((r) => r[mapper.pk]);
+
+  // A Base Wakala file may legitimately arrive before its owner roster. Keep
+  // those rows unassigned instead of violating the FK; owner_name and the
+  // source ID remain available for the later reconciliation pass.
+  if (key === 'baseWakalaIndex') await clearUnresolvedBaseWakalaOwners(supabase, rows);
 
   if (rows.length) {
     const { error } = await supabase.from(mapper.table).upsert(rows, { onConflict: mapper.pk });
