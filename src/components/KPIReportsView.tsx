@@ -17,7 +17,9 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import PageHeaderBanner from './PageHeaderBanner';
-import { getServicingRows, getWeeklyServicingRows } from '../utils/indexedDB';
+import { getServicingRows } from '../utils/indexedDB';
+import { refreshWeeklyStatsHistory } from '../utils/weeklyHistory';
+import type { WeeklyStatsEntry } from '../utils/weeklyKpiEngine';
 import { calculateCompanyKPIs } from '../utils/mappingEngine';
 import { exportKPIAnalysisToPDF } from '../utils/pdfExport';
 import { useReportingPeriod } from './ReportingPeriodContext';
