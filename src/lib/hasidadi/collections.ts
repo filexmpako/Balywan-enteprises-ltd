@@ -288,6 +288,8 @@ export function toRow(mapper: CollectionMapper, obj: any, index: number): Record
     row[mapper.ownerColumn] = obj.ownerId;
   }
 
+  mapper.finalizeRow?.(row, obj);
+
   return row;
 }
 
