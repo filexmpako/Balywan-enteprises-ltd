@@ -46,6 +46,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import PageHeaderBanner from './PageHeaderBanner';
 import { assignTillsToPerson, recalculateAllPerformances } from '../utils/mappingEngine';
+import { normalizeMsisdn } from '../utils/msisdn';
 import OwnerDetailsView from './OwnerDetailsView';
 import DeleteOwnerModal from './DeleteOwnerModal';
 
@@ -817,12 +818,18 @@ export default function PeopleManagementView({
     portfolioGrowth: 'Not yet tracked',
     performance: 88,
     status: 'Active' as Owner['status'],
-    title: 'MFS'
+    title: 'MFS',
+    assignedTillsStr: ''
   });
 
   const handleAddOwnerSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!addOwnerForm.name) return;
+
+    const tillsArr = addOwnerForm.assignedTillsStr
+      .split(/[,\n;]/)
+      .map(t => normalizeMsisdn(t.trim()))
+      .filter(Boolean);
 
     const randomId = `MA-${Math.floor(10000 + Math.random() * 90000)}`;
     const newO: Owner = {
@@ -838,11 +845,18 @@ export default function PeopleManagementView({
       performance: Number(addOwnerForm.performance),
       status: addOwnerForm.status,
       title: addOwnerForm.title,
-      assignedTills: [],
+      assignedTills: tillsArr,
       lastSyncDate: new Date().toLocaleDateString('en-US') + ", " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
     } as any;
 
     setOwners([newO, ...owners]);
+
+    if (tillsArr.length) {
+      assignTillsToPerson(tillsArr.join(', '), newO.name, addOwnerForm.title, addOwnerForm.region);
+      recalculateAllPerformances();
+      window.dispatchEvent(new Event('people-reclassified'));
+    }
+
     setShowAddOwnerModal(false);
     setAddOwnerForm({
       name: '',
@@ -852,7 +866,8 @@ export default function PeopleManagementView({
       portfolioGrowth: 'Not yet tracked',
       performance: 88,
       status: 'Active',
-      title: 'MFS'
+      title: 'MFS',
+      assignedTillsStr: ''
     });
 
     addAuditLog('Synchronization Event', 'K. Kamkg', 'N/A', 'Owner', newO.name, 'Manual Administrator Registry');
@@ -863,15 +878,19 @@ export default function PeopleManagementView({
     name: '',
     title: 'Branch Manager',
     location: 'Dar es Salaam',
-    status: 'Active' as Personnel['status']
+    status: 'Active' as Personnel['status'],
+    assignedTill: ''
   });
 
   const handleAddPersonnelSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!addPersonnelForm.name) return;
 
+    const tillMsisdn = normalizeMsisdn(addPersonnelForm.assignedTill.trim());
+
     const newP: Personnel = {
       id: `personnel-${Date.now()}`,
+      assignedTill: tillMsisdn,
       name: addPersonnelForm.name,
       title: addPersonnelForm.title,
       location: addPersonnelForm.location,
@@ -885,12 +904,19 @@ export default function PeopleManagementView({
     setPersonnel(updatedPersonnel);
     localStorage.setItem('personnelList', JSON.stringify(updatedPersonnel));
 
+    if (tillMsisdn) {
+      assignTillsToPerson(tillMsisdn, newP.name, newP.title, newP.location);
+      recalculateAllPerformances();
+      window.dispatchEvent(new Event('people-reclassified'));
+    }
+
     setShowAddPersonnelModal(false);
     setAddPersonnelForm({
       name: '',
       title: 'Branch Manager',
       location: 'Dar es Salaam',
-      status: 'Active'
+      status: 'Active',
+      assignedTill: ''
     });
 
     addAuditLog('Synchronization Event', 'K. Kamkg', 'N/A', 'Personnel', newP.name, 'Manual Administrator Registry');
@@ -2057,6 +2083,20 @@ export default function PeopleManagementView({
                   />
                 </div>
 
+                <div>
+                  <label className="block text-[10px] uppercase text-slate-400 tracking-wider mb-1">Till No / MSISDN <span className="text-brand-primary">(primary identifier)</span></label>
+                  <input
+                    type="text"
+                    required
+                    inputMode="numeric"
+                    placeholder="e.g., 0712345678, 0765432100"
+                    value={addOwnerForm.assignedTillsStr}
+                    onChange={(e) => setAddOwnerForm({ ...addOwnerForm, assignedTillsStr: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:bg-white focus:border-brand-primary font-mono"
+                  />
+                  <p className="text-[10px] text-slate-400 font-medium mt-1">Separate multiple tills with a comma. Numbers are normalized to 255XXXXXXXXX.</p>
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[10px] uppercase text-slate-400 tracking-wider mb-1">Operational Region</label>
@@ -2192,6 +2232,20 @@ export default function PeopleManagementView({
                     onChange={(e) => setAddPersonnelForm({ ...addPersonnelForm, name: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:bg-white focus:border-brand-primary"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] uppercase text-slate-400 tracking-wider mb-1">Till No / MSISDN <span className="text-brand-primary">(primary identifier)</span></label>
+                  <input
+                    type="text"
+                    required
+                    inputMode="numeric"
+                    placeholder="e.g., 0712345678"
+                    value={addPersonnelForm.assignedTill}
+                    onChange={(e) => setAddPersonnelForm({ ...addPersonnelForm, assignedTill: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none focus:bg-white focus:border-brand-primary font-mono"
+                  />
+                  <p className="text-[10px] text-slate-400 font-medium mt-1">Assigned transaction till. Normalized to 255XXXXXXXXX.</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
