@@ -5,6 +5,7 @@ import { buildOwnerWakalaMap } from '../utils/wakalaMapping';
 import { ownersList } from '../data';
 import WorkLocationSection from './WorkLocationSection';
 import TransactionHistorySection from './TransactionHistorySection';
+import OwnerWeeklyCheckpoints from './OwnerWeeklyCheckpoints';
 import { getAvatarUrl } from '../utils/avatar';
 import OwnerAvatar from './OwnerAvatar';
 import { savePhoto, getPhoto, deletePhoto } from '../utils/db';
@@ -1065,6 +1066,12 @@ export default function OwnerDetailsView({
               </div>
             </div>
           </div>
+
+          {/* Weekly checkpoints for this owner, synced from weekly KPI uploads */}
+          <OwnerWeeklyCheckpoints
+            ownerId={localOwner?.id || ''}
+            monthlyTarget={ownerMtdData.monthlyTarget || 0}
+          />
 
           {/* Collapsible Transaction History Section */}
           <div className="mt-6">

@@ -243,6 +243,7 @@ export const DOCUMENT_KEYS = [
   'kpiValidationWarnings',
   'kpiWorkbookHistory',
   'weeklyKpiHistory',
+  'weeklyWakalaStatsHistory',
   'mgtDailySummariesHistory',
   'latestMgtDailySummary',
   'monthlyTargetUploads',

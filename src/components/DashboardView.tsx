@@ -9,6 +9,8 @@ import { getSavedManualOwnerTargets } from '../utils/targetResolution';
 import { isKpi1RowName, isKpi2RowName } from '../utils/kpiRowMatch';
 import { formatNumberWithAbbreviation } from '../utils/numberFormat';
 import { getDailyServicingRows } from '../utils/indexedDB';
+import { refreshWeeklyStatsHistory, readWeeklyStatsHistory } from '../utils/weeklyHistory';
+import { withCumulativeValue, weekNumberOf, paceLabel, type WeeklyStatsEntry } from '../utils/weeklyKpiEngine';
 
 import { 
   Users, 
@@ -68,6 +70,28 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
     return () => {
       window.removeEventListener('people-reclassified', reloadWarnings);
       window.removeEventListener('storage', reloadWarnings);
+    };
+  }, []);
+
+  // Weekly KPI progression — appended as each new weekly workbook is uploaded.
+  const [weeklyStats, setWeeklyStats] = useState<WeeklyStatsEntry[]>(() => readWeeklyStatsHistory());
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      refreshWeeklyStatsHistory()
+        .then(entries => {
+          if (!cancelled) setWeeklyStats(entries);
+        })
+        .catch(err => console.error('Weekly KPI progression load failed:', err));
+    };
+    load();
+    window.addEventListener('weekly-kpi-updated', load);
+    window.addEventListener('people-reclassified', load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('weekly-kpi-updated', load);
+      window.removeEventListener('people-reclassified', load);
     };
   }, []);
 
@@ -883,6 +907,100 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
           </>
         )}
       </motion.div>
+
+      {/* Weekly KPI Progression — appended per uploaded weekly workbook */}
+      {weeklyStats.length > 0 && (() => {
+        const series = withCumulativeValue(weeklyStats);
+        const latest = series[series.length - 1];
+        const target = monthlyGoal?.hasAny ? monthlyGoal.total : 0;
+        const progress = target > 0 ? (latest.cumulativeValue / target) * 100 : 0;
+        const pace = paceLabel(progress, weekNumberOf(latest.reportingWeek) || series.length);
+        const toneClass =
+          pace.tone === 'ahead'
+            ? 'bg-brand-success-container/40 text-brand-success'
+            : pace.tone === 'ontrack'
+              ? 'bg-brand-primary-container/40 text-brand-primary'
+              : 'bg-brand-error-container/40 text-brand-error';
+
+        return (
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="rounded-2xl border border-brand-gray-border bg-brand-card p-6 shadow-ambient"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-brand-gray-border pb-5">
+              <div>
+                <h3 className="font-sans text-lg font-bold text-brand-text">Weekly KPI Progression</h3>
+                <p className="font-sans text-xs text-brand-text-variant mt-0.5">
+                  Served / unserved wakalas per uploaded week, accumulating toward the monthly KPI 1 target.
+                </p>
+              </div>
+              <span className={`inline-flex items-center rounded-full px-3 py-1 font-sans text-[10px] font-bold tracking-wider ${toneClass}`}>
+                {pace.label}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-5">
+              <div className="rounded-xl bg-brand-gray-hover p-4">
+                <p className="font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Latest Week</p>
+                <p className="font-sans text-xl font-bold text-brand-text mt-1">{latest.reportingWeek}</p>
+              </div>
+              <div className="rounded-xl bg-brand-gray-hover p-4">
+                <p className="font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Served Wakalas</p>
+                <p className="font-sans text-xl font-bold text-brand-success mt-1">
+                  {latest.served} <span className="text-xs text-brand-text-variant">({latest.servedPercent}%)</span>
+                </p>
+              </div>
+              <div className="rounded-xl bg-brand-gray-hover p-4">
+                <p className="font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Unserved Wakalas</p>
+                <p className="font-sans text-xl font-bold text-brand-error mt-1">
+                  {latest.notServed} <span className="text-xs text-brand-text-variant">({latest.notServedPercent}%)</span>
+                </p>
+              </div>
+              <div className="rounded-xl bg-brand-gray-hover p-4">
+                <p className="font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Cumulative vs Target</p>
+                <p className="font-sans text-xl font-bold text-brand-primary mt-1">
+                  {target > 0 ? `${progress.toFixed(1)}%` : '—'}
+                </p>
+                <p className="font-sans text-[10px] text-brand-text-variant mt-0.5">
+                  {formatNumberWithAbbreviation(latest.cumulativeValue)}
+                  {target > 0 ? ` / ${formatNumberWithAbbreviation(target)}` : ''}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 overflow-x-auto">
+              <table className="w-full min-w-[640px] text-left">
+                <thead>
+                  <tr className="border-b border-brand-gray-border">
+                    {['Week', 'Active', 'Inactive', 'Served', 'Unserved', 'Weekly Value', 'Cumulative', 'vs Target'].map(h => (
+                      <th key={h} className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {series.map(entry => (
+                    <tr key={entry.reportingWeek} className="border-b border-brand-gray-border/50">
+                      <td className="py-2.5 font-sans text-xs font-bold text-brand-text">{entry.reportingWeek}</td>
+                      <td className="py-2.5 font-sans text-xs text-brand-text">{entry.active}</td>
+                      <td className="py-2.5 font-sans text-xs text-brand-text">{entry.inactive}</td>
+                      <td className="py-2.5 font-sans text-xs font-bold text-brand-success">{entry.served}</td>
+                      <td className="py-2.5 font-sans text-xs font-bold text-brand-error">{entry.notServed}</td>
+                      <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation(entry.totalValue)}</td>
+                      <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation(entry.cumulativeValue)}</td>
+                      <td className="py-2.5 font-sans text-xs font-bold text-brand-primary">
+                        {target > 0 ? `${((entry.cumulativeValue / target) * 100).toFixed(1)}%` : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </motion.div>
+        );
+      })()}
     </motion.div>
   );
 }

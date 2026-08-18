@@ -283,7 +283,7 @@ export default function PeopleManagementView({
     wakalas: 3,
     portfolioSize: 'TZS 5.0M',
     portfolioGrowth: 'Not yet tracked',
-    performance: 88,
+    performance: 0, // derived live from KPI1 achievement; no seeded score
     status: 'Active' as Owner['status'],
     title: 'MFS',
     assignedTillsStr: ''
@@ -627,7 +627,7 @@ export default function PeopleManagementView({
             wakalas: tillsArr.length,
             portfolioSize: 'TZS 5.0M',
             portfolioGrowth: 'Not yet tracked',
-            performance: 88,
+            performance: 0, // derived live from KPI1 achievement; no seeded score
             status: item.originalObj.status || 'Active',
             title: item.title,
             assignedTills: tillsArr,
@@ -816,7 +816,7 @@ export default function PeopleManagementView({
     wakalas: 3,
     portfolioSize: 'TZS 5.0M',
     portfolioGrowth: 'Not yet tracked',
-    performance: 88,
+    performance: 0, // derived live from KPI1 achievement; no seeded score
     status: 'Active' as Owner['status'],
     title: 'MFS',
     assignedTillsStr: ''
@@ -864,7 +864,7 @@ export default function PeopleManagementView({
       wakalas: 3,
       portfolioSize: 'TZS 5.0M',
       portfolioGrowth: 'Not yet tracked',
-      performance: 88,
+      performance: 0, // derived live from KPI1 achievement; no seeded score
       status: 'Active',
       title: 'MFS',
       assignedTillsStr: ''
