@@ -484,7 +484,7 @@ export default function OwnerSyncDashboard({ onCancel, onAddAuditReport, onSyncC
           wakalas: assignedTills.length,
           portfolioSize: 'TZS 5.0M',
           portfolioGrowth: 'Not yet tracked',
-          performance: 92,
+          performance: 0, // derived live from KPI1 achievement; no seeded score
           status: details.status,
           title: details.title,
           assignedTills: assignedTills,

@@ -60,7 +60,7 @@ export default function OwnersView({ onNavigate, onSelectOwner }: OwnersViewProp
     wakalas: 10,
     portfolioSize: 'TZS 5.0M',
     portfolioGrowth: 'Not yet tracked',
-    performance: 85,
+    performance: 0, // derived live from KPI1 achievement; no seeded score
     status: 'Active' as Owner['status']
   });
 
@@ -113,7 +113,7 @@ export default function OwnersView({ onNavigate, onSelectOwner }: OwnersViewProp
       wakalas: 10,
       portfolioSize: 'TZS 5.0M',
       portfolioGrowth: 'Not yet tracked',
-      performance: 85,
+      performance: 0, // derived live from KPI1 achievement; no seeded score
       status: 'Active'
     });
   };
