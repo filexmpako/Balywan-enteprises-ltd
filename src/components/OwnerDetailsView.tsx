@@ -1066,6 +1066,12 @@ export default function OwnerDetailsView({
             </div>
           </div>
 
+          {/* Weekly checkpoints for this owner, synced from weekly KPI uploads */}
+          <OwnerWeeklyCheckpoints
+            ownerId={localOwner?.id || ''}
+            monthlyTarget={ownerMtdData.monthlyTarget || 0}
+          />
+
           {/* Collapsible Transaction History Section */}
           <div className="mt-6">
             <TransactionHistorySection 
