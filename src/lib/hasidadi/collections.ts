@@ -77,6 +77,14 @@ export const COLLECTIONS: CollectionMapper[] = [
       ownerId: 'owner_id',
     },
     makeId: (t, i) => `till-${String(t.transactionTill || i).trim()}`,
+    finalizeRow: (row, t) => {
+      const blank = (v: any) => v === undefined || v === null || String(v).trim() === '';
+      if (blank(row.owner_id)) row.owner_id = null;
+      if (blank(row.msisdn)) row.msisdn = String(t.transactionTill ?? row.wakala_id ?? '').trim();
+      if (blank(row.name)) row.name = t.tillName || t.name || row.msisdn || 'Unassigned Till';
+      if (blank(row.region)) row.region = t.location || t.region || 'Unknown';
+      if (blank(row.kind)) row.kind = t.kind || 'till';
+    },
   }),
   define({
     key: 'saTillRegistry',
