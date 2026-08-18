@@ -1829,7 +1829,8 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
             uploadedBy: lastUploadedBy,
             date: new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }) + " " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
             size: `${((selectedFile?.size || 45210) / 1024).toFixed(1)} KB`,
-            status: 'Success'
+            status: 'Success',
+            uploadId: ingestResult.uploadId ?? null
           };
           onAddAuditReport(newReport);
 
@@ -2071,7 +2072,9 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
             uploadedBy: lastUploadedBy,
             date: new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }) + " " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
             size: selectedFile?.size !== undefined ? `${(selectedFile.size / 1024).toFixed(1)} KB` : "Unknown",
-            status: 'Success'
+            status: 'Success',
+            reportingWeek: uploadWeek,
+            reportingMonth: uploadMonth
           };
           onAddAuditReport(newReport);
         } else {
@@ -2125,7 +2128,8 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
             uploadedBy: lastUploadedBy,
             date: new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }) + " " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
             size: selectedFile?.size !== undefined ? `${(selectedFile.size / 1024).toFixed(1)} KB` : "Unknown",
-            status: 'Success'
+            status: 'Success',
+            reportingMonth: activeMonth
           };
           onAddAuditReport(newReport);
         }

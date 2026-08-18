@@ -719,3 +719,39 @@ export async function clearClassificationAuditLogs(): Promise<void> {
   });
 }
 
+
+/**
+ * Removes specific daily MGT rows from the offline mirror after their upload
+ * has been purged server-side, so local dashboards stop counting them.
+ */
+export async function deleteDailyServicingRowsByRefs(refs: string[]): Promise<number> {
+  const wanted = new Set((refs || []).map(r => String(r).trim()).filter(Boolean));
+  if (!wanted.size) return 0;
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction([DAILY_ROW_STORE], 'readwrite');
+    const store = transaction.objectStore(DAILY_ROW_STORE);
+    let removed = 0;
+    const request = store.openCursor();
+
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) return;
+      const row: any = cursor.value || {};
+      const ref = String(
+        row['Transaction ID'] ?? row.transactionId ?? row.transaction_ref ?? ''
+      ).trim();
+      if (ref && wanted.has(ref)) {
+        cursor.delete();
+        removed += 1;
+      }
+      cursor.continue();
+    };
+
+    transaction.onerror = () => reject(transaction.error);
+    transaction.oncomplete = () => {
+      window.dispatchEvent(new CustomEvent('servicing-rows-updated'));
+      resolve(removed);
+    };
+  });
+}

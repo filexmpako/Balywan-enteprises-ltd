@@ -29,6 +29,14 @@ import BaseWakalaView from './components/BaseWakalaView';
 import ClassificationAuditLogView from './components/ClassificationAuditLogView';
 import TargetsView from './components/TargetsView';
 import FloatManagerView from './components/FloatManagerView';
+import { deleteUploadedReport } from './lib/uploads.functions';
+import {
+  clearMonthlyServicingData,
+  clearWeeklyServicingData,
+  deleteDailyServicingRowsByRefs,
+} from './utils/indexedDB';
+import { invalidateClassificationCache } from './utils/classificationCache';
+import { refreshWeeklyStatsHistory } from './utils/weeklyHistory';
 
 function AppContent() {
   // Theme state
@@ -95,6 +103,60 @@ function AppContent() {
   const handleAddAuditReport = (newReport: AuditReport) => {
     setReportsList(prev => {
       const updated = [newReport, ...prev];
+      localStorage.setItem('auditHistoryReports', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  /**
+   * Deletes an uploaded report: purges its rows in the database first, then
+   * clears the matching offline mirrors and local archive entries.
+   */
+  const handleDeleteAuditReport = async (report: AuditReport) => {
+    const result = await deleteUploadedReport({
+      data: {
+        uploadId: report.uploadId ?? null,
+        fileName: report.fileName ?? null,
+        reportingWeek: report.reportingWeek ?? null,
+        reportingMonth: report.reportingMonth ?? null,
+        reportType: report.type ?? null,
+      },
+    });
+
+    // Offline mirrors + local archive registries
+    try {
+      if (result?.transactionRefs?.length) {
+        await deleteDailyServicingRowsByRefs(result.transactionRefs);
+      }
+      if (report.reportingWeek) {
+        await clearWeeklyServicingData(report.reportingWeek).catch(() => undefined);
+        const weekly = JSON.parse(localStorage.getItem('weeklyKpiHistory') || '[]');
+        localStorage.setItem(
+          'weeklyKpiHistory',
+          JSON.stringify(weekly.filter((h: any) => h?.reportingWeek !== report.reportingWeek)),
+        );
+        const stats = JSON.parse(localStorage.getItem('weeklyWakalaStatsHistory') || '[]');
+        localStorage.setItem(
+          'weeklyWakalaStatsHistory',
+          JSON.stringify(stats.filter((h: any) => h?.reportingWeek !== report.reportingWeek)),
+        );
+        await refreshWeeklyStatsHistory().catch(() => undefined);
+        window.dispatchEvent(new Event('weekly-kpi-updated'));
+      } else if (report.reportingMonth) {
+        await clearMonthlyServicingData(report.reportingMonth).catch(() => undefined);
+        const monthly = JSON.parse(localStorage.getItem('kpiWorkbookHistory') || '[]');
+        localStorage.setItem(
+          'kpiWorkbookHistory',
+          JSON.stringify(monthly.filter((h: any) => h?.reportingMonth !== report.reportingMonth)),
+        );
+      }
+      invalidateClassificationCache();
+    } catch (e) {
+      console.error('Local cleanup after upload deletion failed:', e);
+    }
+
+    setReportsList(prev => {
+      const updated = prev.filter(r => r.id !== report.id);
       localStorage.setItem('auditHistoryReports', JSON.stringify(updated));
       return updated;
     });
@@ -313,6 +375,7 @@ function AppContent() {
           }}
           reports={reportsList}
           onAddAuditReport={handleAddAuditReport}
+          onDeleteReport={handleDeleteAuditReport}
         />
       );
     } else if (hash === '#/admin/settings') {
