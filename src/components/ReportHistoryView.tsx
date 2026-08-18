@@ -11,7 +11,10 @@ import {
   FileSpreadsheet,
   FileArchive,
   Activity,
-  History
+  History,
+  Trash2,
+  AlertTriangle,
+  Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import PageHeaderBanner from './PageHeaderBanner';
@@ -21,13 +24,32 @@ interface ReportHistoryViewProps {
   onNavigate: (view: ViewType) => void;
   reports: AuditReport[];
   onAddAuditReport: (report: AuditReport) => void;
+  onDeleteReport?: (report: AuditReport) => Promise<void> | void;
 }
 
 export default function ReportHistoryView({
   onNavigate,
   reports,
-  onAddAuditReport
+  onAddAuditReport,
+  onDeleteReport
 }: ReportHistoryViewProps) {
+  const [pendingDelete, setPendingDelete] = useState<AuditReport | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const confirmDelete = async () => {
+    if (!pendingDelete || !onDeleteReport) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await onDeleteReport(pendingDelete);
+      setPendingDelete(null);
+    } catch (e: any) {
+      setDeleteError(e?.message || 'Failed to delete this upload. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
@@ -265,6 +287,7 @@ export default function ReportHistoryView({
                   <th className="px-6 py-4.5">Date & Time</th>
                   <th className="px-6 py-4.5 text-right">Size</th>
                   <th className="px-6 py-4.5">Status</th>
+                  <th className="px-6 py-4.5 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className={`divide-y divide-brand-gray-border transition-all duration-300 ${isRefreshing ? 'opacity-35 pointer-events-none' : 'opacity-100'}`}>
@@ -315,11 +338,24 @@ export default function ReportHistoryView({
                           {rep.status}
                         </span>
                       </td>
+
+                      {/* Destructive purge action */}
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          onClick={() => { setDeleteError(null); setPendingDelete(rep); }}
+                          disabled={!onDeleteReport}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[10px] font-bold text-rose-700 hover:bg-rose-100 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                          title="Delete this upload and remove its data from the database"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Delete
+                        </button>
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center">
+                    <td colSpan={7} className="px-6 py-12 text-center">
                       <div className="flex flex-col items-center justify-center gap-2">
                         <FileText className="h-8 w-8 text-slate-300" />
                         <p className="font-sans text-sm font-semibold text-brand-text-variant">No audit logs found matching your filters.</p>
@@ -369,6 +405,61 @@ export default function ReportHistoryView({
             </div>
           </div>
         </div>
+      {/* Delete confirmation */}
+      <AnimatePresence>
+        {pendingDelete && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-[2px] p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.96, opacity: 0 }}
+              className="w-full max-w-md rounded-2xl bg-white border border-brand-gray-border shadow-xl p-6"
+            >
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 border border-rose-100 shrink-0">
+                  <AlertTriangle className="h-5 w-5 text-rose-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-brand-text">Delete uploaded report?</h3>
+                  <p className="mt-1 text-xs font-medium text-brand-text-variant">
+                    <strong className="text-brand-text">{pendingDelete.fileName}</strong> and all data it
+                    imported will be permanently removed from the database
+                    {pendingDelete.reportingWeek ? ` (week ${pendingDelete.reportingWeek})` : ''}
+                    {!pendingDelete.reportingWeek && pendingDelete.reportingMonth ? ` (${pendingDelete.reportingMonth})` : ''}
+                    . This cannot be undone.
+                  </p>
+                  {deleteError && (
+                    <p className="mt-2 text-xs font-bold text-rose-600">{deleteError}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-5 flex justify-end gap-2.5">
+                <button
+                  onClick={() => setPendingDelete(null)}
+                  disabled={isDeleting}
+                  className="rounded-xl border border-brand-gray-border bg-white px-4 py-2.5 text-xs font-bold text-brand-text hover:bg-brand-gray-hover transition-all cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  disabled={isDeleting}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-rose-700 transition-all cursor-pointer disabled:opacity-60"
+                >
+                  {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  {isDeleting ? 'Deleting…' : 'Delete permanently'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
