@@ -1,9 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { ViewType, KPIMetric, TopOwner, RecentReport, AuditReport } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { ViewType, KPIMetric, TopOwner, RecentReport, AuditReport, Owner, ManualOwnerTarget, PriorityWakala, BaseWakala } from '../types';
 import { dashboardKPIs, topOwners, recentReports } from '../data';
 import { calculateCompanyKPIs, CompanyKPIsResult } from '../utils/mappingEngine';
-import { getCompanyTotalKPI1Target } from '../utils/kpiEngine';
+import { getCompanyTotalKPI1Target, calculateKPI1 } from '../utils/kpiEngine';
+import { calculateKPI2 } from '../utils/kpi2Engine';
+import { getClassifiedRowsCached } from '../utils/classificationCache';
+import { getSavedManualOwnerTargets } from '../utils/targetResolution';
+import { isKpi1RowName, isKpi2RowName } from '../utils/kpiRowMatch';
+import { formatNumberWithAbbreviation } from '../utils/numberFormat';
 import { getDailyServicingRows } from '../utils/indexedDB';
+
 import { 
   Users, 
   UploadCloud, 
@@ -65,7 +71,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
     };
   }, []);
 
-  const [kpis, setKpis] = useState<KPIMetric[]>(() => {
+  const [rawKpis, setRawKpis] = useState<KPIMetric[]>(() => {
     const saved = localStorage.getItem('dashboardKPIs');
     if (saved) {
       try {
@@ -76,6 +82,52 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
     }
     return [];
   });
+
+  // Live engine inputs (same set TargetsView loads) so KPI1/KPI2 summary rows
+  // recompute from accumulated Daily MGT data instead of the frozen upload.
+  const [liveTotals, setLiveTotals] = useState<{
+    kpi1: { target: number; achieved: number } | null;
+    kpi2: { target: number; achieved: number } | null;
+  }>({ kpi1: null, kpi2: null });
+
+  const kpis: KPIMetric[] = useMemo(() => {
+    return rawKpis.map(kpi => {
+      const applyLive = (targetVal: number, achievedVal: number, isCurrency: boolean): KPIMetric => {
+        const realPct = targetVal > 0 ? (achievedVal / targetVal) * 100 : 0;
+        const performance = Math.round(Math.min(realPct, 100) * 10) / 10;
+        return {
+          ...kpi,
+          targetVal,
+          achievedVal,
+          target: isCurrency ? `TZS ${formatNumberWithAbbreviation(targetVal)}` : `${Math.round(targetVal).toLocaleString('en-US')}`,
+          achieved: isCurrency ? `TZS ${formatNumberWithAbbreviation(achievedVal)}` : `${Math.round(achievedVal).toLocaleString('en-US')}`,
+          performance,
+        };
+      };
+
+      if (isKpi1RowName(kpi.name) && liveTotals.kpi1) {
+        return applyLive(liveTotals.kpi1.target, liveTotals.kpi1.achieved, true);
+      }
+      if (isKpi2RowName(kpi.name) && liveTotals.kpi2) {
+        return applyLive(liveTotals.kpi2.target, liveTotals.kpi2.achieved, false);
+      }
+      // Not modelled by any engine in this app — leave exactly as uploaded.
+      return kpi;
+    });
+  }, [rawKpis, liveTotals]);
+
+  const realPerformanceByKpiId = useMemo(() => {
+    const m = new Map<string, number>();
+    rawKpis.forEach(kpi => {
+      const live = isKpi1RowName(kpi.name) ? liveTotals.kpi1 : (isKpi2RowName(kpi.name) ? liveTotals.kpi2 : null);
+      if (live && live.target > 0) {
+        const realPct = (live.achieved / live.target) * 100;
+        if (realPct > 100) m.set(kpi.id, Math.round(realPct * 10) / 10);
+      }
+    });
+    return m;
+  }, [rawKpis, liveTotals]);
+
 
   const computeTopOwnersList = (rows: any[]): TopOwner[] => {
     if (rows && rows.length > 0) {
@@ -231,6 +283,35 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
           } catch (e) {
             console.error('Failed to compute monthly goal:', e);
           }
+
+          // Live KPI1 / KPI2 company-wide totals from accumulated daily data
+          try {
+            const owners: Owner[] = JSON.parse(localStorage.getItem('ownersList') || '[]');
+            const saTillRegistry = JSON.parse(localStorage.getItem('saTillRegistry') || '[]');
+            const tillsList = JSON.parse(localStorage.getItem('tillsList') || '[]');
+            const baseWakalaIndex: BaseWakala[] = JSON.parse(localStorage.getItem('baseWakalaIndex') || '[]');
+            const priorityWakalas: PriorityWakala[] = JSON.parse(localStorage.getItem('priorityWakalaList') || '[]');
+            const manualTargets: ManualOwnerTarget[] = getSavedManualOwnerTargets();
+
+            const classified = getClassifiedRowsCached(rows || [], saTillRegistry, baseWakalaIndex, tillsList, owners);
+
+            const kpi1Results = calculateKPI1(classified, [], owners, currentPeriod, manualTargets);
+            const kpi1Target = kpi1Results.reduce((s, r) => s + (r.hasTarget ? r.monthlyTarget : 0), 0);
+            const kpi1Achieved = kpi1Results.reduce((s, r) => s + r.servedVolume, 0);
+
+            const kpi2Results = calculateKPI2(classified, owners, currentPeriod, manualTargets, priorityWakalas, baseWakalaIndex);
+            const kpi2Target = kpi2Results.reduce((s, r) => s + (r.hasTarget ? r.normalTarget + r.priorityTarget : 0), 0);
+            const kpi2Achieved = kpi2Results.reduce((s, r) => s + (r.hasTarget ? r.normalServed + r.priorityServed : 0), 0);
+
+            if (isMounted) {
+              setLiveTotals({
+                kpi1: kpi1Target > 0 ? { target: kpi1Target, achieved: kpi1Achieved } : null,
+                kpi2: kpi2Target > 0 ? { target: kpi2Target, achieved: kpi2Achieved } : null,
+              });
+            }
+          } catch (e) {
+            console.error('Failed to compute live KPI1/KPI2 totals:', e);
+          }
         }
       }
     };
@@ -243,13 +324,14 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
       const savedKpis = localStorage.getItem('dashboardKPIs');
       if (savedKpis) {
         try {
-          setKpis(JSON.parse(savedKpis));
+          setRawKpis(JSON.parse(savedKpis));
         } catch (e) {
-          setKpis([]);
+          setRawKpis([]);
         }
       } else {
-        setKpis([]);
+        setRawKpis([]);
       }
+
 
       const savedReports = localStorage.getItem('auditHistoryReports');
       if (savedReports) {
@@ -779,7 +861,13 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                         />
                       </div>
                     </div>
-                    <span className="font-mono text-xs font-bold text-brand-text-variant w-8 text-right">{kpi.performance}%</span>
+                    <span className="font-mono text-xs font-bold text-brand-text-variant text-right whitespace-nowrap">
+                      {kpi.performance}%
+                      {realPerformanceByKpiId.has(kpi.id) && (
+                        <span className="ml-1 text-[10px] font-semibold text-brand-primary">(real: {realPerformanceByKpiId.get(kpi.id)}%)</span>
+                      )}
+                    </span>
+
                   </div>
 
                   {/* Status Badge */}

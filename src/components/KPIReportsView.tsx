@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import PageHeaderBanner from './PageHeaderBanner';
-import { getServicingRows } from '../utils/indexedDB';
+import { getServicingRows, getWeeklyServicingRows } from '../utils/indexedDB';
 import { calculateCompanyKPIs } from '../utils/mappingEngine';
 import { exportKPIAnalysisToPDF } from '../utils/pdfExport';
 import { useReportingPeriod } from './ReportingPeriodContext';
@@ -82,7 +82,27 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
     return [];
   });
 
+  const [weeklyWakalaStatsHistory, setWeeklyWakalaStatsHistory] = useState<Array<{
+    reportingWeek: string;
+    uploadedAt: string;
+    total: number;
+    active: number;
+    inactive: number;
+    served: number;
+    notServed: number;
+    servedPercent: string;
+    notServedPercent: string;
+  }>>(() => {
+    try {
+      const saved = localStorage.getItem('weeklyWakalaStatsHistory');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
   const [selectedMetric, setSelectedMetric] = useState<string>('');
+
 
   const handleExportPDF = () => {
     if (kpis.length === 0) return;
@@ -377,9 +397,147 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
     }
   };
 
+  // Weekly equivalent of loadWakalaStats — same rules, weekly data source.
+  const computeWeeklyWakalaStats = async (reportingWeek: string) => {
+    const rows = await getWeeklyServicingRows(reportingWeek);
+    if (!rows || rows.length === 0) return null;
+
+    const isRowStatusActive = (row: any): boolean => {
+      if (!row) return false;
+      const val = row.wakala_status ?? row.Wakala_Status ?? row['Wakala Status'] ?? row['wakala status'] ?? row.status ?? row.Status;
+      if (val === undefined || val === null || val === '') return false;
+      return Number(val) === 1;
+    };
+
+    const hasRowStatusKey = (row: any): boolean => {
+      if (!row) return false;
+      return (
+        'wakala_status' in row ||
+        'Wakala_Status' in row ||
+        'Wakala Status' in row ||
+        'wakala status' in row ||
+        'status' in row ||
+        'Status' in row
+      );
+    };
+
+    const getFieldValue = (row: any, keys: string[]): number => {
+      for (const k of keys) {
+        if (row[k] !== undefined && row[k] !== null) {
+          const val = parseFloat(String(row[k]).replace(/,/g, '').trim());
+          if (!isNaN(val)) return val;
+        }
+      }
+      for (const rowKey of Object.keys(row)) {
+        const normRowKey = rowKey.toLowerCase().replace(/[\s_-]+/g, '');
+        for (const searchKey of keys) {
+          if (normRowKey === searchKey.toLowerCase().replace(/[\s_-]+/g, '')) {
+            const val = parseFloat(String(row[rowKey]).replace(/,/g, '').trim());
+            if (!isNaN(val)) return val;
+          }
+        }
+      }
+      return 0;
+    };
+
+    const wakalaMap = new Map<string, { txns: number; val: number; isActiveStatus: boolean; hasStatusCol: boolean }>();
+
+    rows.forEach((row: any) => {
+      const msisdn = String(row.MSISDN || row.msisdn || row.phone || row.Phone || '').trim();
+      if (!msisdn) return;
+      const txns = getFieldValue(row, ['SA_Servicing_Txns', 'SA Servicing Txns', 'sa_servicing_txns']);
+      const val = getFieldValue(row, ['SA_Servicing_Val', 'SA Servicing Val', 'sa_servicing_val']);
+      const rowActive = isRowStatusActive(row);
+      const rowHasStatus = hasRowStatusKey(row);
+
+      const existing = wakalaMap.get(msisdn);
+      if (existing) {
+        existing.txns += txns;
+        existing.val += val;
+        if (rowActive) existing.isActiveStatus = true;
+        if (rowHasStatus) existing.hasStatusCol = true;
+      } else {
+        wakalaMap.set(msisdn, { txns, val, isActiveStatus: rowActive, hasStatusCol: rowHasStatus });
+      }
+    });
+
+    let activeCount = 0;
+    let servedCount = 0;
+    let datasetHasStatusCol = false;
+
+    wakalaMap.forEach(({ txns, val, isActiveStatus, hasStatusCol }) => {
+      if (hasStatusCol) datasetHasStatusCol = true;
+      const isServedWakala = isActiveStatus ? (txns > 6 || val > 600000) : (txns > 6);
+      if (isActiveStatus) activeCount++;
+      if (isServedWakala) servedCount++;
+    });
+
+    if (!datasetHasStatusCol && activeCount === 0) {
+      activeCount = servedCount;
+    }
+
+    const totalCount = wakalaMap.size;
+    const denom = totalCount || 1;
+    const served = servedCount;
+    const notServed = totalCount - served;
+
+    return {
+      total: totalCount,
+      active: activeCount,
+      inactive: totalCount - activeCount,
+      served,
+      notServed,
+      servedPercent: ((served / denom) * 100).toFixed(1),
+      notServedPercent: ((notServed / denom) * 100).toFixed(1),
+    };
+  };
+
+  const loadWeeklyWakalaStats = async () => {
+    try {
+      const savedWeekly = localStorage.getItem('weeklyKpiHistory');
+      const history: any[] = savedWeekly ? JSON.parse(savedWeekly) : [];
+      if (!Array.isArray(history) || history.length === 0) {
+        setWeeklyWakalaStatsHistory([]);
+        localStorage.setItem('weeklyWakalaStatsHistory', JSON.stringify([]));
+        return;
+      }
+
+      let cached: any[] = [];
+      try {
+        cached = JSON.parse(localStorage.getItem('weeklyWakalaStatsHistory') || '[]');
+      } catch (e) {
+        cached = [];
+      }
+
+      const entries: any[] = [];
+      for (const h of history) {
+        const week = h?.reportingWeek;
+        if (!week) continue;
+        const uploadedAt = h.uploadDate || '';
+        const existing = cached.find((c: any) => c.reportingWeek === week && c.uploadedAt === uploadedAt);
+        if (existing) {
+          entries.push(existing);
+          continue;
+        }
+        const stats = await computeWeeklyWakalaStats(week);
+        if (stats) entries.push({ reportingWeek: week, uploadedAt, ...stats });
+      }
+
+      const weekNum = (w: string) => parseInt(String(w).match(/(\d+)/)?.[1] || '0', 10);
+      entries.sort((a, b) => weekNum(a.reportingWeek) - weekNum(b.reportingWeek));
+
+      setWeeklyWakalaStatsHistory(entries);
+      localStorage.setItem('weeklyWakalaStatsHistory', JSON.stringify(entries));
+    } catch (e) {
+      console.error('Error loading weekly wakala stats:', e);
+    }
+  };
+
   useEffect(() => {
     loadWakalaStats();
+    loadWeeklyWakalaStats();
   }, []);
+
 
   useEffect(() => {
     const handleUpdate = () => {
@@ -406,6 +564,8 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
       }
 
       loadWakalaStats();
+      loadWeeklyWakalaStats();
+
     };
     window.addEventListener('servicing-rows-updated', handleUpdate);
     window.addEventListener('weekly-kpi-updated', handleUpdate);
@@ -784,6 +944,63 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
                 </div>
               </div>
             </div>
+
+            {/* GROUP 2B: Weekly Wakala Stats Trend (Served / Unserved per uploaded week) */}
+            <div className="p-4 sm:p-5 bg-brand-card rounded-2xl border border-brand-gray-border/80 shadow-ambient">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-brand-text uppercase tracking-wide">
+                    Weekly Wakala Stats
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/70">
+                    Same Company Rule, Weekly Data
+                  </span>
+                </div>
+                <span className="text-[11px] text-brand-text-variant font-medium hidden sm:inline">
+                  {weeklyWakalaStatsHistory.length} week{weeklyWakalaStatsHistory.length === 1 ? '' : 's'} tracked
+                </span>
+              </div>
+
+              {weeklyWakalaStatsHistory.length === 0 ? (
+                <div className="text-[11px] font-medium text-brand-text-variant bg-brand-gray-hover/40 p-3 rounded-lg border border-brand-gray-border/50">
+                  No weekly KPI data uploaded yet. Upload a Weekly KPI workbook to start building the served/unserved trend.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {weeklyWakalaStatsHistory.map(w => (
+                    <div key={`${w.reportingWeek}-${w.uploadedAt}`} className="rounded-xl border border-brand-gray-border/60 bg-brand-gray-hover/20 p-3">
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <span className="text-xs font-bold text-brand-text">{w.reportingWeek}</span>
+                        <span className="font-mono text-[11px] font-bold text-indigo-600">{w.servedPercent}% served</span>
+                      </div>
+                      <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full bg-indigo-600" style={{ width: `${w.servedPercent}%` }} />
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                        <div className="flex justify-between sm:block">
+                          <span className="font-semibold text-brand-text-variant">Total</span>
+                          <span className="sm:block font-mono font-bold text-brand-text">{w.total}</span>
+                        </div>
+                        <div className="flex justify-between sm:block">
+                          <span className="font-semibold text-brand-text-variant">Active</span>
+                          <span className="sm:block font-mono font-bold text-emerald-600">{w.active}</span>
+                        </div>
+                        <div className="flex justify-between sm:block">
+                          <span className="font-semibold text-brand-text-variant">Served</span>
+                          <span className="sm:block font-mono font-bold text-indigo-600">{w.served}</span>
+                        </div>
+                        <div className="flex justify-between sm:block">
+                          <span className="font-semibold text-brand-text-variant">Not Served</span>
+                          <span className="sm:block font-mono font-bold text-amber-600">{w.notServed} <span className="text-[10px]">({w.notServedPercent}%)</span></span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+
 
             {/* GROUP 3: Cross-Tabulation Wakala Operational Matrix */}
             {wakalaStats && !wakalaStats.error && (
