@@ -1230,7 +1230,7 @@ export type Database = {
           location_captured_at: string | null
           msisdn: string
           name: string
-          owner_id: string
+          owner_id: string | null
           owner_match_status: string | null
           photo_id: string | null
           region: string
@@ -1254,7 +1254,7 @@ export type Database = {
           location_captured_at?: string | null
           msisdn: string
           name: string
-          owner_id: string
+          owner_id?: string | null
           owner_match_status?: string | null
           photo_id?: string | null
           region?: string
@@ -1278,7 +1278,7 @@ export type Database = {
           location_captured_at?: string | null
           msisdn?: string
           name?: string
-          owner_id?: string
+          owner_id?: string | null
           owner_match_status?: string | null
           photo_id?: string | null
           region?: string

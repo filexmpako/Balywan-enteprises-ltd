@@ -20,6 +20,8 @@ export interface CollectionMapper {
   extrasColumn?: string;
   /** derive the pk value when the object has no natural id */
   makeId?: (obj: any, index: number) => string;
+  /** last chance to fill NOT NULL columns / normalise blanks before upsert */
+  finalizeRow?: (row: Record<string, any>, obj: any) => void;
 }
 
 const define = (m: CollectionMapper) => m;
@@ -75,6 +77,14 @@ export const COLLECTIONS: CollectionMapper[] = [
       ownerId: 'owner_id',
     },
     makeId: (t, i) => `till-${String(t.transactionTill || i).trim()}`,
+    finalizeRow: (row, t) => {
+      const blank = (v: any) => v === undefined || v === null || String(v).trim() === '';
+      if (blank(row.owner_id)) row.owner_id = null;
+      if (blank(row.msisdn)) row.msisdn = String(t.transactionTill ?? row.wakala_id ?? '').trim();
+      if (blank(row.name)) row.name = t.tillName || t.name || row.msisdn || 'Unassigned Till';
+      if (blank(row.region)) row.region = t.location || t.region || 'Unknown';
+      if (blank(row.kind)) row.kind = t.kind || 'till';
+    },
   }),
   define({
     key: 'saTillRegistry',
@@ -277,6 +287,8 @@ export function toRow(mapper: CollectionMapper, obj: any, index: number): Record
   if (mapper.ownerColumn && row[mapper.ownerColumn] === undefined && obj.ownerId) {
     row[mapper.ownerColumn] = obj.ownerId;
   }
+
+  mapper.finalizeRow?.(row, obj);
 
   return row;
 }
