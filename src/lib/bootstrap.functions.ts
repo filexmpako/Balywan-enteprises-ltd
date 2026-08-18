@@ -4,10 +4,17 @@ import { createServerFn } from '@tanstack/react-start';
  * First-run provisioning. Callable without a session, but it is a hard no-op
  * once any profile exists, so it can never be used to mint extra accounts.
  */
-const SEED_ACCOUNTS = [
+const SEED_ACCOUNTS: Array<{
+  username: string;
+  email: string;
+  name: string;
+  role: string;
+  password: string;
+  ownerId?: string;
+}> = [
+  // Only the admin account is provisioned automatically. Every other account
+  // (owners, float managers, personnel) must be created by the admin.
   { username: 'admin', email: 'admin@hasidadi.com', name: 'Executive Admin', role: 'admin', password: 'AdminPassword123!' },
-  { username: 'owner1', email: 'owner@hasidadi.com', name: 'Wakala Agent Owner', role: 'owner', password: 'OwnerPassword123!', ownerId: 'owner-1' },
-  { username: 'floatmanager', email: 'floatmanager@hasidadi.com', name: 'Float Operations Manager', role: 'float_manager', password: 'FloatManagerPassword123!' },
 ];
 
 export const bootstrapSeedAccounts = createServerFn({ method: 'POST' }).handler(async () => {
