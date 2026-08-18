@@ -2018,16 +2018,21 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
         });
 
         if (isWeekly) {
-          // TASK A3: Clear previous weekly servicing data for this week before saving new data
+          // Postgres is the system of record for weekly data; IndexedDB keeps
+          // an offline mirror. Replaces the week so re-uploads stay idempotent.
           clearWeeklyServicingData(uploadWeek)
-            .then(() => saveWeeklyServicingData(uploadWeek, uploadMonth, parsedServicing, servicingColumns))
-            .then(() => {
+            .catch(() => undefined)
+            .then(() => persistWeeklyServicing(uploadWeek, uploadMonth, parsedServicing, servicingColumns))
+            .then((res) => {
               invalidateClassificationCache();
-              console.log(`Successfully persisted ${parsedServicing.length} weekly servicing records to WakalaServicingDB for ${uploadWeek}`);
+              window.dispatchEvent(new Event('weekly-kpi-updated'));
+              console.log(
+                `Persisted ${res.saved} weekly servicing records for ${uploadWeek} (${res.cloud ? 'cloud + offline mirror' : 'offline mirror only'})`
+              );
             })
             .catch(err => {
-              console.error("Critical IndexedDB weekly write failure:", err);
-              alert(`Weekly IndexedDB write failure: ${err.message || err}`);
+              console.error("Critical weekly write failure:", err);
+              alert(`Weekly report write failure: ${err.message || err}`);
             });
 
           // Save history in localStorage (weeklyKpiHistory)
