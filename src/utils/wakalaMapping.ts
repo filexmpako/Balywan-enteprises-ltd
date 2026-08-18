@@ -34,8 +34,16 @@ export function buildOwnerWakalaMap(baseWakalas: BaseWakala[], owners: Owner[]):
   const unmatched: BaseWakala[] = [];
   const unassigned: BaseWakala[] = [];
 
+  const ownersById = new Map(owners.filter(o => o && o.id).map(o => [String(o.id).trim().toLowerCase(), o]));
+
   for (const record of baseWakalas) {
-    const result = resolveOwnerMatch(record.ownerName, owners);
+    // An owner ID carried by the wakala file wins — it survives name spelling
+    // differences and works when the owner roster is uploaded later.
+    const directOwner = record.ownerId ? ownersById.get(String(record.ownerId).trim().toLowerCase()) : undefined;
+    const result = directOwner
+      ? { status: 'Matched' as const, matchedOwner: directOwner }
+      : resolveOwnerMatch(record.ownerName, owners);
+
 
     if (result.status === 'Matched' && result.matchedOwner && result.matchedOwner.id) {
       const entry = toWakalaEntry(record);
