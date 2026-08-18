@@ -20,6 +20,8 @@ export interface CollectionMapper {
   extrasColumn?: string;
   /** derive the pk value when the object has no natural id */
   makeId?: (obj: any, index: number) => string;
+  /** last chance to fill NOT NULL columns / normalise blanks before upsert */
+  finalizeRow?: (row: Record<string, any>, obj: any) => void;
 }
 
 const define = (m: CollectionMapper) => m;
