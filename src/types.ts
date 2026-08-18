@@ -223,7 +223,12 @@ export interface AuditReport {
   date: string;
   size: string;
   status: 'Success' | 'Processing' | 'Failed' | 'Success (Partial)';
+  /** Purge metadata: lets the admin delete the upload and its database rows. */
+  uploadId?: string | null;
+  reportingWeek?: string;
+  reportingMonth?: string;
 }
+
 
 export interface Personnel {
   id: string;
