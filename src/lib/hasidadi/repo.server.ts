@@ -94,22 +94,28 @@ export async function saveCollection(supabase: DB, key: string, items: any[]): P
   // source ID remain available for the later reconciliation pass.
   if (key === 'baseWakalaIndex') await clearUnresolvedBaseWakalaOwners(supabase, rows);
 
-  if (rows.length) {
-    const { error } = await supabase.from(mapper.table).upsert(rows, { onConflict: mapper.pk });
+  for (const batch of chunk(rows, 500)) {
+    const { error } = await supabase.from(mapper.table).upsert(batch, { onConflict: mapper.pk });
     if (error) throw new Error(`${mapper.table} upsert: ${error.message}`);
   }
 
-  const keepIds = rows.map((r) => String(r[mapper.pk]));
-  let del = supabase.from(mapper.table).delete();
-  if (keepIds.length) {
-    del = del.not(mapper.pk, 'in', `(${keepIds.map((id) => `"${id.replace(/"/g, '')}"`).join(',')})`);
-  } else {
-    del = del.not(mapper.pk, 'is', null);
+  // Prune by diffing existing PKs instead of sending one giant NOT IN filter
+  // (that overflows the request URL and fails with an empty error message).
+  const keepIds = new Set(rows.map((r) => String(r[mapper.pk])));
+  const { data: existing, error: listError } = await supabase.from(mapper.table).select(mapper.pk);
+  if (listError) throw new Error(`${mapper.table} list: ${listError.message}`);
+
+  const staleIds = (existing ?? [])
+    .map((r: any) => String(r[mapper.pk]))
+    .filter((id) => !keepIds.has(id));
+
+  for (const batch of chunk(staleIds, 200)) {
+    const { error: delError } = await supabase.from(mapper.table).delete().in(mapper.pk, batch);
+    if (delError) throw new Error(`${mapper.table} prune: ${delError.message}`);
   }
-  const { error: delError } = await del;
-  if (delError) throw new Error(`${mapper.table} prune: ${delError.message}`);
 
   return rows.length;
+
 }
 
 export async function saveDocument(supabase: DB, key: string, value: any, userId?: string) {
