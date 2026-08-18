@@ -19,10 +19,29 @@ import {
 
 export const WEEKLY_STATS_KEY = 'weeklyWakalaStatsHistory';
 
+/** Entries cached before the engine gained value/txn/owner fields lack them. */
+function normalizeEntry(e: any): WeeklyStatsEntry {
+  return {
+    reportingWeek: e?.reportingWeek || '',
+    uploadedAt: e?.uploadedAt || '',
+    total: Number(e?.total) || 0,
+    active: Number(e?.active) || 0,
+    inactive: Number(e?.inactive) || 0,
+    served: Number(e?.served) || 0,
+    notServed: Number(e?.notServed) || 0,
+    servedPercent: e?.servedPercent ?? '0.0',
+    notServedPercent: e?.notServedPercent ?? '0.0',
+    totalValue: Number(e?.totalValue) || 0,
+    totalTxns: Number(e?.totalTxns) || 0,
+    byOwner: Array.isArray(e?.byOwner) ? e.byOwner : [],
+  };
+}
+
 export function readWeeklyStatsHistory(): WeeklyStatsEntry[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(WEEKLY_STATS_KEY) || '[]');
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(e => e && e.reportingWeek).map(normalizeEntry);
   } catch {
     return [];
   }
