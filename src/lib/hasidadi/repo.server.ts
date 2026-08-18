@@ -235,12 +235,13 @@ export async function recordUpload(
       upload_id: upload.uploadId,
       file_name: upload.fileName,
       report_type: upload.reportType,
-      file_size: upload.fileSize ?? null,
+      file_size: upload.fileSize ?? 0,
       status: 'Success',
       import_summary: upload.summary ?? null,
       reporting_period: new Date().toISOString().slice(0, 7),
       uploaded_by: upload.uploadedBy ?? null,
-      uploaded_by_name: upload.uploadedByName ?? null,
+      uploaded_by_name: upload.uploadedByName ?? 'System',
+
     },
     { onConflict: 'upload_id' },
   );
