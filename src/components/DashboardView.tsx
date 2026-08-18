@@ -73,6 +73,28 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
     };
   }, []);
 
+  // Weekly KPI progression — appended as each new weekly workbook is uploaded.
+  const [weeklyStats, setWeeklyStats] = useState<WeeklyStatsEntry[]>(() => readWeeklyStatsHistory());
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      refreshWeeklyStatsHistory()
+        .then(entries => {
+          if (!cancelled) setWeeklyStats(entries);
+        })
+        .catch(err => console.error('Weekly KPI progression load failed:', err));
+    };
+    load();
+    window.addEventListener('weekly-kpi-updated', load);
+    window.addEventListener('people-reclassified', load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('weekly-kpi-updated', load);
+      window.removeEventListener('people-reclassified', load);
+    };
+  }, []);
+
   const [rawKpis, setRawKpis] = useState<KPIMetric[]>(() => {
     const saved = localStorage.getItem('dashboardKPIs');
     if (saved) {
