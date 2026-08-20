@@ -212,7 +212,7 @@ export function computeWeeklyStats(
     // Weekly served/unserved comes straight from the uploaded servicing_status
     // column — no computed threshold. Missing values are excluded, never
     // counted as unserved.
-    const isServedWakala = servedStatus === true;
+    if (isActiveStatus) activeCount++;
     if (isActiveStatus) activeCount++;
     if (servedStatus === true) servedCount++;
     else if (servedStatus === false) notServedCount++;
