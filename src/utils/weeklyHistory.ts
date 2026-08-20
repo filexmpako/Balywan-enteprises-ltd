@@ -29,6 +29,7 @@ function normalizeEntry(e: any): WeeklyStatsEntry {
     inactive: Number(e?.inactive) || 0,
     served: Number(e?.served) || 0,
     notServed: Number(e?.notServed) || 0,
+    noStatus: Number(e?.noStatus) || 0,
     servedPercent: e?.servedPercent ?? '0.0',
     notServedPercent: e?.notServedPercent ?? '0.0',
     totalValue: Number(e?.totalValue) || 0,

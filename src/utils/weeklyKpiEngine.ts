@@ -213,7 +213,6 @@ export function computeWeeklyStats(
     // column — no computed threshold. Missing values are excluded, never
     // counted as unserved.
     if (isActiveStatus) activeCount++;
-    if (isActiveStatus) activeCount++;
     if (servedStatus === true) servedCount++;
     else if (servedStatus === false) notServedCount++;
     else noStatusCount++;
