@@ -9,6 +9,9 @@ import {
 import { calculateKPI1, KPI1Result, getCompanyTotalKPI1Target } from '../utils/kpiEngine';
 import { calculateKPI2, KPI2Result } from '../utils/kpi2Engine';
 import { getDailyServicingRows } from '../utils/indexedDB';
+import { loadAllWeeklyRows } from '../utils/weeklyStore';
+import { getServicedStatusFromColumn, mergeServicedStatus } from '../utils/servicingStatus';
+import { normalizeMsisdn } from '../utils/msisdn';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
 import { Target, X, ArrowLeft, Loader2, SlidersHorizontal, MoreVertical } from 'lucide-react';
 import PageHeaderBanner from './PageHeaderBanner';
@@ -107,13 +110,43 @@ export default function TargetsView() {
     return () => { isMounted = false; };
   }, [loadStaticData]);
 
+  // Weekly servicing rows for the selected month. Where a wakala has a weekly
+  // row, its uploaded servicing_status is the authoritative served answer and
+  // overrides the Daily MGT computed rule for that wakala.
+  const [weeklyServedMap, setWeeklyServedMap] = useState<Map<string, boolean>>(new Map());
+
+  useEffect(() => {
+    let isMounted = true;
+    loadAllWeeklyRows()
+      .then(rows => {
+        if (!isMounted) return;
+        const map = new Map<string, boolean | null>();
+        (rows || []).forEach((row: any) => {
+          const month = String(row?.reportingMonth || row?.reporting_month || '').trim();
+          if (month && period && month !== period) return;
+          const key = normalizeMsisdn(row?.MSISDN || row?.msisdn);
+          if (!key) return;
+          map.set(key, mergeServicedStatus(map.get(key) ?? null, getServicedStatusFromColumn(row)));
+        });
+        const resolved = new Map<string, boolean>();
+        map.forEach((v, k) => {
+          if (v !== null) resolved.set(k, v);
+        });
+        setWeeklyServedMap(resolved);
+      })
+      .catch(() => {
+        if (isMounted) setWeeklyServedMap(new Map());
+      });
+    return () => { isMounted = false; };
+  }, [period]);
+
   const kpi1Results: KPI1Result[] = useMemo(() => {
     return calculateKPI1(classifiedRows, [], owners, period, manualTargets);
   }, [classifiedRows, owners, period, manualTargets]);
 
   const kpi2Results: KPI2Result[] = useMemo(() => {
-    return calculateKPI2(classifiedRows, owners, period, manualTargets, priorityWakalas, baseWakalaIndex);
-  }, [classifiedRows, owners, period, manualTargets, priorityWakalas, baseWakalaIndex]);
+    return calculateKPI2(classifiedRows, owners, period, manualTargets, priorityWakalas, baseWakalaIndex, weeklyServedMap);
+  }, [classifiedRows, owners, period, manualTargets, priorityWakalas, baseWakalaIndex, weeklyServedMap]);
 
   const kpi1ByOwner = useMemo(() => {
     const m = new Map<string, KPI1Result>();

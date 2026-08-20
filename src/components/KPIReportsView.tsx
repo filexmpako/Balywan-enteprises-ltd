@@ -19,6 +19,7 @@ import { motion } from 'motion/react';
 import PageHeaderBanner from './PageHeaderBanner';
 import { getServicingRows } from '../utils/indexedDB';
 import { refreshWeeklyStatsHistory } from '../utils/weeklyHistory';
+import { getServicedStatusFromColumn, mergeServicedStatus } from '../utils/servicingStatus';
 import type { WeeklyStatsEntry } from '../utils/weeklyKpiEngine';
 import { calculateCompanyKPIs } from '../utils/mappingEngine';
 import { exportKPIAnalysisToPDF } from '../utils/pdfExport';
@@ -266,7 +267,7 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
       };
 
       // Company-wide totals for averages and stats
-      const companyWakalaMap = new Map<string, { txns: number; val: number; isProductSeller: boolean; isServed: boolean; isActiveStatus: boolean; hasStatusCol: boolean }>();
+      const companyWakalaMap = new Map<string, { txns: number; val: number; isProductSeller: boolean; isServed: boolean; isActiveStatus: boolean; hasStatusCol: boolean; servedStatus: boolean | null }>();
       let companyTotalCI = 0;
       let companyTotalCO = 0;
       let companyTotalServicingVal = 0;
@@ -296,6 +297,7 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
             if (txns > 0 || val > 0) existing.isServed = true;
             if (rowActive) existing.isActiveStatus = true;
             if (rowHasStatus) existing.hasStatusCol = true;
+            existing.servedStatus = mergeServicedStatus(existing.servedStatus, getServicedStatusFromColumn(row));
           } else {
             companyWakalaMap.set(msisdn, {
               txns,
@@ -303,7 +305,8 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
               isProductSeller,
               isServed: txns > 0 || val > 0,
               isActiveStatus: rowActive,
-              hasStatusCol: rowHasStatus
+              hasStatusCol: rowHasStatus,
+              servedStatus: getServicedStatusFromColumn(row)
             });
           }
         }
@@ -319,15 +322,25 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
       let inactiveAndNotServed = 0;
       let datasetHasStatusCol = false;
 
-      companyWakalaMap.forEach(({ txns, val, isProductSeller, isActiveStatus, hasStatusCol }) => {
+      let companyNoStatusCount = 0;
+      let companyNotServedCount = 0;
+
+      companyWakalaMap.forEach(({ isProductSeller, isActiveStatus, hasStatusCol, servedStatus }) => {
         if (hasStatusCol) datasetHasStatusCol = true;
-        const isServedWakala = isActiveStatus ? (txns > 6 || val > 600000) : (txns > 6);
+        // Served/unserved is read from the uploaded servicing_status column.
+        // Monthly files do not carry it yet, so those rows are reported as
+        // "no status data" rather than guessed at.
+        const isServedWakala = servedStatus === true;
 
         if (isActiveStatus) {
           companyActiveCount++;
         }
-        if (isServedWakala) {
+        if (servedStatus === true) {
           companyServedCount++;
+        } else if (servedStatus === false) {
+          companyNotServedCount++;
+        } else {
+          companyNoStatusCount++;
         }
         if (isProductSeller) {
           companyProductSellerCount++;
@@ -339,13 +352,6 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
         else if (!isActiveStatus && !isServedWakala) inactiveAndNotServed++;
       });
 
-      if (!datasetHasStatusCol && companyActiveCount === 0) {
-        // Fallback if dataset lacks a status column
-        companyActiveCount = companyServedCount;
-        activeAndServed = companyServedCount;
-        inactiveAndNotServed = (companyWakalaMap.size || 0) - companyServedCount;
-      }
-
       const total = companyWakalaMap.size || 1;
       const active = companyActiveCount;
       const inactive = companyWakalaMap.size - active;
@@ -353,12 +359,14 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
       const inactivePercent = ((inactive / total) * 100).toFixed(1);
 
       const served = companyServedCount;
-      const notServed = companyWakalaMap.size - served;
-      const servedPercent = ((served / total) * 100).toFixed(1);
-      const notServedPercent = ((notServed / total) * 100).toFixed(1);
+      const notServed = companyNotServedCount;
+      const statusDenom = served + notServed || 1;
+      const servedPercent = ((served / statusDenom) * 100).toFixed(1);
+      const notServedPercent = ((notServed / statusDenom) * 100).toFixed(1);
 
       setWakalaStats({
         total: companyWakalaMap.size,
+        noStatus: companyNoStatusCount,
         active,
         inactive,
         activePercent,

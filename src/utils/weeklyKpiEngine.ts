@@ -16,6 +16,7 @@
 import { BaseWakala, Owner } from '../types';
 import { normalizeMsisdn } from './msisdn';
 import { resolveOwnerMatch } from './ownerMatch';
+import { getServicedStatusFromColumn, mergeServicedStatus } from './servicingStatus';
 
 export interface WeeklyWakalaStats {
   total: number;
@@ -23,6 +24,8 @@ export interface WeeklyWakalaStats {
   inactive: number;
   served: number;
   notServed: number;
+  /** Wakalas whose row carried no servicing_status value at all. */
+  noStatus: number;
   servedPercent: string;
   notServedPercent: string;
   totalValue: number;
@@ -37,6 +40,7 @@ export interface WeeklyOwnerBreakdown {
   inactive: number;
   served: number;
   notServed: number;
+  noStatus: number;
   value: number;
   txns: number;
 }
@@ -163,7 +167,7 @@ export function computeWeeklyStats(
 
   const wakalaMap = new Map<
     string,
-    { txns: number; val: number; isActiveStatus: boolean; hasStatusCol: boolean }
+    { txns: number; val: number; isActiveStatus: boolean; hasStatusCol: boolean; servedStatus: boolean | null }
   >();
 
   rows.forEach((row: any) => {
@@ -173,6 +177,7 @@ export function computeWeeklyStats(
     const val = getFieldValue(row, VAL_KEYS);
     const rowActive = isRowStatusActive(row);
     const rowHasStatus = hasRowStatusKey(row);
+    const rowServed = getServicedStatusFromColumn(row);
 
     const existing = wakalaMap.get(msisdn);
     if (existing) {
@@ -180,24 +185,37 @@ export function computeWeeklyStats(
       existing.val += val;
       if (rowActive) existing.isActiveStatus = true;
       if (rowHasStatus) existing.hasStatusCol = true;
+      existing.servedStatus = mergeServicedStatus(existing.servedStatus, rowServed);
     } else {
-      wakalaMap.set(msisdn, { txns, val, isActiveStatus: rowActive, hasStatusCol: rowHasStatus });
+      wakalaMap.set(msisdn, {
+        txns,
+        val,
+        isActiveStatus: rowActive,
+        hasStatusCol: rowHasStatus,
+        servedStatus: rowServed,
+      });
     }
   });
 
   let activeCount = 0;
   let servedCount = 0;
+  let notServedCount = 0;
+  let noStatusCount = 0;
   let datasetHasStatusCol = false;
   let totalValue = 0;
   let totalTxns = 0;
 
   const ownerAgg = new Map<string, WeeklyOwnerBreakdown>();
 
-  wakalaMap.forEach(({ txns, val, isActiveStatus, hasStatusCol }, msisdn) => {
+  wakalaMap.forEach(({ txns, val, isActiveStatus, hasStatusCol, servedStatus }, msisdn) => {
     if (hasStatusCol) datasetHasStatusCol = true;
-    const isServedWakala = isActiveStatus ? txns > 6 || val > 600000 : txns > 6;
+    // Weekly served/unserved comes straight from the uploaded servicing_status
+    // column — no computed threshold. Missing values are excluded, never
+    // counted as unserved.
     if (isActiveStatus) activeCount++;
-    if (isServedWakala) servedCount++;
+    if (servedStatus === true) servedCount++;
+    else if (servedStatus === false) notServedCount++;
+    else noStatusCount++;
     totalValue += val;
     totalTxns += txns;
 
@@ -214,6 +232,7 @@ export function computeWeeklyStats(
         inactive: 0,
         served: 0,
         notServed: 0,
+        noStatus: 0,
         value: 0,
         txns: 0,
       };
@@ -222,8 +241,9 @@ export function computeWeeklyStats(
     agg.total++;
     if (isActiveStatus) agg.active++;
     else agg.inactive++;
-    if (isServedWakala) agg.served++;
-    else agg.notServed++;
+    if (servedStatus === true) agg.served++;
+    else if (servedStatus === false) agg.notServed++;
+    else agg.noStatus++;
     agg.value += val;
     agg.txns += txns;
   });
@@ -239,9 +259,10 @@ export function computeWeeklyStats(
   }
 
   const totalCount = wakalaMap.size;
-  const denom = totalCount || 1;
   const served = servedCount;
-  const notServed = totalCount - served;
+  const notServed = notServedCount;
+  // Only rows that actually carried a status participate in the percentages.
+  const denom = served + notServed || 1;
 
   return {
     total: totalCount,
@@ -249,6 +270,7 @@ export function computeWeeklyStats(
     inactive: totalCount - activeCount,
     served,
     notServed,
+    noStatus: noStatusCount,
     servedPercent: ((served / denom) * 100).toFixed(1),
     notServedPercent: ((notServed / denom) * 100).toFixed(1),
     totalValue,
