@@ -68,7 +68,7 @@ export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget }: Props
           <div>
             <h3 className="font-sans text-base font-bold text-brand-text">Weekly Checkpoints</h3>
             <p className="font-sans text-xs text-brand-text-variant">
-              Served wakalas and servicing value per uploaded week, versus this owner's monthly target.
+              Served/unserved read from each week's servicing_status column, versus this owner's monthly target.
             </p>
           </div>
         </div>
@@ -78,10 +78,10 @@ export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget }: Props
       </div>
 
       <div className="mt-4 overflow-x-auto">
-        <table className="w-full min-w-[560px] text-left">
+        <table className="w-full min-w-[640px] text-left">
           <thead>
             <tr className="border-b border-brand-gray-border">
-              {['Week', 'Active', 'Served', 'Unserved', 'Weekly Value', 'Cumulative', 'vs Target'].map(h => (
+              {['Week', 'Active', 'Served', 'Unserved', 'No Status', 'Weekly Value', 'Cumulative', 'vs Target'].map(h => (
                 <th key={h} className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">
                   {h}
                 </th>
@@ -95,6 +95,7 @@ export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget }: Props
                 <td className="py-2.5 font-sans text-xs text-brand-text">{row.breakdown?.active ?? 0}</td>
                 <td className="py-2.5 font-sans text-xs font-bold text-brand-success">{row.breakdown?.served ?? 0}</td>
                 <td className="py-2.5 font-sans text-xs font-bold text-brand-error">{row.breakdown?.notServed ?? 0}</td>
+                <td className="py-2.5 font-sans text-xs text-brand-text-variant">{row.breakdown?.noStatus ?? 0}</td>
                 <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation(row.breakdown?.value ?? 0)}</td>
                 <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation(row.cumulativeValue)}</td>
                 <td className="py-2.5 font-sans text-xs font-bold text-brand-primary">

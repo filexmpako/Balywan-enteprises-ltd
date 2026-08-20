@@ -22,6 +22,7 @@ export interface PurgeResult {
   transactions: number;
   auditRecords: number;
   weeklyRows: number;
+  monthlyRowsDeleted: number;
   transactionRefs: string[];
 }
 
@@ -37,6 +38,7 @@ export async function purgeUpload(supabase: DB, input: PurgeInput): Promise<Purg
     transactions: 0,
     auditRecords: 0,
     weeklyRows: 0,
+    monthlyRowsDeleted: 0,
     transactionRefs: [],
   };
 
@@ -98,6 +100,38 @@ export async function purgeUpload(supabase: DB, input: PurgeInput): Promise<Purg
       .select('id');
     if (error) throw new Error(`weekly_servicing_records delete: ${error.message}`);
     result.weeklyRows = (data ?? []).length;
+  }
+
+  // 4. Monthly uploads feed the month-scoped target/summary/snapshot tables.
+  if (input.reportingMonth) {
+    const monthTables: Array<{ table: string; column: string }> = [
+      { table: 'monthly_kpi_targets', column: 'reporting_month' },
+      { table: 'performance_summaries', column: 'reporting_month' },
+      { table: 'monthly_kpi_snapshots', column: 'reporting_month' },
+    ];
+    for (const t of monthTables) {
+      const { data, error } = await supabase
+        .from(t.table)
+        .delete()
+        .eq(t.column, input.reportingMonth)
+        .select('*');
+      if (error) throw new Error(`${t.table} delete: ${error.message}`);
+      result.monthlyRowsDeleted += (data ?? []).length;
+    }
+
+    // Snapshot tables key on (reporting_period, period_type); both carry a
+    // period_type column constrained to 'Daily' | 'Monthly', so scoping the
+    // delete by period_type = 'Monthly' cannot touch daily rows.
+    for (const table of ['company_performance_snapshots', 'owner_performance_snapshots']) {
+      const { data, error } = await supabase
+        .from(table)
+        .delete()
+        .eq('reporting_period', input.reportingMonth)
+        .eq('period_type', 'Monthly')
+        .select('*');
+      if (error) throw new Error(`${table} delete: ${error.message}`);
+      result.monthlyRowsDeleted += (data ?? []).length;
+    }
   }
 
   return result;

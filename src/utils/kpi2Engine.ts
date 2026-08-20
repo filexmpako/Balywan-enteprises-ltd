@@ -47,7 +47,14 @@ export function calculateKPI2(
   period: string,
   manualTargets?: ManualOwnerTarget[],
   priorityWakalasParam?: PriorityWakala[],
-  baseWakalasParam?: BaseWakala[]
+  baseWakalasParam?: BaseWakala[],
+  /**
+   * Authoritative per-wakala served status (normalized MSISDN -> served),
+   * sourced from the uploaded servicing_status column (Weekly data).
+   * When a wakala is present here, the Daily MGT computed rule is ignored
+   * for that wakala; otherwise the computed rule applies unchanged.
+   */
+  servedOverride?: Map<string, boolean>
 ): KPI2Result[] {
   const actualManualTargets = (manualTargets && Array.isArray(manualTargets)) ? manualTargets : getSavedManualOwnerTargets();
   const priorityWakalas: PriorityWakala[] = priorityWakalasParam || (() => {
@@ -152,7 +159,9 @@ export function calculateKPI2(
         return Number(val) === 1;
       });
 
-      const isServed = isActive ? (totalTxns > 6 || totalVal > 600000) : (totalTxns > 6);
+      const computedServed = isActive ? (totalTxns > 6 || totalVal > 600000) : (totalTxns > 6);
+      const override = servedOverride?.get(wClean);
+      const isServed = override !== undefined ? override : computedServed;
 
       if (isServed) {
         if (ownerPriorityMsisdns.has(wClean)) {
