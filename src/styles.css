@@ -155,18 +155,26 @@
 
 /* Shared dimensional card treatment for all application content pages. */
 main :is(.bg-brand-card, .bg-card):is(.rounded-xl, .rounded-2xl, .rounded-3xl) {
-  border-color: color-mix(in oklab, var(--color-card-vivid-border) 68%, var(--color-brand-gray-border));
-  background-color: color-mix(in oklab, var(--color-brand-card) 96%, var(--color-brand-primary-container));
+  border-color: color-mix(in oklab, var(--color-card-vivid-border) 80%, var(--color-brand-gray-border));
+  border-top-color: color-mix(in oklab, var(--color-brand-primary) 68%, var(--color-card-vivid-accent));
+  background-color: color-mix(in oklab, var(--color-brand-card) 92%, var(--color-brand-primary-container));
   background-image: linear-gradient(
     145deg,
-    color-mix(in oklab, var(--color-brand-primary-container) 34%, transparent),
-    transparent 42%,
-    color-mix(in oklab, var(--color-brand-accent-light) 13%, transparent)
+    color-mix(in oklab, var(--color-brand-primary-container) 52%, transparent),
+    transparent 46%,
+    color-mix(in oklab, var(--color-brand-accent-light) 25%, transparent)
   );
   box-shadow:
     inset 0 1px 0 color-mix(in oklab, var(--color-brand-card) 88%, transparent),
-    0 1px 2px color-mix(in oklab, var(--color-brand-primary) 8%, transparent),
-    0 12px 32px -18px var(--color-card-vivid-glow);
+    inset 3px 0 0 color-mix(in oklab, var(--color-card-vivid-accent) 52%, transparent),
+    0 2px 5px color-mix(in oklab, var(--color-brand-primary) 12%, transparent),
+    0 16px 36px -18px var(--color-card-vivid-glow);
+}
+
+main :is(.bg-brand-card, .bg-card):is(.rounded-xl, .rounded-2xl, .rounded-3xl)
+  :is(.bg-brand-primary-container, .bg-brand-accent-light, .bg-status-info-bg, .bg-status-success-bg, .bg-status-warning-bg, .bg-status-error-bg) {
+  border: 1px solid color-mix(in oklab, currentColor 16%, transparent);
+  box-shadow: 0 8px 18px -12px currentColor;
 }
 
 main :is(button, a).bg-brand-card:is(.rounded-xl, .rounded-2xl, .rounded-3xl),
