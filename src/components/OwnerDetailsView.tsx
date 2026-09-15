@@ -24,6 +24,7 @@ import {
   ChevronRight,
   ChevronDown,
   UserCheck,
+  UserX,
   CheckCircle,
   AlertTriangle,
   Clock,
@@ -34,8 +35,10 @@ import {
   Loader2,
   Navigation,
   AlertCircle,
-  Info
+  Info,
+  Layers
 } from 'lucide-react';
+import MetricCard from './MetricCard';
 import { motion, AnimatePresence } from 'motion/react';
 import FloatManagementPanel from './FloatManagementPanel';
 import { getDailyServicingRows } from '../utils/indexedDB';
