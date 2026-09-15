@@ -60,6 +60,9 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-card-vivid-border: var(--card-vivid-border);
+  --color-card-vivid-glow: var(--card-vivid-glow);
+  --color-card-vivid-accent: var(--card-vivid-accent);
 }
 
 :root {
@@ -96,6 +99,9 @@
   --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
   --sidebar-border: oklch(0.929 0.013 255.508);
   --sidebar-ring: oklch(0.704 0.04 256.788);
+  --card-vivid-border: oklch(0.83 0.075 256);
+  --card-vivid-glow: oklch(0.55 0.2 257 / 18%);
+  --card-vivid-accent: oklch(0.82 0.17 88);
 }
 
 .dark {
@@ -131,6 +137,9 @@
   --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.551 0.027 264.364);
+  --card-vivid-border: oklch(0.63 0.15 255 / 55%);
+  --card-vivid-glow: oklch(0.61 0.19 255 / 22%);
+  --card-vivid-accent: oklch(0.84 0.17 88);
 }
 
 @layer base {
@@ -141,5 +150,55 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+  }
+}
+
+/* Shared dimensional card treatment for all application content pages. */
+main :is(.bg-brand-card, .bg-card):is(.rounded-xl, .rounded-2xl, .rounded-3xl) {
+  border-color: color-mix(in oklab, var(--color-card-vivid-border) 80%, var(--color-brand-gray-border));
+  border-top-color: color-mix(in oklab, var(--color-brand-primary) 68%, var(--color-card-vivid-accent));
+  background-color: color-mix(in oklab, var(--color-brand-card) 92%, var(--color-brand-primary-container));
+  background-image: linear-gradient(
+    145deg,
+    color-mix(in oklab, var(--color-brand-primary-container) 52%, transparent),
+    transparent 46%,
+    color-mix(in oklab, var(--color-brand-accent-light) 25%, transparent)
+  );
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, var(--color-brand-card) 88%, transparent),
+    inset 3px 0 0 color-mix(in oklab, var(--color-card-vivid-accent) 52%, transparent),
+    0 2px 5px color-mix(in oklab, var(--color-brand-primary) 12%, transparent),
+    0 16px 36px -18px var(--color-card-vivid-glow);
+}
+
+main :is(.bg-brand-card, .bg-card):is(.rounded-xl, .rounded-2xl, .rounded-3xl)
+  :is(.bg-brand-primary-container, .bg-brand-accent-light, .bg-status-info-bg, .bg-status-success-bg, .bg-status-warning-bg, .bg-status-error-bg) {
+  border: 1px solid color-mix(in oklab, currentColor 16%, transparent);
+  box-shadow: 0 8px 18px -12px currentColor;
+}
+
+main :is(button, a).bg-brand-card:is(.rounded-xl, .rounded-2xl, .rounded-3xl),
+main :is(button, a) :is(.bg-brand-card, .bg-card):is(.rounded-xl, .rounded-2xl, .rounded-3xl) {
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+main :is(button, a).bg-brand-card:is(.rounded-xl, .rounded-2xl, .rounded-3xl):hover,
+main :is(button, a):hover :is(.bg-brand-card, .bg-card):is(.rounded-xl, .rounded-2xl, .rounded-3xl) {
+  border-color: color-mix(in oklab, var(--color-brand-primary) 58%, var(--color-card-vivid-accent));
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, var(--color-brand-card) 90%, transparent),
+    0 16px 34px -16px var(--color-card-vivid-glow),
+    0 0 0 1px color-mix(in oklab, var(--color-card-vivid-accent) 20%, transparent);
+  transform: translateY(-2px);
+}
+
+main :is(.bg-status-info-bg, .bg-status-success-bg, .bg-status-warning-bg, .bg-status-error-bg):is(.rounded-xl, .rounded-2xl, .rounded-3xl) {
+  box-shadow: inset 0 1px 0 color-mix(in oklab, var(--color-brand-card) 72%, transparent), 0 10px 26px -18px currentColor;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  main :is(button, a).bg-brand-card,
+  main :is(button, a) :is(.bg-brand-card, .bg-card) {
+    transition: none;
   }
 }
