@@ -930,32 +930,38 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
             </div>
 
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 pt-5">
-              <div className="rounded-xl bg-brand-gray-hover p-4">
-                <p className="font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Latest Week</p>
-                <p className="font-sans text-xl font-bold text-brand-text mt-1">{latest.reportingWeek}</p>
-              </div>
-              <div className="rounded-xl bg-brand-gray-hover p-4">
-                <p className="font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Served Wakalas</p>
-                <p className="font-sans text-xl font-bold text-brand-success mt-1">
-                  {latest.served} <span className="text-xs text-brand-text-variant">({latest.servedPercent}%)</span>
-                </p>
-              </div>
-              <div className="rounded-xl bg-brand-gray-hover p-4">
-                <p className="font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Unserved Wakalas</p>
-                <p className="font-sans text-xl font-bold text-brand-error mt-1">
-                  {latest.notServed} <span className="text-xs text-brand-text-variant">({latest.notServedPercent}%)</span>
-                </p>
-              </div>
-              <div className="rounded-xl bg-brand-gray-hover p-4">
-                <p className="font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Cumulative vs Target</p>
-                <p className="font-sans text-xl font-bold text-brand-primary mt-1">
-                  {target > 0 ? `${progress.toFixed(1)}%` : '—'}
-                </p>
-                <p className="font-sans text-[10px] text-brand-text-variant mt-0.5">
-                  {formatNumberWithAbbreviation(latest.cumulativeValue)}
-                  {target > 0 ? ` / ${formatNumberWithAbbreviation(target)}` : ''}
-                </p>
-              </div>
+              <MetricCard
+                title="Latest Week"
+                value={latest.reportingWeek}
+                icon={Calendar}
+                variant="blue"
+              />
+              <MetricCard
+                title="Served Wakalas"
+                value={latest.served}
+                subValue={`(${latest.servedPercent}%)`}
+                icon={UserCheck}
+                variant="green"
+              />
+              <MetricCard
+                title="Unserved Wakalas"
+                value={latest.notServed}
+                subValue={`(${latest.notServedPercent}%)`}
+                icon={UserX}
+                variant="red"
+              />
+              <MetricCard
+                title="Cumulative vs Target"
+                value={target > 0 ? `${progress.toFixed(1)}%` : '—'}
+                subValue={
+                  <>
+                    {formatNumberWithAbbreviation(latest.cumulativeValue)}
+                    {target > 0 ? ` / ${formatNumberWithAbbreviation(target)}` : ''}
+                  </>
+                }
+                icon={Target}
+                variant="indigo"
+              />
               {(() => {
                 const month = (latest as any).reportingMonth;
                 const monthEntries = month
@@ -964,15 +970,13 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                 const penaltyMtd = monthEntries.reduce((s, e) => s + ((e as any).penalty || 0), 0);
                 const iopMtd = monthEntries.reduce((s, e) => s + ((e as any).iopValue || 0), 0);
                 return (
-                  <div className="rounded-xl bg-brand-gray-hover p-4">
-                    <p className="font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Penalty (Month to date)</p>
-                    <p className="font-sans text-xl font-bold text-brand-error mt-1">
-                      {formatNumberWithAbbreviation(penaltyMtd)}
-                    </p>
-                    <p className="font-sans text-[10px] text-brand-text-variant mt-0.5">
-                      IOP volume {formatNumberWithAbbreviation(iopMtd)}
-                    </p>
-                  </div>
+                  <MetricCard
+                    title="Penalty (Month to date)"
+                    value={formatNumberWithAbbreviation(penaltyMtd)}
+                    subValue={`IOP volume ${formatNumberWithAbbreviation(iopMtd)}`}
+                    icon={AlertTriangle}
+                    variant="amber"
+                  />
                 );
               })()}
             </div>
