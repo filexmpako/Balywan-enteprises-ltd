@@ -1014,38 +1014,27 @@ export default function OwnerDetailsView({
 
             {/* Daily Ingestion Sub-cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {/* Card 1: Transactions Today */}
-              <div className="rounded-2xl border border-brand-gray-border bg-brand-card p-5 shadow-ambient flex flex-col justify-between">
-                <span className="block font-sans text-[10px] font-bold text-brand-text-variant uppercase tracking-wider">Transactions Today</span>
-                <div className="mt-2.5 flex items-baseline justify-between gap-1.5 flex-wrap">
-                  <span className="font-sans text-lg sm:text-xl font-black text-brand-text">
-                    {localOwner.transactionsToday || 0}
-                  </span>
-                  <span className="text-[9px] font-bold text-amber-600 font-mono">TXNS</span>
-                </div>
-              </div>
-
-              {/* Card 2: CP Penalty */}
-              <div className="rounded-2xl border border-rose-200 bg-rose-50/50 p-5 shadow-ambient flex flex-col justify-between">
-                <span className="block font-sans text-[10px] font-bold text-rose-800 uppercase tracking-wider">CP Penalty</span>
-                <div className="mt-2.5 flex items-baseline justify-between gap-1.5 flex-wrap">
-                  <span className="font-sans text-lg sm:text-xl font-black text-rose-950 font-mono">
-                    TZS {(localOwner.penalty || 0).toLocaleString()}
-                  </span>
-                  <span className="text-[9px] font-bold text-rose-700 font-mono">PENALTY</span>
-                </div>
-              </div>
-
-              {/* Card 3: IOP Volume (Daily) */}
-              <div className="rounded-2xl border border-purple-200 bg-purple-50/50 p-5 shadow-ambient flex flex-col justify-between">
-                <span className="block font-sans text-[10px] font-bold text-purple-800 uppercase tracking-wider">IOP Volume (Daily)</span>
-                <div className="mt-2.5 flex items-baseline justify-between gap-1.5 flex-wrap">
-                  <span className="font-sans text-lg sm:text-xl font-black text-purple-950 font-mono">
-                    TZS {(localOwner.iopVolume || 0).toLocaleString()}
-                  </span>
-                  <span className="text-[9px] font-bold text-purple-700 font-mono">VOLUME</span>
-                </div>
-              </div>
+              <MetricCard
+                title="Transactions Today"
+                value={localOwner.transactionsToday || 0}
+                subValue="TXNS"
+                icon={Activity}
+                variant="blue"
+              />
+              <MetricCard
+                title="CP Penalty"
+                value={`TZS ${(localOwner.penalty || 0).toLocaleString()}`}
+                subValue="PENALTY"
+                icon={AlertTriangle}
+                variant="red"
+              />
+              <MetricCard
+                title="IOP Volume (Daily)"
+                value={`TZS ${(localOwner.iopVolume || 0).toLocaleString()}`}
+                subValue="VOLUME"
+                icon={Layers}
+                variant="purple"
+              />
             </div>
           </div>
 
