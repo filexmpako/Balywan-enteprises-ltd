@@ -15,9 +15,9 @@ import {
   Map,
   Building2,
   Target,
-  Banknote
-  ,ChevronLeft
-  ,ChevronRight
+  Banknote,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useCompany } from './CompanyContext';

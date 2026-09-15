@@ -51,17 +51,28 @@ export default function SettingsView({
   const [penaltyInput, setPenaltyInput] = useState(String(rules.penaltyRate));
   const [savingRules, setSavingRules] = useState(false);
   const [rulesSaved, setRulesSaved] = useState(false);
+  const transactionThreshold = Number(thresholdInput);
+  const amountThreshold = Number(amountThresholdInput);
+  const penaltyRate = Number(penaltyInput);
+  const ruleIsValid = Number.isFinite(transactionThreshold) && transactionThreshold > 0
+    && Number.isFinite(amountThreshold) && amountThreshold > 0
+    && Number.isFinite(penaltyRate) && penaltyRate >= 0;
 
   const handleSaveRules = async () => {
+    if (!ruleIsValid) {
+      setErrorMessage('Transaction and amount thresholds must be greater than zero, and the penalty rate cannot be negative.');
+      return;
+    }
+    setErrorMessage('');
     setSavingRules(true);
     setRulesSaved(false);
     try {
       const next = saveActivityRules({
-        threshold: Number(thresholdInput) || 0,
-        amountThreshold: Number(amountThresholdInput) || 0,
+        threshold: transactionThreshold,
+        amountThreshold,
         mode: modeInput,
         window: 'weekly',
-        penaltyRate: Number(penaltyInput) || 0,
+        penaltyRate,
       });
       setRules(next);
       // Re-run every stored week so recorded statuses follow the new rule.
@@ -382,7 +393,7 @@ export default function SettingsView({
             )}
             <Button
               type="button"
-              disabled={savingRules}
+              disabled={savingRules || !ruleIsValid}
               onClick={handleSaveRules}
               className="h-10 rounded-lg bg-brand-primary px-5 text-xs font-bold text-white shadow-ambient hover:bg-brand-primary-light"
             >

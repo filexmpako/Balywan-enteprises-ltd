@@ -193,6 +193,12 @@ export default function OwnerDetailsView({
   const [tillsList, setTillsList] = useState<any[]>([]);
   const [servicingRows, setServicingRows] = useState<any[]>([]);
   const [loadingMetrics, setLoadingMetrics] = useState(true);
+  const [latestWeeklyActivity, setLatestWeeklyActivity] = useState<{ active: number; inactive: number } | null>(null);
+  const handleLatestWeeklyActivity = useCallback((active: number, inactive: number) => {
+    setLatestWeeklyActivity(current =>
+      current?.active === active && current?.inactive === inactive ? current : { active, inactive }
+    );
+  }, []);
 
   useEffect(() => {
     // Sync localOwner if selectedOwnerName changes
@@ -910,15 +916,15 @@ export default function OwnerDetailsView({
             />
             <MetricCard
               title="Active Wakala"
-              value={isSynced ? activeWakalaCount : 'Not yet synced'}
-              subValue={isSynced ? 'HIGH GROWTH' : 'Awaiting Ingestion'}
+              value={latestWeeklyActivity?.active ?? (isSynced ? activeWakalaCount : 'Not yet synced')}
+              subValue={latestWeeklyActivity ? 'LATEST WEEKLY RULE' : (isSynced ? 'DAILY INGESTION' : 'Awaiting Ingestion')}
               icon={UserCheck}
               variant="green"
             />
             <MetricCard
               title="Inactive Wakala"
-              value={isSynced ? inactiveWakalaCount : 'Not yet synced'}
-              subValue={isSynced ? 'REQUIRES REVIEW' : 'Awaiting Ingestion'}
+              value={latestWeeklyActivity?.inactive ?? (isSynced ? inactiveWakalaCount : 'Not yet synced')}
+              subValue={latestWeeklyActivity ? 'LATEST WEEKLY RULE' : (isSynced ? 'DAILY INGESTION' : 'Awaiting Ingestion')}
               icon={UserX}
               variant="red"
             />
@@ -1042,6 +1048,7 @@ export default function OwnerDetailsView({
           <OwnerWeeklyCheckpoints
             ownerId={localOwner?.id || ''}
             monthlyTarget={ownerMtdData.monthlyTarget || 0}
+            onLatestActivity={handleLatestWeeklyActivity}
           />
 
           {/* Owner -> Admin issue reporting for wakalas with problems */}
