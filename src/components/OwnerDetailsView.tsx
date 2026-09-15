@@ -13,6 +13,7 @@ import { savePhoto, getPhoto, deletePhoto } from '../utils/db';
 import { 
   ArrowLeft, 
   User, 
+  Users,
   MapPin, 
   Calendar, 
   TrendingUp, 
