@@ -72,6 +72,26 @@ export const saveWakalaStatusHistory = createServerFn({ method: 'POST' })
 
     const rows = Array.from(byMsisdn.values());
 
+    // Only keep owner references that really exist, otherwise the FK rejects the batch.
+    const referenced = Array.from(
+      new Set(rows.map(r => r.owner_id).filter((v): v is string => !!v)),
+    );
+    if (referenced.length) {
+      const known = new Set<string>();
+      for (let i = 0; i < referenced.length; i += 500) {
+        const { data: owners, error: ownersError } = await supabase
+          .from('owners')
+          .select('owner_id')
+          .in('owner_id', referenced.slice(i, i + 500));
+        if (ownersError) throw new Error(`owners lookup: ${ownersError.message}`);
+        (owners ?? []).forEach((o: any) => known.add(String(o.owner_id)));
+      }
+      rows.forEach(r => {
+        if (r.owner_id && !known.has(String(r.owner_id))) r.owner_id = null;
+      });
+    }
+
+
     const { error: delError } = await supabase
       .from('wakala_status_history')
       .delete()
