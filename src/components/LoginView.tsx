@@ -27,12 +27,6 @@ export default function LoginView({
   const isFloatManager = portalType === 'float-manager';
   const isOwner = portalType === 'owner';
 
-  // Only the admin account exists out of the box; owner / float manager
-  // credentials are issued by the admin, so nothing is pre-filled for them.
-  const defaultUsername = isFloatManager || isOwner ? '' : 'admin';
-
-  const defaultPassword = isFloatManager || isOwner ? '' : 'AdminPassword123!';
-
   const portalHeading = isFloatManager
     ? 'Float Manager Portal'
     : isOwner
@@ -45,8 +39,9 @@ export default function LoginView({
     ? '#/owner/dashboard'
     : '#/admin/dashboard';
 
-  const [username, setUsername] = useState(defaultUsername);
-  const [password, setPassword] = useState(defaultPassword);
+  // Credentials are never pre-filled for any portal.
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [keepLogged, setKeepLogged] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -207,51 +202,19 @@ export default function LoginView({
           <div className="relative my-6 flex items-center justify-center">
             <div className="absolute inset-x-0 border-t border-brand-gray-border" />
             <span className="relative z-10 bg-white px-3 font-mono text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-              Or Secure SSO
+              Single Sign-On
             </span>
           </div>
 
-          {/* Social login grid */}
-          <div className="grid grid-cols-2 gap-3 font-sans text-xs font-semibold text-brand-text">
-            <button 
-              type="button"
-              onClick={async () => {
-                setIsLoading(true);
-                try {
-                  await login(defaultUsername, portalType, defaultPassword);
-                  setIsLoading(false);
-                  window.location.hash = targetHash;
-                } catch {
-                  setIsLoading(false);
-                }
-              }}
-              className="rounded-xl border border-brand-gray-border bg-white py-3 hover:bg-brand-gray-hover flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24">
-                <path fill="#EA4335" d="M12 5.04c1.66 0 3.2.57 4.38 1.69l3.27-3.27C17.67 1.62 14.98 1 12 1 7.35 1 3.4 3.65 1.5 7.5l3.82 2.96C6.27 7.42 8.92 5.04 12 5.04z" />
-                <path fill="#4285F4" d="M23.49 12.27c0-.81-.07-1.59-.2-2.35H12v4.51h6.46c-.29 1.48-1.14 2.73-2.42 3.58l3.76 2.91c2.2-2.03 3.49-5.02 3.49-8.65z" />
-                <path fill="#FBBC05" d="M5.32 14.54c-.25-.75-.4-1.55-.4-2.38s.15-1.63.4-2.38L1.5 6.82C.54 8.74 0 10.87 0 13s.54 4.26 1.5 6.18l3.82-2.96z" />
-                <path fill="#34A853" d="M12 23c3.24 0 5.97-1.07 7.96-2.91l-3.76-2.91c-1.04.7-2.38 1.12-3.93 1.12-3.08 0-5.73-2.38-6.68-5.42l-3.82 2.96C3.4 20.35 7.35 23 12 23z" />
-              </svg>
-              Google
-            </button>
-            <button 
-              type="button"
-              onClick={async () => {
-                setIsLoading(true);
-                try {
-                  await login(defaultUsername, portalType, defaultPassword);
-                  setIsLoading(false);
-                  window.location.hash = targetHash;
-                } catch {
-                  setIsLoading(false);
-                }
-              }}
-              className="rounded-xl border border-brand-gray-border bg-white py-3 hover:bg-brand-gray-hover flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <ShieldCheck className="h-4.5 w-4.5 text-brand-primary shrink-0" />
-              SAML
-            </button>
+          {/* Single sign-on is not enabled on this deployment. */}
+          <div className="rounded-xl border border-dashed border-brand-gray-border bg-brand-gray-hover/40 px-4 py-3 text-center">
+            <div className="flex items-center justify-center gap-2 text-xs font-bold text-brand-text">
+              <ShieldCheck className="h-4 w-4 text-brand-primary shrink-0" />
+              Single sign-on is not enabled
+            </div>
+            <p className="mt-1 text-[11px] font-medium text-brand-text-variant">
+              Sign in with the username and password issued to you by your administrator.
+            </p>
           </div>
         </motion.div>
       </div>
