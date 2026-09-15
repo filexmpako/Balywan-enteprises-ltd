@@ -122,11 +122,18 @@ export async function saveWeeklyRows(supabase: DB, input: WeeklyRowInput): Promi
 
   // Attribute rows to owners through the Base Wakala index so owner-scoped RLS
   // reads (and the Owner dashboard) work without a second pass.
-  const { data: baseRows } = await supabase
-    .from('base_wakala_index')
-    .select('msisdn, alt_msisdn, owner_id')
-    .not('owner_id', 'is', null)
-    .limit(50000);
+  // Page through the index: a single Data API response is capped at 1000 rows.
+  const baseRows: any[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data } = await supabase
+      .from('base_wakala_index')
+      .select('msisdn, alt_msisdn, owner_id')
+      .not('owner_id', 'is', null)
+      .range(from, from + 999);
+    const page = data ?? [];
+    baseRows.push(...page);
+    if (page.length < 1000) break;
+  }
 
   const ownerByMsisdn = new Map<string, string>();
   for (const b of baseRows ?? []) {
