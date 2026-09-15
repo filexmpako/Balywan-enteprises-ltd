@@ -6,6 +6,7 @@ import { ownersList } from '../data';
 import WorkLocationSection from './WorkLocationSection';
 import TransactionHistorySection from './TransactionHistorySection';
 import OwnerWeeklyCheckpoints from './OwnerWeeklyCheckpoints';
+import WakalaIssuesPanel from './WakalaIssuesPanel';
 import { getAvatarUrl } from '../utils/avatar';
 import OwnerAvatar from './OwnerAvatar';
 import { savePhoto, getPhoto, deletePhoto } from '../utils/db';
@@ -1072,6 +1073,19 @@ export default function OwnerDetailsView({
             ownerId={localOwner?.id || ''}
             monthlyTarget={ownerMtdData.monthlyTarget || 0}
           />
+
+          {/* Owner -> Admin issue reporting for wakalas with problems */}
+          {isStandaloneAgent && (
+            <div className="mt-6">
+              <WakalaIssuesPanel
+                mode="owner"
+                ownerId={localOwner?.id || ''}
+                ownerName={localOwner?.name || ''}
+                senderName={localOwner?.name || 'Owner'}
+                wakalas={allWakalas.map((w: any) => ({ msisdn: w.msisdn, name: w.name }))}
+              />
+            </div>
+          )}
 
           {/* Collapsible Transaction History Section */}
           <div className="mt-6">

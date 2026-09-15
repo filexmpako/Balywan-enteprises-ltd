@@ -7,8 +7,11 @@ import {
   CheckCircle, 
   Sun,
   Moon,
-  Settings
+  Settings,
+  SlidersHorizontal
 } from 'lucide-react';
+import { getActivityRules, saveActivityRules } from '../utils/activityRules';
+import { refreshWeeklyStatsHistory } from '../utils/weeklyHistory';
 import { motion } from 'motion/react';
 import PageHeaderBanner from './PageHeaderBanner';
 import { useAuth } from './AuthContext';
@@ -35,6 +38,38 @@ export default function SettingsView({
   const [companyNameInput, setCompanyNameInput] = useState(companyName);
   const [showSaved, setShowSaved] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // --- Active/Inactive rule configuration ---
+  const [rules, setRules] = useState(() => getActivityRules());
+  const [thresholdInput, setThresholdInput] = useState(String(rules.threshold));
+  const [modeInput, setModeInput] = useState<'combined' | 'separate'>(rules.mode);
+  const [penaltyInput, setPenaltyInput] = useState(String(rules.penaltyRate));
+  const [savingRules, setSavingRules] = useState(false);
+  const [rulesSaved, setRulesSaved] = useState(false);
+
+  const handleSaveRules = async () => {
+    setSavingRules(true);
+    setRulesSaved(false);
+    try {
+      const next = saveActivityRules({
+        threshold: Number(thresholdInput) || 0,
+        mode: modeInput,
+        window: 'weekly',
+        penaltyRate: Number(penaltyInput) || 0,
+      });
+      setRules(next);
+      // Re-run every stored week so recorded statuses follow the new rule.
+      await refreshWeeklyStatsHistory();
+      window.dispatchEvent(new Event('weekly-kpi-updated'));
+      setRulesSaved(true);
+      setTimeout(() => setRulesSaved(false), 3500);
+    } catch (err) {
+      console.error('Failed to save activity rule:', err);
+      setErrorMessage('Could not save the activity rule. Please try again.');
+    } finally {
+      setSavingRules(false);
+    }
+  };
 
   // Sync state with loaded user and company
   useEffect(() => {
@@ -246,6 +281,81 @@ export default function SettingsView({
               </div>
             </div>
           </form>
+        </div>
+
+        {/* Activity rule: what makes a wakala Active for a reporting week */}
+        <div className="rounded-2xl border border-brand-gray-border bg-brand-card p-6 shadow-ambient mt-6">
+          <h3 className="text-sm font-bold uppercase tracking-wider text-brand-primary border-b border-brand-gray-border pb-2.5 mb-4 flex items-center gap-1.5">
+            <SlidersHorizontal className="h-4.5 w-4.5" />
+            Active / Inactive Wakala Rule
+          </h3>
+          <p className="text-xs text-brand-text-variant mb-4">
+            A wakala counts as active for a reporting week when its cash-in and cash-out
+            transactions reach the number below. Changing this re-evaluates every stored week.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-brand-text uppercase tracking-wider mb-1.5">
+                Transactions required
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={thresholdInput}
+                onChange={(e) => setThresholdInput(e.target.value)}
+                className="w-full rounded-xl bg-brand-bg border-2 border-transparent px-4 py-2.5 text-sm text-brand-text outline-none focus:border-brand-primary focus:bg-white transition-all font-semibold"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-brand-text uppercase tracking-wider mb-1.5">
+                How they are counted
+              </label>
+              <select
+                value={modeInput}
+                onChange={(e) => setModeInput(e.target.value as 'combined' | 'separate')}
+                className="w-full rounded-xl bg-brand-bg border-2 border-transparent px-4 py-2.5 text-sm text-brand-text outline-none focus:border-brand-primary focus:bg-white transition-all font-semibold"
+              >
+                <option value="combined">Cash-in + cash-out together</option>
+                <option value="separate">Cash-in and cash-out each</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-brand-text uppercase tracking-wider mb-1.5">
+                Penalty rate (%)
+              </label>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={penaltyInput}
+                onChange={(e) => setPenaltyInput(e.target.value)}
+                className="w-full rounded-xl bg-brand-bg border-2 border-transparent px-4 py-2.5 text-sm text-brand-text outline-none focus:border-brand-primary focus:bg-white transition-all font-semibold"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between border-t border-brand-gray-border pt-5 mt-5">
+            {rulesSaved ? (
+              <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600">
+                <CheckCircle className="h-4.5 w-4.5" />
+                Rule saved — weeks re-evaluated.
+              </div>
+            ) : (
+              <span className="text-xs text-brand-text-variant">
+                Current rule: {rules.threshold} transactions ({rules.mode === 'combined' ? 'combined' : 'each'}) per week
+              </span>
+            )}
+            <button
+              type="button"
+              disabled={savingRules}
+              onClick={handleSaveRules}
+              className="rounded-xl bg-brand-primary px-5 py-2.5 text-xs font-bold text-white shadow-ambient hover:bg-brand-primary-light transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+            >
+              <Save className="h-4 w-4" />
+              {savingRules ? 'Re-evaluating…' : 'Save Rule'}
+            </button>
+          </div>
         </div>
       </div>
     </motion.div>

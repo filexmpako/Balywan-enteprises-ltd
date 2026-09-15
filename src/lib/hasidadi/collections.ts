@@ -252,6 +252,7 @@ export const DOCUMENT_KEYS = [
   'roleMappings',
   'auditHistoryReports',
   'dismissedNotificationIds',
+  'activityRules',
 ] as const;
 
 export type DocumentKey = (typeof DOCUMENT_KEYS)[number];

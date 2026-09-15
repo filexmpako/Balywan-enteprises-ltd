@@ -17,7 +17,27 @@ import {
   type WeeklyStatsEntry,
 } from './weeklyKpiEngine';
 
+import { getActivityRules } from './activityRules';
+import { saveWakalaStatusHistory } from '../lib/wakalaStatus.functions';
+
 export const WEEKLY_STATS_KEY = 'weeklyWakalaStatsHistory';
+
+const MONTH_NAMES = [
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december',
+];
+
+/**
+ * Best-effort "YYYY-MM" from a week label such as "Week 2 July 2026".
+ * Used only when the stored rows carry no reporting_month.
+ */
+function monthFromWeek(week: string): string {
+  const label = String(week || '').toLowerCase();
+  const year = label.match(/(20\d{2})/)?.[1];
+  const monthIndex = MONTH_NAMES.findIndex(m => label.includes(m.slice(0, 3)));
+  if (!year || monthIndex < 0) return '';
+  return `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+}
 
 /** Entries cached before the engine gained value/txn/owner fields lack them. */
 function normalizeEntry(e: any): WeeklyStatsEntry {
@@ -34,6 +54,12 @@ function normalizeEntry(e: any): WeeklyStatsEntry {
     notServedPercent: e?.notServedPercent ?? '0.0',
     totalValue: Number(e?.totalValue) || 0,
     totalTxns: Number(e?.totalTxns) || 0,
+    baseValue: Number(e?.baseValue) || 0,
+    iopValue: Number(e?.iopValue) || 0,
+    cashInTxns: Number(e?.cashInTxns) || 0,
+    cashOutTxns: Number(e?.cashOutTxns) || 0,
+    penalty: Number(e?.penalty) || 0,
+    reportingMonth: e?.reportingMonth || '',
     byOwner: Array.isArray(e?.byOwner) ? e.byOwner : [],
   };
 }
@@ -93,12 +119,41 @@ export async function refreshWeeklyStatsHistory(): Promise<WeeklyStatsEntry[]> {
   const weeks = new Set<string>(await listStoredWeeks());
   uploadMeta.forEach((_v, week) => weeks.add(week));
 
+  const rules = getActivityRules();
   const computed: WeeklyStatsEntry[] = [];
   for (const week of Array.from(weeks).sort((a, b) => weekNumberOf(a) - weekNumberOf(b))) {
     const rows = await loadWeeklyRows(week);
-    const stats = computeWeeklyStats(rows, resolver);
+    const stats = computeWeeklyStats(rows, resolver, rules);
     if (!stats) continue;
-    computed.push({ reportingWeek: week, uploadedAt: uploadMeta.get(week) || '', ...stats });
+    const { evaluations, ...entry } = stats;
+    const reportingMonth =
+      rows.find((r: any) => r?.reportingMonth)?.reportingMonth || monthFromWeek(week);
+    computed.push({ reportingWeek: week, reportingMonth, uploadedAt: uploadMeta.get(week) || '', ...entry });
+
+    // Record the status that applied in this week so historical reports keep
+    // it, instead of re-reading today's status.
+    try {
+      await saveWakalaStatusHistory({
+        data: {
+          reportingWeek: week,
+          reportingMonth: reportingMonth || null,
+          threshold: rules.threshold,
+          ruleMode: rules.mode,
+          evaluations: evaluations.map(e => ({
+            msisdn: e.msisdn,
+            ownerId: e.ownerId,
+            ownerName: e.ownerName,
+            cashInTxns: e.cashInTxns,
+            cashOutTxns: e.cashOutTxns,
+            totalTxns: e.totalTxns,
+            totalValue: e.totalValue,
+            isActive: e.isActive,
+          })),
+        },
+      });
+    } catch (err) {
+      console.warn('[weekly] status history not recorded for', week, err);
+    }
   }
 
   const merged = mergeWeeklyHistory(readWeeklyStatsHistory(), computed);

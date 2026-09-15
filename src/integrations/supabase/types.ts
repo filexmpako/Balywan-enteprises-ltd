@@ -1214,6 +1214,171 @@ export type Database = {
         }
         Relationships: []
       }
+      wakala_issue_messages: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          issue_id: string
+          sender_name: string
+          sender_role: string
+          sender_user_id: string | null
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          issue_id: string
+          sender_name: string
+          sender_role?: string
+          sender_user_id?: string | null
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          issue_id?: string
+          sender_name?: string
+          sender_role?: string
+          sender_user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wakala_issue_messages_issue_id_fkey"
+            columns: ["issue_id"]
+            isOneToOne: false
+            referencedRelation: "wakala_issues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wakala_issues: {
+        Row: {
+          category: string
+          created_at: string
+          created_by: string | null
+          description: string
+          id: string
+          owner_id: string
+          owner_name: string
+          priority: string
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+          subject: string
+          updated_at: string
+          wakala_msisdn: string
+          wakala_name: string | null
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          description: string
+          id?: string
+          owner_id: string
+          owner_name: string
+          priority?: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          subject: string
+          updated_at?: string
+          wakala_msisdn: string
+          wakala_name?: string | null
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          id?: string
+          owner_id?: string
+          owner_name?: string
+          priority?: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+          subject?: string
+          updated_at?: string
+          wakala_msisdn?: string
+          wakala_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wakala_issues_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "owners"
+            referencedColumns: ["owner_id"]
+          },
+        ]
+      }
+      wakala_status_history: {
+        Row: {
+          cash_in_txns: number
+          cash_out_txns: number
+          created_at: string
+          evaluated_at: string
+          id: number
+          is_active: boolean
+          msisdn: string
+          owner_id: string | null
+          owner_name: string | null
+          reporting_month: string | null
+          reporting_week: string
+          rule_mode: string
+          threshold_used: number
+          total_txns: number
+          total_value: number
+        }
+        Insert: {
+          cash_in_txns?: number
+          cash_out_txns?: number
+          created_at?: string
+          evaluated_at?: string
+          id?: number
+          is_active?: boolean
+          msisdn: string
+          owner_id?: string | null
+          owner_name?: string | null
+          reporting_month?: string | null
+          reporting_week: string
+          rule_mode?: string
+          threshold_used?: number
+          total_txns?: number
+          total_value?: number
+        }
+        Update: {
+          cash_in_txns?: number
+          cash_out_txns?: number
+          created_at?: string
+          evaluated_at?: string
+          id?: number
+          is_active?: boolean
+          msisdn?: string
+          owner_id?: string | null
+          owner_name?: string | null
+          reporting_month?: string | null
+          reporting_week?: string
+          rule_mode?: string
+          threshold_used?: number
+          total_txns?: number
+          total_value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wakala_status_history_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "owners"
+            referencedColumns: ["owner_id"]
+          },
+        ]
+      }
       wakalas: {
         Row: {
           alternate_number: string | null

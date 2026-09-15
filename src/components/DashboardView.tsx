@@ -834,75 +834,61 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
               </div>
             )}
 
-            {/* Column Labels */}
-            <div className="mt-6 hidden md:grid grid-cols-12 gap-4 px-4 font-sans text-[11px] font-bold text-brand-text-variant uppercase tracking-wider">
-              <div className="col-span-4">KPI Metric</div>
-              <div className="col-span-2 text-right">Monthly Target</div>
-              <div className="col-span-2 text-right">MTD Achieved</div>
-              <div className="col-span-3 text-center">Performance %</div>
-              <div className="col-span-1 text-right">Status</div>
-            </div>
-
-            {/* Metrics Rows */}
-            <div className="mt-4 divide-y divide-brand-gray-border/60">
-              {kpis.map((kpi) => (
-                <div 
-                  key={kpi.id} 
-                  className="grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-4 items-center py-4 px-2 hover:bg-brand-gray-hover/30 rounded-xl transition-colors"
-                >
-                  {/* KPI Identity */}
-                  <div className="col-span-1 md:col-span-4 flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand-primary-container/40 text-brand-primary shadow-sm shrink-0">
-                      <Layers className="h-5 w-5" />
+            {/* Every KPI as its own status card */}
+            <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {kpis.map((kpi) => {
+                const badge = getSemanticBadgeInfo(kpi.status, kpi.performance);
+                return (
+                  <button
+                    key={kpi.id}
+                    onClick={() => onNavigate(ViewType.KPI_REPORTS)}
+                    className="text-left p-5 rounded-2xl bg-brand-card border border-brand-gray-border shadow-xs hover:shadow-ambient hover:border-brand-primary/40 transition-all cursor-pointer"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-primary-container/40 text-brand-primary shrink-0">
+                          <Layers className="h-5 w-5" />
+                        </div>
+                        <h4 className="font-sans text-sm font-extrabold text-brand-text leading-snug">{kpi.name}</h4>
+                      </div>
+                      <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 font-sans text-[10px] font-bold tracking-wider whitespace-nowrap ${badge.bgClass}`}>
+                        {badge.badgeText}
+                      </span>
                     </div>
-                    <div>
-                      <h4 className="font-sans text-sm font-bold text-brand-text">{kpi.name}</h4>
-                      <span className="md:hidden font-sans text-xs text-brand-text-variant">Target: {kpi.target}</span>
-                    </div>
-                  </div>
 
-                  {/* Monthly Target (Desktop) */}
-                  <div className="col-span-2 text-right hidden md:block">
-                    <span className="font-mono text-sm font-semibold text-brand-text">{kpi.target}</span>
-                  </div>
-
-                  {/* MTD Achieved */}
-                  <div className="col-span-2 text-right flex md:block justify-between items-center bg-brand-gray-hover/30 md:bg-transparent px-3 py-2 md:p-0 rounded-lg">
-                    <span className="md:hidden font-sans text-xs font-semibold text-brand-text-variant">MTD Achieved</span>
-                    <span className="font-mono text-sm font-bold text-brand-primary">{kpi.achieved}</span>
-                  </div>
-
-                  {/* Performance Indicator Gauge */}
-                  <div className="col-span-3 flex items-center gap-3 bg-brand-gray-hover/30 md:bg-transparent px-3 py-2 md:p-0 rounded-lg">
-                    <span className="md:hidden font-sans text-xs font-semibold text-brand-text-variant shrink-0">Performance</span>
-                    <div className="flex-1">
-                      <div className="h-2 w-full overflow-hidden rounded-full bg-brand-gray-hover/40">
-                        <motion.div 
-                          initial={{ width: 0 }}
-                          animate={{ width: `${kpi.performance}%` }}
-                          transition={{ duration: 1, ease: 'easeOut' }}
-                          className={`h-full rounded-full ${getProgressColor(kpi.status, kpi.performance)}`}
-                        />
+                    <div className="mt-4 flex items-end justify-between">
+                      <div>
+                        <p className="font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Performance</p>
+                        <p className="font-mono text-2xl font-black text-brand-text">
+                          {kpi.performance}%
+                          {realPerformanceByKpiId.has(kpi.id) && (
+                            <span className="ml-1 font-sans text-[10px] font-semibold text-brand-primary align-middle">
+                              real: {realPerformanceByKpiId.get(kpi.id)}%
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">MTD Achieved</p>
+                        <p className="font-mono text-sm font-bold text-brand-primary">{kpi.achieved}</p>
                       </div>
                     </div>
-                    <span className="font-mono text-xs font-bold text-brand-text-variant text-right whitespace-nowrap">
-                      {kpi.performance}%
-                      {realPerformanceByKpiId.has(kpi.id) && (
-                        <span className="ml-1 text-[10px] font-semibold text-brand-primary">(real: {realPerformanceByKpiId.get(kpi.id)}%)</span>
-                      )}
-                    </span>
 
-                  </div>
+                    <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-brand-gray-hover/40">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${Math.min(100, kpi.performance)}%` }}
+                        transition={{ duration: 1, ease: 'easeOut' }}
+                        className={`h-full rounded-full ${getProgressColor(kpi.status, kpi.performance)}`}
+                      />
+                    </div>
 
-                  {/* Status Badge */}
-                  <div className="col-span-1 flex md:block justify-between items-center bg-brand-gray-hover/30 md:bg-transparent px-3 py-2 md:p-0 rounded-lg">
-                    <span className="md:hidden font-sans text-xs font-semibold text-brand-text-variant">Status</span>
-                    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 font-sans text-[10px] font-bold tracking-wider ${getSemanticBadgeInfo(kpi.status, kpi.performance).bgClass}`}>
-                      {getSemanticBadgeInfo(kpi.status, kpi.performance).badgeText}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                    <p className="mt-2.5 font-sans text-[11px] text-brand-text-variant">
+                      Target: <strong className="font-mono text-brand-text">{kpi.target}</strong>
+                    </p>
+                  </button>
+                );
+              })}
             </div>
           </>
         )}
@@ -940,7 +926,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
               </span>
             </div>
 
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-5">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 pt-5">
               <div className="rounded-xl bg-brand-gray-hover p-4">
                 <p className="font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Latest Week</p>
                 <p className="font-sans text-xl font-bold text-brand-text mt-1">{latest.reportingWeek}</p>
@@ -967,13 +953,32 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                   {target > 0 ? ` / ${formatNumberWithAbbreviation(target)}` : ''}
                 </p>
               </div>
+              {(() => {
+                const month = (latest as any).reportingMonth;
+                const monthEntries = month
+                  ? series.filter(e => (e as any).reportingMonth === month)
+                  : series;
+                const penaltyMtd = monthEntries.reduce((s, e) => s + ((e as any).penalty || 0), 0);
+                const iopMtd = monthEntries.reduce((s, e) => s + ((e as any).iopValue || 0), 0);
+                return (
+                  <div className="rounded-xl bg-brand-gray-hover p-4">
+                    <p className="font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Penalty (Month to date)</p>
+                    <p className="font-sans text-xl font-bold text-brand-error mt-1">
+                      {formatNumberWithAbbreviation(penaltyMtd)}
+                    </p>
+                    <p className="font-sans text-[10px] text-brand-text-variant mt-0.5">
+                      IOP volume {formatNumberWithAbbreviation(iopMtd)}
+                    </p>
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="mt-5 overflow-x-auto">
               <table className="w-full min-w-[640px] text-left">
                 <thead>
                   <tr className="border-b border-brand-gray-border">
-                    {['Week', 'Active', 'Inactive', 'Served', 'Unserved', 'Weekly Value', 'Cumulative', 'vs Target'].map(h => (
+                    {['Week', 'Active', 'Inactive', 'Served', 'Unserved', 'Weekly Value', 'IOP Value', 'Penalty', 'Cumulative', 'vs Target'].map(h => (
                       <th key={h} className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">
                         {h}
                       </th>
@@ -989,6 +994,8 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                       <td className="py-2.5 font-sans text-xs font-bold text-brand-success">{entry.served}</td>
                       <td className="py-2.5 font-sans text-xs font-bold text-brand-error">{entry.notServed}</td>
                       <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation(entry.totalValue)}</td>
+                      <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation((entry as any).iopValue || 0)}</td>
+                      <td className="py-2.5 font-sans text-xs font-bold text-brand-error">{formatNumberWithAbbreviation((entry as any).penalty || 0)}</td>
                       <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation(entry.cumulativeValue)}</td>
                       <td className="py-2.5 font-sans text-xs font-bold text-brand-primary">
                         {target > 0 ? `${((entry.cumulativeValue / target) * 100).toFixed(1)}%` : '—'}
