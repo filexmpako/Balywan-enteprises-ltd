@@ -926,7 +926,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
               </span>
             </div>
 
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-5">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 pt-5">
               <div className="rounded-xl bg-brand-gray-hover p-4">
                 <p className="font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Latest Week</p>
                 <p className="font-sans text-xl font-bold text-brand-text mt-1">{latest.reportingWeek}</p>
