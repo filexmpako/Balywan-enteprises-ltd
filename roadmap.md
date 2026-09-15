@@ -1,0 +1,4 @@
+- [ ] Fix weekly active/inactive parsing and evaluation using transaction and amount rules
+- [ ] Make the navigation collapsible
+- [ ] Redesign the settings page professionally
+- [ ] Verify weekly reporting, settings, and navigation
