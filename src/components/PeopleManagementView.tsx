@@ -1,7 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { ViewType, Owner, Personnel, BaseWakala } from '../types';
 import { buildOwnerWakalaMap } from '../utils/wakalaMapping';
-import { generateSalt, hashPassword } from '../utils/passwordHash';
+import {
+  listUserAccounts,
+  createUserAccount,
+  resetUserPassword,
+  deleteUserAccount,
+} from '../lib/accounts.functions';
 import { ownersList as initialOwners } from '../data';
 import { useAuth } from './AuthContext';
 import { useCompany } from './CompanyContext';
@@ -94,13 +99,37 @@ export default function PeopleManagementView({
     window.dispatchEvent(new Event('people-reclassified'));
     setTimeout(() => setDeletionToast(null), 5000);
   };
-  const [usersList, setUsersList] = useState<any[]>(() => {
-    const saved = localStorage.getItem('hasidadi_users');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
+  // Real accounts, read from Supabase Auth through admin-only server functions.
+  const [usersList, setUsersList] = useState<any[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersError, setUsersError] = useState<string | null>(null);
+  const [userActionBusy, setUserActionBusy] = useState(false);
+
+  const reloadUsers = React.useCallback(async () => {
+    setUsersLoading(true);
+    setUsersError(null);
+    try {
+      const res = await listUserAccounts();
+      setUsersList(
+        (res?.users ?? []).map((u) => ({
+          id: u.userId,
+          userId: u.userId,
+          username: u.username,
+          email: u.email,
+          name: u.name,
+          role: u.role,
+          ownerId: u.ownerId ?? undefined,
+          personnelId: u.personnelId ?? undefined,
+          lastSignInAt: u.lastSignInAt,
+        })),
+      );
+    } catch (e: any) {
+      setUsersError(e?.message || 'Could not load accounts.');
+      setUsersList([]);
+    } finally {
+      setUsersLoading(false);
     }
-    return [];
-  });
+  }, []);
 
   // Modal / Form States
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
@@ -120,54 +149,14 @@ export default function PeopleManagementView({
   const [resetSuccessData, setResetSuccessData] = useState<{ user: any; password: string } | null>(null);
   const [copiedResetPassword, setCopiedResetPassword] = useState(false);
 
-  // Sync users list from localStorage and migrate legacy unhashed accounts
   useEffect(() => {
-    async function syncAndMigrateUsers() {
-      const saved = localStorage.getItem('hasidadi_users');
-      if (!saved) return;
-      try {
-        const parsed = JSON.parse(saved);
-        if (!Array.isArray(parsed)) return;
-        
-        let mutated = false;
-        const migrated = await Promise.all(
-          parsed.map(async (u) => {
-            if (u.password !== undefined || !u.salt || !u.passwordHash || !u.username) {
-              mutated = true;
-              const rawPass = u.password || 'OwnerPassword123!';
-              const salt = u.salt || generateSalt();
-              const passwordHash = u.passwordHash || (await hashPassword(rawPass, salt));
-              const { password, ...rest } = u;
-              const autoUsername = u.username || (u.name ? u.name.toLowerCase().replace(/[^a-z0-9]/g, '') : (u.email ? u.email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '') : 'user'));
-              return {
-                ...rest,
-                username: autoUsername,
-                role: u.role === 'Personnel' ? 'Owner' : (u.role || 'Owner'),
-                salt,
-                passwordHash,
-              };
-            }
-            return u;
-          })
-        );
-
-        if (mutated) {
-          localStorage.setItem('hasidadi_users', JSON.stringify(migrated));
-          setUsersList(migrated);
-        } else if (activeTab === 'users') {
-          setUsersList(parsed);
-        }
-      } catch (e) {
-        console.error('Failed to parse or migrate hasidadi_users:', e);
-      }
-    }
-    syncAndMigrateUsers();
-  }, [activeTab]);
+    if (activeTab === 'users') void reloadUsers();
+  }, [activeTab, reloadUsers]);
 
   const handleCreateUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const { selectedRole, selectedEntityId, username, email, password } = createUserForm;
-    if (!username.trim() || !email.trim() || !password.trim()) return;
+    if (!username.trim() || !email.trim()) return;
     if (selectedRole === 'Owner' && !selectedEntityId) return; // Owner accounts must link to a real Owner
 
     const cleanUsername = username.trim().toLowerCase();
@@ -200,79 +189,90 @@ export default function PeopleManagementView({
       }
     }
 
-    const salt = generateSalt();
-    const passwordHash = await hashPassword(password.trim(), salt);
+    const displayName =
+      selectedRole === 'Owner' ? linkedName : (linkedName !== 'System Account' ? linkedName : cleanUsername);
 
-    const newUser = {
-      username: cleanUsername,
-      email: email.trim(),
-      name: selectedRole === 'Owner' ? linkedName : (linkedName !== 'System Account' ? linkedName : cleanUsername),
-      role: selectedRole,
-      salt,
-      passwordHash,
-      ownerId,
-      personnelId,
-    };
+    setUserActionBusy(true);
+    try {
+      const created = await createUserAccount({
+        data: {
+          email: cleanEmail,
+          username: cleanUsername,
+          name: displayName,
+          role: selectedRole,
+          password: password.trim() || undefined,
+          ownerId: ownerId ?? null,
+          personnelId: personnelId ?? null,
+        },
+      });
 
-    const updatedUsers = [...usersList, newUser];
-    setUsersList(updatedUsers);
-    localStorage.setItem('hasidadi_users', JSON.stringify(updatedUsers));
+      addAuditLog('User Created', currentUser?.name || 'Admin', 'N/A', selectedRole, linkedName, `Provisioned ${selectedRole} login credentials (Username: ${cleanUsername})`);
 
-    addAuditLog('User Created', currentUser?.name || 'Admin', 'N/A', selectedRole, linkedName, `Provisioned ${selectedRole} login credentials (Username: ${cleanUsername})`);
+      setShowCreateUserModal(false);
+      setCreateUserForm({ selectedRole: 'Owner', selectedEntityId: '', selectedEntityType: 'Owner', username: '', email: '', password: '' });
+      await reloadUsers();
 
-    setShowCreateUserModal(false);
-    setCreateUserForm({ selectedRole: 'Owner', selectedEntityId: '', selectedEntityType: 'Owner', username: '', email: '', password: '' });
+      // Show the password exactly once so the admin can hand it over.
+      const createdRow = {
+        userId: created.userId,
+        name: displayName,
+        username: cleanUsername,
+        email: cleanEmail,
+        role: selectedRole,
+      };
+      setShowResetPasswordModal(createdRow);
+      setResetSuccessData({ user: createdRow, password: created.password });
+      setCopiedResetPassword(false);
+    } catch (err: any) {
+      alert(`Could not create the account: ${err?.message || err}`);
+    } finally {
+      setUserActionBusy(false);
+    }
   };
 
   const handleResetPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!showResetPasswordModal || !resetPasswordValue.trim()) return;
-
-    const newPlainPassword = resetPasswordValue.trim();
-    const salt = generateSalt();
-    const passwordHash = await hashPassword(newPlainPassword, salt);
+    if (!showResetPasswordModal) return;
 
     const targetUser = showResetPasswordModal;
+    setUserActionBusy(true);
+    try {
+      const res = await resetUserPassword({
+        data: { userId: targetUser.userId, password: resetPasswordValue.trim() || undefined },
+      });
 
-    const updatedUsers = usersList.map(u => {
-      const isMatch = (targetUser.username && u.username && u.username.toLowerCase() === targetUser.username.toLowerCase()) ||
-                      (u.email && targetUser.email && u.email.toLowerCase() === targetUser.email.toLowerCase());
-      if (isMatch) {
-        const { password, ...rest } = u; // strip any legacy plaintext field if present
-        return { ...rest, salt, passwordHash };
-      }
-      return u;
-    });
+      addAuditLog('Password Reset', currentUser?.name || 'Admin', 'N/A', targetUser.role, targetUser.name, `Administrative password reset executed for username ${targetUser.username || targetUser.email}`);
 
-    setUsersList(updatedUsers);
-    localStorage.setItem('hasidadi_users', JSON.stringify(updatedUsers));
-
-    addAuditLog('Password Reset', currentUser?.name || 'Admin', 'N/A', showResetPasswordModal.role, showResetPasswordModal.name, `Administrative password reset executed for username ${showResetPasswordModal.username || showResetPasswordModal.email}`);
-
-    // Transition to transient success display state so admin can copy the new password
-    setResetSuccessData({
-      user: showResetPasswordModal,
-      password: newPlainPassword
-    });
-    setCopiedResetPassword(false);
+      setResetSuccessData({ user: targetUser, password: res.password });
+      setCopiedResetPassword(false);
+    } catch (err: any) {
+      alert(`Could not reset the password: ${err?.message || err}`);
+    } finally {
+      setUserActionBusy(false);
+    }
   };
 
-  const handleDeleteUserConfirm = () => {
+  const handleDeleteUserConfirm = async () => {
     if (!showDeleteUserConfirmModal) return;
 
-    if (currentUser && showDeleteUserConfirmModal.email.toLowerCase() === currentUser.email.toLowerCase()) {
+    if (currentUser && showDeleteUserConfirmModal.email?.toLowerCase() === currentUser.email.toLowerCase()) {
       alert("Accidental lockout prevention: You cannot delete your own active administrator account.");
       return;
     }
 
-    const updatedUsers = usersList.filter(u => u.email.toLowerCase() !== showDeleteUserConfirmModal.email.toLowerCase());
-    setUsersList(updatedUsers);
-    localStorage.setItem('hasidadi_users', JSON.stringify(updatedUsers));
-
-    addAuditLog('User Deleted', currentUser?.name || 'Admin', 'N/A', showDeleteUserConfirmModal.role, showDeleteUserConfirmModal.name, `De-provisioned login credentials`);
-
-    setShowDeleteUserConfirmModal(null);
+    setUserActionBusy(true);
+    try {
+      await deleteUserAccount({ data: { userId: showDeleteUserConfirmModal.userId } });
+      addAuditLog('User Deleted', currentUser?.name || 'Admin', 'N/A', showDeleteUserConfirmModal.role, showDeleteUserConfirmModal.name, `De-provisioned login credentials`);
+      setShowDeleteUserConfirmModal(null);
+      await reloadUsers();
+    } catch (err: any) {
+      alert(`Could not delete the account: ${err?.message || err}`);
+    } finally {
+      setUserActionBusy(false);
+    }
   };
+
 
   // --- EDIT MODAL STATES ---
   const [showEditOwnerModal, setShowEditOwnerModal] = useState(false);
@@ -1751,10 +1751,22 @@ export default function PeopleManagementView({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-brand-gray-border text-xs font-medium text-brand-text">
-                      {usersList.length === 0 ? (
+                      {usersLoading ? (
                         <tr>
                           <td colSpan={6} className="py-12 text-center text-brand-text-variant font-sans">
-                            No credentials provisioned in system directory yet.
+                            Loading accounts…
+                          </td>
+                        </tr>
+                      ) : usersError ? (
+                        <tr>
+                          <td colSpan={6} className="py-12 text-center text-rose-700 font-sans font-semibold">
+                            {usersError}
+                          </td>
+                        </tr>
+                      ) : usersList.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-12 text-center text-brand-text-variant font-sans">
+                            No login accounts exist yet. Use “Provision User Credentials” to create one.
                           </td>
                         </tr>
                       ) : (
@@ -2670,8 +2682,8 @@ export default function PeopleManagementView({
                   <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider">Initial Password</label>
                   <input
                     type="password"
-                    required
-                    placeholder="Minimum 6 characters"
+                    minLength={8}
+                    placeholder="Leave blank to generate a strong password"
                     value={createUserForm.password}
                     onChange={(e) => setCreateUserForm(prev => ({ ...prev, password: e.target.value }))}
                     className="w-full rounded-xl bg-slate-50 border border-slate-200/85 px-3.5 py-2.5 text-xs font-medium text-slate-800 focus:outline-none focus:border-brand-primary focus:bg-white"
@@ -2680,6 +2692,7 @@ export default function PeopleManagementView({
 
                 <div className="text-[10px] text-slate-400 font-semibold leading-relaxed">
                   * Users log in using their <strong>Username</strong>. Contact email is retained for verification and system communications.
+                  The password is displayed once after the account is created — copy it then.
                 </div>
 
                 <div className="border-t border-slate-100 pt-3 flex justify-end gap-2">
@@ -2692,9 +2705,10 @@ export default function PeopleManagementView({
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 bg-brand-primary hover:bg-brand-primary-light text-white font-extrabold rounded-xl transition-all cursor-pointer text-xs shadow-ambient"
+                    disabled={userActionBusy}
+                    className="px-5 py-2 bg-brand-primary hover:bg-brand-primary-light text-white font-extrabold rounded-xl transition-all cursor-pointer text-xs shadow-ambient disabled:opacity-60"
                   >
-                    Provision Account
+                    {userActionBusy ? 'Creating…' : 'Provision Account'}
                   </button>
                 </div>
               </form>
@@ -2805,13 +2819,17 @@ export default function PeopleManagementView({
                       <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider">New Secure Password</label>
                       <input
                         type="password"
-                        required
-                        placeholder="Enter new password"
+                        minLength={8}
+                        placeholder="Leave blank to generate a strong password"
                         value={resetPasswordValue}
                         onChange={(e) => setResetPasswordValue(e.target.value)}
                         className="w-full rounded-xl bg-slate-50 border border-slate-200/85 px-3.5 py-2.5 text-xs font-medium text-slate-800 focus:outline-none focus:border-brand-primary focus:bg-white"
                       />
+                      <p className="text-[10px] font-semibold text-slate-400">
+                        Minimum 8 characters. The password is shown once after saving.
+                      </p>
                     </div>
+
 
                     <div className="border-t border-slate-100 pt-3 flex justify-end gap-2">
                       <button

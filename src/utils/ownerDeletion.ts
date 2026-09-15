@@ -1,6 +1,8 @@
 import { getPhotosByOwner, deletePhoto } from './db';
 import { resolveOwnerMatch } from './ownerMatch';
 import { invalidateClassificationCache } from './classificationCache';
+import { supabase } from '@/integrations/supabase/client';
+import { deleteUserAccount } from '../lib/accounts.functions';
 
 export interface OwnerDeletionImpact {
   ownerId: string;
@@ -11,6 +13,29 @@ export interface OwnerDeletionImpact {
   photosDeleted: number;
   loginAccountDeleted: boolean;
   loginEmail?: string;
+}
+
+/** Looks up the real login (if any) attached to this owner. */
+async function findLinkedLogin(
+  ownerId: string,
+): Promise<{ userId: string; email?: string } | null> {
+  try {
+    const { data: owner } = await supabase
+      .from('owners')
+      .select('user_id')
+      .eq('owner_id', ownerId)
+      .maybeSingle();
+    const userId = (owner as any)?.user_id as string | undefined;
+    if (!userId) return null;
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('email')
+      .eq('user_id', userId)
+      .maybeSingle();
+    return { userId, email: (profile as any)?.email ?? undefined };
+  } catch {
+    return null;
+  }
 }
 
 export async function getOwnerDeletionImpact(ownerId: string): Promise<OwnerDeletionImpact> {
@@ -55,9 +80,8 @@ export async function getOwnerDeletionImpact(ownerId: string): Promise<OwnerDele
     photosCount++;
   }
 
-  // 5. Login account
-  const users = JSON.parse(localStorage.getItem('hasidadi_users') || '[]');
-  const linkedUser = users.find((u: any) => u.ownerId === actualOwnerId);
+  // 5. Real login account, if one is linked
+  const login = await findLinkedLogin(actualOwnerId);
 
   return {
     ownerId: actualOwnerId,
@@ -66,8 +90,8 @@ export async function getOwnerDeletionImpact(ownerId: string): Promise<OwnerDele
     baseWakalasUnassigned,
     iopWakalasRemoved,
     photosDeleted: photosCount,
-    loginAccountDeleted: !!linkedUser,
-    loginEmail: linkedUser?.email,
+    loginAccountDeleted: !!login,
+    loginEmail: login?.email,
   };
 }
 
@@ -86,10 +110,19 @@ export async function deleteOwnerCascade(ownerId: string): Promise<{
   const actualOwnerId = owner.id;
   const ownerNameLower = (owner.name || '').trim().toLowerCase();
 
+  // 2. Delete the real login account first, while the link still exists.
+  let loginAccountDeleted = false;
+  try {
+    const res = await deleteUserAccount({ data: { ownerId: actualOwnerId } });
+    loginAccountDeleted = !!res?.deleted;
+  } catch (e) {
+    console.error('Could not delete the login account for this owner:', e);
+  }
+
   const updatedOwners = owners.filter((o: any) => o.id !== actualOwnerId);
   localStorage.setItem('ownersList', JSON.stringify(updatedOwners));
 
-  // 2. Unassign (not delete) any tills pointing at this owner
+  // 3. Unassign (not delete) any tills pointing at this owner
   const tillsList = JSON.parse(localStorage.getItem('tillsList') || '[]');
   let tillsUnassigned = 0;
   const updatedTills = tillsList.map((t: any) => {
@@ -101,7 +134,7 @@ export async function deleteOwnerCascade(ownerId: string): Promise<{
   });
   localStorage.setItem('tillsList', JSON.stringify(updatedTills));
 
-  // 3. Unassign (not delete) baseWakalaIndex entries pointing at this owner
+  // 4. Unassign (not delete) baseWakalaIndex entries pointing at this owner
   const baseWakalaIndex = JSON.parse(localStorage.getItem('baseWakalaIndex') || '[]');
   let baseWakalasUnassigned = 0;
   const updatedIndex = baseWakalaIndex.map((w: any) => {
@@ -114,15 +147,15 @@ export async function deleteOwnerCascade(ownerId: string): Promise<{
   });
   localStorage.setItem('baseWakalaIndex', JSON.stringify(updatedIndex));
 
-  // 4. owner.iopWakalas is deleted automatically with the owner record itself
+  // 5. owner.iopWakalas is deleted automatically with the owner record itself
   const iopWakalasRemoved = (owner.iopWakalas || []).length;
 
-  // 5. Remove manualOwnerTargets entries for this owner
+  // 6. Remove manualOwnerTargets entries for this owner
   const manualTargets = JSON.parse(localStorage.getItem('manualOwnerTargets') || '[]');
   const updatedTargets = manualTargets.filter((t: any) => t.ownerId !== actualOwnerId);
   localStorage.setItem('manualOwnerTargets', JSON.stringify(updatedTargets));
 
-  // 6. Delete IndexedDB photos (avatar + work + any receipts)
+  // 7. Delete IndexedDB photos (avatar + work + any receipts)
   let photosDeleted = 0;
   try {
     const photos = await getPhotosByOwner(actualOwnerId);
@@ -141,15 +174,9 @@ export async function deleteOwnerCascade(ownerId: string): Promise<{
     } catch (e) {}
   }
 
-  // 7. Remove reportSubmissions_${ownerId} localStorage key
+  // 8. Remove reportSubmissions_${ownerId} localStorage key
   localStorage.removeItem(`reportSubmissions_${actualOwnerId}`);
   localStorage.removeItem(`reportSubmissions_${owner.name}`);
-
-  // 8. Delete linked login account, if one exists
-  const users = JSON.parse(localStorage.getItem('hasidadi_users') || '[]');
-  const linkedUser = users.find((u: any) => u.ownerId === actualOwnerId);
-  const updatedUsers = users.filter((u: any) => u.ownerId !== actualOwnerId);
-  localStorage.setItem('hasidadi_users', JSON.stringify(updatedUsers));
 
   // 9. Invalidate classification cache, since ownersList changed
   invalidateClassificationCache();
@@ -159,6 +186,6 @@ export async function deleteOwnerCascade(ownerId: string): Promise<{
     baseWakalasUnassigned,
     iopWakalasRemoved,
     photosDeleted,
-    loginAccountDeleted: !!linkedUser,
+    loginAccountDeleted,
   };
 }

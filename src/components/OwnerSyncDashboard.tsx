@@ -565,30 +565,9 @@ export default function OwnerSyncDashboard({ onCancel, onAddAuditReport, onSyncC
     // Recalculate metrics immediately after synchronization
     recalculateAllPerformances();
 
-    // Automatically provision user accounts in hasidadi_users for Owners
-    const storedUsersStr = localStorage.getItem('hasidadi_users');
-    if (storedUsersStr) {
-      try {
-        const users = JSON.parse(storedUsersStr);
-        const companyDomain = (getCompanyName().toLowerCase().replace(/[^a-z0-9]/g, '') || 'company') + '.com';
-        currentOwners.forEach(owner => {
-          const email = `${owner.name.toLowerCase().replace(/\s+/g, '.')}@${companyDomain}`;
-          const exists = users.some((u: any) => u.email.toLowerCase() === email.toLowerCase());
-          if (!exists) {
-            users.push({
-              email: email,
-              password: 'agentpassword',
-              name: owner.name,
-              role: 'Owner',
-              ownerId: owner.id
-            });
-          }
-        });
-        localStorage.setItem('hasidadi_users', JSON.stringify(users));
-      } catch (e) {
-        console.error(e);
-      }
-    }
+    // Logins are never auto-provisioned here: an administrator creates each
+    // real account (with its own password) from People Management > Users.
+
 
     // Audit Log creation
     const newAuditLog = {

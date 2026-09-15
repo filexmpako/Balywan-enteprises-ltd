@@ -754,6 +754,56 @@ export type Database = {
           },
         ]
       }
+      monthly_servicing_records: {
+        Row: {
+          created_at: string
+          id: number
+          msisdn: string
+          owner_id: string | null
+          owner_name: string | null
+          raw: Json
+          reporting_month: string
+          servicing_txns: number
+          servicing_val: number
+          uploaded_by: string | null
+          wakala_status: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          msisdn: string
+          owner_id?: string | null
+          owner_name?: string | null
+          raw?: Json
+          reporting_month: string
+          servicing_txns?: number
+          servicing_val?: number
+          uploaded_by?: string | null
+          wakala_status?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          msisdn?: string
+          owner_id?: string | null
+          owner_name?: string | null
+          raw?: Json
+          reporting_month?: string
+          servicing_txns?: number
+          servicing_val?: number
+          uploaded_by?: string | null
+          wakala_status?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monthly_servicing_records_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "owners"
+            referencedColumns: ["owner_id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           alert_type: string

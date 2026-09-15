@@ -138,9 +138,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const identifier = username.trim();
 
-      // First run on a fresh backend: provision the standard operating accounts.
+      // First run on a fresh backend: provision the administrator account only.
+      // Its password is generated server-side and surfaced here exactly once,
+      // so nothing has to be hardcoded in the source.
       try {
-        await bootstrapSeedAccounts();
+        const setup = await bootstrapSeedAccounts();
+        if (setup?.created === 1 && setup.password) {
+          return {
+            success: false,
+            error:
+              `First-run setup complete. The administrator account "${setup.email}" was just created with the one-time password: ` +
+              `${setup.password}\nWrite it down now — it is shown only this once — then sign in and change it immediately.`,
+          };
+        }
       } catch {
         /* already provisioned or unavailable — continue */
       }

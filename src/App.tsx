@@ -31,7 +31,8 @@ import WakalaIssuesPanel from "./components/WakalaIssuesPanel";
 import TargetsView from "./components/TargetsView";
 import FloatManagerView from "./components/FloatManagerView";
 import { deleteUploadedReport } from "./lib/uploads.functions";
-import { clearMonthlyServicingData, clearWeeklyServicingData, deleteDailyServicingRowsByRefs } from "./utils/indexedDB";
+import { clearWeeklyServicingData, deleteDailyServicingRowsByRefs } from "./utils/indexedDB";
+import { removeMonth } from "./utils/monthlyStore";
 import { invalidateClassificationCache } from "./utils/classificationCache";
 import { refreshWeeklyStatsHistory } from "./utils/weeklyHistory";
 
@@ -137,7 +138,8 @@ function AppContent() {
         await refreshWeeklyStatsHistory().catch(() => undefined);
         window.dispatchEvent(new Event("weekly-kpi-updated"));
       } else if (report.reportingMonth) {
-        await clearMonthlyServicingData(report.reportingMonth).catch(() => undefined);
+        // Removes the month from Postgres and from the offline mirror.
+        await removeMonth(report.reportingMonth).catch(() => undefined);
         const monthly = JSON.parse(localStorage.getItem("kpiWorkbookHistory") || "[]");
         localStorage.setItem(
           "kpiWorkbookHistory",

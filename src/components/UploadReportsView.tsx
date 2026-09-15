@@ -61,6 +61,7 @@ import { ingestClassified } from '../lib/ingest';
 import { invalidateClassificationCache } from '../utils/classificationCache';
 import { saveMonthlyServicingData, clearMonthlyServicingData, getServicingRows, getServicingColumns, saveWeeklyServicingData, clearWeeklyServicingData, getWeeklyServicingRows, getWeeklyServicingColumns, saveDailyServicingData, getDailyServicingRows, clearDailyServicingData } from '../utils/indexedDB';
 import { persistWeeklyServicing } from '../utils/weeklyStore';
+import { persistMonthlyServicing } from '../utils/monthlyStore';
 import { useReportingMetadata } from '../hooks/useReportingMetadata';
 
 // Executive KPI Analysis Engine Modular Subcomponents
@@ -2120,16 +2121,21 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
 
           const activeMonth = uploadMonth;
 
-          // TASK A2: Clear previous monthly servicing data for activeMonth before saving new data
-          clearMonthlyServicingData(activeMonth)
-            .then(() => saveMonthlyServicingData(activeMonth, parsedServicing, servicingColumns))
-            .then(() => {
+          // Replace this month's per-wakala rows in Postgres (authoritative) and
+          // in the offline mirror — same shape as the Weekly path.
+          persistMonthlyServicing(activeMonth, parsedServicing, servicingColumns)
+            .then((res) => {
               invalidateClassificationCache();
-              console.log(`Successfully persisted ${parsedServicing.length} servicing records to WakalaServicingDB for ${activeMonth}`);
+              console.log(
+                `Persisted ${res.saved} servicing records for ${activeMonth} (cloud: ${res.cloud})`,
+              );
+              if (!res.cloud) {
+                console.warn(`[monthly] ${activeMonth} kept offline only — cloud write failed`);
+              }
             })
             .catch(err => {
-              console.error("Critical IndexedDB write failure:", err);
-              alert(`FATAL DATABASE PERSISTENCE FAILURE: Failed to write servicing data rows to WakalaServicingDB for ${activeMonth}. No rows have been truncated, but database persistence failed. Error details: ${err.message || err}`);
+              console.error("Critical monthly persistence failure:", err);
+              alert(`FATAL DATABASE PERSISTENCE FAILURE: Failed to write servicing data rows for ${activeMonth}. No rows have been truncated, but database persistence failed. Error details: ${err.message || err}`);
             });
 
           // Archive this report in historical workbooks list (lightweight, referencing IndexedDB)
