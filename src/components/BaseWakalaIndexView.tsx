@@ -799,7 +799,7 @@ export default function BaseWakalaIndexView() {
                             <span
                               title={
                                 statusRecord
-                                  ? `${statusRecord.reporting_week}: ${statusRecord.cash_in_txns} cash-in + ${statusRecord.cash_out_txns} cash-out (threshold ${statusRecord.threshold_used})`
+                                  ? `${statusRecord.reporting_week}: ${statusRecord.total_txns} transactions and ${Number(statusRecord.total_value || 0).toLocaleString()} amount (transaction threshold ${statusRecord.threshold_used})`
                                   : 'No weekly report covers this wakala yet'
                               }
                               className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full border w-fit ${

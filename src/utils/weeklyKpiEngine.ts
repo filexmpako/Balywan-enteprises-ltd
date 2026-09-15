@@ -3,8 +3,9 @@
  *
  * Pure/derived analysis of uploaded Weekly KPI workbooks (Sheet 2 servicing
  * rows). Mirrors the exact activity rules already used for Monthly data:
- *   - a wakala is ACTIVE when Wakala_Status === 1
- *   - a wakala is SERVED when (active ? txns > 6 || val > 600000 : txns > 6)
+ *   - a wakala is ACTIVE only when both configured transaction and amount
+ *     thresholds are reached
+ *   - a wakala is SERVED only from the uploaded servicing_status column
  *
  * Adds a per-owner breakdown by resolving each row's MSISDN through the
  * Base Wakala index / till registry, so weekly results can be shown on the
@@ -128,8 +129,16 @@ export function getFieldValue(row: any, keys: string[]): number {
   return 0;
 }
 
-const TXN_KEYS = ['SA_Servicing_Txns', 'SA Servicing Txns', 'sa_servicing_txns'];
-const VAL_KEYS = ['SA_Servicing_Val', 'SA Servicing Val', 'sa_servicing_val'];
+const TXN_KEYS = [
+  'SA_Servicing_Txns', 'SA Servicing Txns', 'SA_Servicing_Transactions',
+  'SA Servicing Transactions', 'sa_servicing_txns', 'servicing_txns',
+  'Servicing Transactions', 'Transaction Count', 'Transactions', 'Txns',
+];
+const VAL_KEYS = [
+  'SA_Servicing_Val', 'SA Servicing Val', 'SA_Servicing_Value',
+  'SA Servicing Value', 'sa_servicing_val', 'servicing_val',
+  'Servicing Amount', 'Transaction Amount', 'Volume', 'Amount', 'Value',
+];
 
 /**
  * Builds an MSISDN -> ownerId resolver from the Base Wakala index (primary and
@@ -261,7 +270,7 @@ export function computeWeeklyStats(
     // Active / inactive follows the configurable system rule (cash-in +
     // cash-out transaction count against the threshold), never the raw
     // status column. Served / unserved still comes from servicing_status.
-    const isActive = isActiveByRule({ cashIn, cashOut, total: countTotal }, rules);
+    const isActive = isActiveByRule({ cashIn, cashOut, total: countTotal || txns, amount: val }, rules);
     if (isActive) activeCount++;
     if (servedStatus === true) servedCount++;
     else if (servedStatus === false) notServedCount++;
