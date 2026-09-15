@@ -36,6 +36,17 @@ function pick(row: any, keys: string[]): any {
   return undefined;
 }
 
+/** Merges two rows for the same MSISDN, keeping any "served" reading. */
+function mergeRaw(a: any, b: any): any {
+  const merged = { ...(a && typeof a === 'object' ? a : {}), ...(b && typeof b === 'object' ? b : {}) };
+  const served = (row: any) =>
+    Number(
+      pick(row || {}, ['servicing_status', 'Servicing_Status', 'Servicing Status']) ?? NaN,
+    ) === 1;
+  if (served(a) || served(b)) merged.servicing_status = 1;
+  return merged;
+}
+
 export interface WeeklyRowInput {
   reportingWeek: string;
   reportingMonth?: string;
@@ -51,27 +62,52 @@ export async function saveWeeklyRows(supabase: DB, input: WeeklyRowInput): Promi
 
   // Deduplicate on MSISDN — the unique key of a weekly row.
   const byMsisdn = new Map<string, any>();
-  for (const raw of input.rows || []) {
-    const msisdn = String(pick(raw, ['MSISDN', 'msisdn', 'phone']) ?? '').trim();
-    if (!msisdn) continue;
-    const existing = byMsisdn.get(msisdn);
+  let skipped = 0;
+  (input.rows || []).forEach((raw: any, index: number) => {
+    const msisdn = String(
+      pick(raw, [
+        'MSISDN',
+        'msisdn',
+        'MSISDN_NO',
+        'MSISDN NO',
+        'Msisdn No',
+        'Agent_MSISDN',
+        'Wakala_MSISDN',
+        'phone',
+        'Phone Number',
+        'Mobile',
+      ]) ?? '',
+    ).trim();
+    if (!msisdn) {
+      // Keep the row instead of discarding it — it still carries servicing
+      // values that belong in the week's totals.
+      skipped += 1;
+    }
+    const key = msisdn || `__norow_${index}`;
+    const existing = byMsisdn.get(key);
     const txns = num(pick(raw, ['SA_Servicing_Txns', 'SA Servicing Txns']));
     const val = num(pick(raw, ['SA_Servicing_Val', 'SA Servicing Val']));
     const statusRaw = pick(raw, ['Wakala_Status', 'Wakala Status', 'status']);
     const record = {
       reporting_week: week,
       reporting_month: input.reportingMonth || null,
-      msisdn,
+      msisdn: msisdn || key,
       owner_id: null as string | null,
       owner_name: String(pick(raw, ['Owner_Name', 'owner_name', 'Wakala Name', 'owner']) ?? '') || null,
-      wakala_status: statusRaw === undefined ? null : Number(statusRaw) || 0,
+      // Merging duplicates must never downgrade a reading: an active/served
+      // value on any row for this MSISDN wins.
+      wakala_status: Math.max(
+        statusRaw === undefined || statusRaw === null ? 0 : Number(statusRaw) || 0,
+        existing ? Number(existing.wakala_status) || 0 : 0,
+      ),
       servicing_txns: existing ? Number(existing.servicing_txns) + txns : txns,
       servicing_val: existing ? Number(existing.servicing_val) + val : val,
-      raw,
+      raw: existing ? mergeRaw(existing.raw, raw) : raw,
       uploaded_by: input.uploadedBy ?? null,
     };
-    byMsisdn.set(msisdn, record);
-  }
+    byMsisdn.set(key, record);
+  });
+  if (skipped > 0) console.warn(`[weekly] ${skipped} row(s) had no MSISDN column value`);
 
   const records = Array.from(byMsisdn.values());
 
@@ -105,10 +141,17 @@ export async function saveWeeklyRows(supabase: DB, input: WeeklyRowInput): Promi
 }
 
 export async function loadWeeklyRows(supabase: DB, reportingWeek?: string): Promise<any[]> {
-  let query = supabase.from(TABLE).select('*').limit(50000);
-  if (reportingWeek) query = query.eq('reporting_week', reportingWeek);
-  const { data, error } = await query;
-  if (error) throw new Error(`${TABLE} read: ${error.message}`);
+  // Paginate: a single capped select silently truncated large weeks.
+  const PAGE = 1000;
+  const data: any[] = [];
+  for (let from = 0; ; from += PAGE) {
+    let query = supabase.from(TABLE).select('*').range(from, from + PAGE - 1);
+    if (reportingWeek) query = query.eq('reporting_week', reportingWeek);
+    const { data: page, error } = await query;
+    if (error) throw new Error(`${TABLE} read: ${error.message}`);
+    data.push(...(page ?? []));
+    if (!page || page.length < PAGE) break;
+  }
   return (data ?? []).map((r: any) => ({
     ...(r.raw && typeof r.raw === 'object' ? r.raw : {}),
     MSISDN: r.msisdn,
@@ -123,9 +166,18 @@ export async function loadWeeklyRows(supabase: DB, reportingWeek?: string): Prom
 }
 
 export async function listWeeklyWeeks(supabase: DB): Promise<string[]> {
-  const { data, error } = await supabase.from(TABLE).select('reporting_week').limit(50000);
-  if (error) throw new Error(`${TABLE} weeks: ${error.message}`);
-  return Array.from(new Set((data ?? []).map((r: any) => r.reporting_week))).filter(Boolean);
+  const PAGE = 1000;
+  const weeks = new Set<string>();
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select('reporting_week')
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(`${TABLE} weeks: ${error.message}`);
+    (data ?? []).forEach((r: any) => r.reporting_week && weeks.add(r.reporting_week));
+    if (!data || data.length < PAGE) break;
+  }
+  return Array.from(weeks);
 }
 
 export async function deleteWeeklyRows(supabase: DB, reportingWeek: string): Promise<void> {
