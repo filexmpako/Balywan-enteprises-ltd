@@ -36,9 +36,24 @@ export const saveWakalaStatusHistory = createServerFn({ method: 'POST' })
     const supabase = context.supabase as any;
     const week = String(data.reportingWeek).trim();
 
-    const rows = data.evaluations
+    const byMsisdn = new Map<string, any>();
+    data.evaluations
       .filter(e => e && String(e.msisdn || '').trim())
-      .map(e => ({
+      .forEach(e => {
+        const key = String(e.msisdn).trim();
+        const prev = byMsisdn.get(key);
+        if (prev) {
+          // Same wakala listed twice in one week: merge instead of inserting twice.
+          prev.cash_in_txns += Number(e.cashInTxns) || 0;
+          prev.cash_out_txns += Number(e.cashOutTxns) || 0;
+          prev.total_txns += Number(e.totalTxns) || 0;
+          prev.total_value += Number(e.totalValue) || 0;
+          prev.is_active = prev.is_active || !!e.isActive;
+          prev.owner_id = prev.owner_id || e.ownerId || null;
+          prev.owner_name = prev.owner_name || e.ownerName || null;
+          return;
+        }
+        byMsisdn.set(key, {
         msisdn: String(e.msisdn).trim(),
         owner_id: e.ownerId || null,
         owner_name: e.ownerName || null,
