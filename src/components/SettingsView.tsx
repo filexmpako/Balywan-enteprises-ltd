@@ -48,6 +48,7 @@ export default function SettingsView({
   const [thresholdInput, setThresholdInput] = useState(String(rules.threshold));
   const [amountThresholdInput, setAmountThresholdInput] = useState(String(rules.amountThreshold));
   const [modeInput, setModeInput] = useState<'combined' | 'separate'>(rules.mode);
+  const [requirementInput, setRequirementInput] = useState<'both' | 'either'>(rules.requirement);
   const [penaltyInput, setPenaltyInput] = useState(String(rules.penaltyRate));
   const [savingRules, setSavingRules] = useState(false);
   const [rulesSaved, setRulesSaved] = useState(false);
@@ -71,6 +72,7 @@ export default function SettingsView({
         threshold: transactionThreshold,
         amountThreshold,
         mode: modeInput,
+        requirement: requirementInput,
         window: 'weekly',
         penaltyRate,
       });
@@ -312,8 +314,14 @@ export default function SettingsView({
             <div className="flex items-start gap-3">
               <div className="rounded-lg bg-brand-primary p-2 text-white"><ShieldCheck className="h-4 w-4" /></div>
               <div>
-                <p className="text-sm font-bold text-brand-text">Both conditions are required</p>
-                <p className="mt-1 text-xs leading-5 text-brand-text-variant">A Wakala is active only after meeting the transaction threshold and the servicing amount threshold in the same week.</p>
+                <p className="text-sm font-bold text-brand-text">
+                  {requirementInput === 'both' ? 'Both conditions are required' : 'Either condition is enough'}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-brand-text-variant">
+                  {requirementInput === 'both'
+                    ? 'A Wakala is active only after meeting the transaction threshold and the servicing amount threshold in the same week.'
+                    : 'A Wakala is active once it meets either the transaction threshold or the servicing amount threshold in the week.'}
+                </p>
               </div>
             </div>
           </div>
@@ -349,7 +357,20 @@ export default function SettingsView({
             </div>
             <div>
               <label className="block text-xs font-bold text-brand-text uppercase tracking-wider mb-1.5">
-                How they are counted
+                How the two conditions combine
+              </label>
+              <select
+                value={requirementInput}
+                onChange={(e) => setRequirementInput(e.target.value as 'both' | 'either')}
+                className="w-full rounded-xl bg-brand-bg border-2 border-transparent px-4 py-2.5 text-sm text-brand-text outline-none focus:border-brand-primary focus:bg-white transition-all font-semibold"
+              >
+                <option value="both">Transactions AND amount required</option>
+                <option value="either">Transactions OR amount is enough</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-brand-text uppercase tracking-wider mb-1.5">
+                How transactions are counted
               </label>
               <select
                 value={modeInput}
@@ -377,7 +398,7 @@ export default function SettingsView({
 
           <div className="mt-5 rounded-lg bg-brand-bg p-4 text-xs text-brand-text-variant">
             <span className="font-bold text-brand-text">Current decision:</span>{' '}
-            {modeInput === 'combined' ? 'combined transactions' : 'cash-in and cash-out individually'} ≥ {Number(thresholdInput || 0).toLocaleString()} <span className="font-bold text-brand-primary">AND</span> amount ≥ TZS {Number(amountThresholdInput || 0).toLocaleString()}.
+            {modeInput === 'combined' ? 'combined transactions' : 'cash-in and cash-out individually'} ≥ {Number(thresholdInput || 0).toLocaleString()} <span className="font-bold text-brand-primary">{requirementInput === 'both' ? 'AND' : 'OR'}</span> amount ≥ TZS {Number(amountThresholdInput || 0).toLocaleString()}.
           </div>
 
           <div className="flex flex-col gap-3 border-t border-brand-gray-border pt-5 mt-5 sm:flex-row sm:items-center sm:justify-between">
@@ -388,7 +409,7 @@ export default function SettingsView({
               </div>
             ) : (
               <span className="text-xs text-brand-text-variant">
-                 Saved: {rules.threshold.toLocaleString()} transactions and TZS {rules.amountThreshold.toLocaleString()} per week
+                 Saved: {rules.threshold.toLocaleString()} transactions {rules.requirement === 'both' ? 'and' : 'or'} TZS {rules.amountThreshold.toLocaleString()} per week
               </span>
             )}
             <Button
