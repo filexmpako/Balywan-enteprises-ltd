@@ -1226,9 +1226,14 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
     const finalServicingRows: any[] = [];
     let uniqueSheet2Headers: string[] = [];
     if (sheet2Exists && sheet2HeaderValid) {
+      // Repeated header labels used to overwrite each other, losing a column's
+      // values entirely — suffix duplicates instead.
+      const seenHeaders = new Map<string, number>();
       uniqueSheet2Headers = sheet2Headers.map((header, idx) => {
-        const trimmed = header.trim();
-        return trimmed !== '' ? trimmed : `Column_${idx + 1}`;
+        const base = header.trim() !== '' ? header.trim() : `Column_${idx + 1}`;
+        const seen = seenHeaders.get(base) || 0;
+        seenHeaders.set(base, seen + 1);
+        return seen === 0 ? base : `${base}_${seen + 1}`;
       });
       setServicingColumns(uniqueSheet2Headers);
 
