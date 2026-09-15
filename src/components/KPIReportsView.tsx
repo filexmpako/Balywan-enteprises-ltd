@@ -53,6 +53,8 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
     notServed: number;
     servedPercent: string;
     notServedPercent: string;
+    /** Wakalas whose row carried no servicing_status value at all. */
+    noStatus?: number;
     activeAndServed: number;
     activeAndNotServed: number;
     inactiveAndServed: number;
