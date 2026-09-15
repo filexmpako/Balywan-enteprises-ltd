@@ -27,6 +27,7 @@ import PeopleManagementView from "./components/PeopleManagementView";
 import AdminFieldMapView from "./components/AdminFieldMapView";
 import BaseWakalaView from "./components/BaseWakalaView";
 import ClassificationAuditLogView from "./components/ClassificationAuditLogView";
+import WakalaIssuesPanel from "./components/WakalaIssuesPanel";
 import TargetsView from "./components/TargetsView";
 import FloatManagerView from "./components/FloatManagerView";
 import { deleteUploadedReport } from "./lib/uploads.functions";
