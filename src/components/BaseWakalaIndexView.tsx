@@ -9,6 +9,8 @@ import { Owner } from '../types';
 import { normalizeMsisdn, isValidTanzanianMsisdn } from '../utils/msisdn';
 import { resolveOwnerMatch, addNameAlias } from '../utils/ownerMatch';
 import { useCompany } from './CompanyContext';
+import { getActivityRules } from '../utils/activityRules';
+import { fetchWakalaStatusHistory } from '../lib/wakalaStatus.functions';
 import PageHeaderBanner from './PageHeaderBanner';
 import { 
   UploadCloud, 
@@ -67,9 +69,72 @@ export default function BaseWakalaIndexView() {
     try { return JSON.parse(saved); } catch (e) { return []; }
   }, []);
 
+  // --- Live Active/Inactive status, recorded weekly by the system rule ---
+  const [statusRows, setStatusRows] = useState<any[]>([]);
+  const [rules, setRules] = useState(() => getActivityRules());
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetchWakalaStatusHistory({ data: {} });
+        if (!cancelled) setStatusRows(res.rows || []);
+      } catch (err) {
+        console.warn('[base wakala] status history unavailable', err);
+      }
+    };
+    load();
+    const onRules = () => { setRules(getActivityRules()); load(); };
+    window.addEventListener('activity-rules-updated', onRules);
+    window.addEventListener('weekly-kpi-updated', load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('activity-rules-updated', onRules);
+      window.removeEventListener('weekly-kpi-updated', load);
+    };
+  }, []);
+
+  /**
+   * Latest recorded week per wakala + a per-month roll-up, so the list can
+   * show the real status now and what it was in earlier months.
+   */
+  const statusIndex = useMemo(() => {
+    const latest = new Map<string, any>();
+    const byMonth = new Map<string, Map<string, boolean>>();
+    const months = new Set<string>();
+
+    const weekRank = (label: string) => {
+      const row = String(label || '');
+      const year = Number(row.match(/(20\d{2})/)?.[1] || 0);
+      const week = Number(row.match(/(\d+)/)?.[1] || 0);
+      return year * 100 + week;
+    };
+
+    (statusRows || []).forEach(r => {
+      const key = normalizeMsisdn(r.msisdn) || String(r.msisdn || '');
+      if (!key) return;
+      const prev = latest.get(key);
+      if (!prev || weekRank(r.reporting_week) >= weekRank(prev.reporting_week)) latest.set(key, r);
+      if (r.reporting_month) {
+        months.add(r.reporting_month);
+        let m = byMonth.get(r.reporting_month);
+        if (!m) { m = new Map(); byMonth.set(r.reporting_month, m); }
+        // A wakala counts as active for the month if it was active in any
+        // recorded week of that month.
+        m.set(key, (m.get(key) || false) || !!r.is_active);
+      }
+    });
+
+    return {
+      latest,
+      byMonth,
+      recentMonths: Array.from(months).sort().reverse().slice(0, 3),
+    };
+  }, [statusRows]);
+
   // --- Search & Filters ---
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE' | 'NO_DATA'>('ALL');
   const [ownerFilter, setOwnerFilter] = useState<string>('all');
   const [districtFilter, setDistrictFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
@@ -141,21 +206,36 @@ export default function BaseWakalaIndexView() {
     return Array.from(set).sort();
   }, [entities]);
 
-  // Enrich entities with owner match status
+  // Enrich entities with owner match status and the real, weekly-measured
+  // Active/Inactive status from the recorded status history.
   const enrichedEntities = useMemo(() => {
     return entities.map(e => {
       const match = resolveOwnerMatch(e.ownerName, owners, 'Base Wakala Index');
+      const key = normalizeMsisdn(e.msisdn) || e.msisdn;
+      const altKey = e.altMsisdn ? normalizeMsisdn(e.altMsisdn) : '';
+      const record = statusIndex.latest.get(key) || (altKey ? statusIndex.latest.get(altKey) : undefined);
+      const liveStatus: 'ACTIVE' | 'INACTIVE' | 'NO_DATA' = record
+        ? (record.is_active ? 'ACTIVE' : 'INACTIVE')
+        : 'NO_DATA';
+      const monthHistory = statusIndex.recentMonths.map(month => {
+        const m = statusIndex.byMonth.get(month);
+        const val = m ? (m.get(key) ?? (altKey ? m.get(altKey) : undefined)) : undefined;
+        return { month, status: val === undefined ? 'NO_DATA' : val ? 'ACTIVE' : 'INACTIVE' };
+      });
       return {
         entity: e,
         ownerStatus: match.status, // 'Matched' | 'Unmatched' | 'Unassigned'
-        matchedOwner: match.matchedOwner
+        matchedOwner: match.matchedOwner,
+        liveStatus,
+        statusRecord: record,
+        monthHistory,
       };
     });
-  }, [entities, owners]);
+  }, [entities, owners, statusIndex]);
 
   // Filtered dataset
   const filteredItems = useMemo(() => {
-    return enrichedEntities.filter(({ entity, ownerStatus, matchedOwner }) => {
+    return enrichedEntities.filter(({ entity, ownerStatus, matchedOwner, liveStatus }) => {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const hit =
@@ -170,7 +250,7 @@ export default function BaseWakalaIndexView() {
         if (!hit) return false;
       }
 
-      if (statusFilter !== 'ALL' && entity.status !== statusFilter) return false;
+      if (statusFilter !== 'ALL' && liveStatus !== statusFilter) return false;
 
       if (ownerFilter === '__unassigned__' && ownerStatus !== 'Unassigned') return false;
       if (ownerFilter === '__unmatched__' && ownerStatus !== 'Unmatched') return false;

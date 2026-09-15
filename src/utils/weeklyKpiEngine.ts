@@ -17,6 +17,13 @@ import { BaseWakala, Owner } from '../types';
 import { normalizeMsisdn } from './msisdn';
 import { resolveOwnerMatch } from './ownerMatch';
 import { getServicedStatusFromColumn, mergeServicedStatus } from './servicingStatus';
+import {
+  getActivityRules,
+  isActiveByRule,
+  extractTxnCounts,
+  calculatePenalty,
+  type ActivityRules,
+} from './activityRules';
 
 export interface WeeklyWakalaStats {
   total: number;
@@ -30,6 +37,14 @@ export interface WeeklyWakalaStats {
   notServedPercent: string;
   totalValue: number;
   totalTxns: number;
+  /** Volume attributed to wakalas that belong to a company owner. */
+  baseValue: number;
+  /** Volume from wakalas not registered to any owner (IOP). */
+  iopValue: number;
+  cashInTxns: number;
+  cashOutTxns: number;
+  /** Telco penalty accrued on this week's served volume. */
+  penalty: number;
 }
 
 export interface WeeklyOwnerBreakdown {
@@ -43,10 +58,25 @@ export interface WeeklyOwnerBreakdown {
   noStatus: number;
   value: number;
   txns: number;
+  iopValue: number;
+  penalty: number;
+}
+
+/** Per-wakala activity evaluation for one week, kept as history. */
+export interface WeeklyWakalaEvaluation {
+  msisdn: string;
+  ownerId: string | null;
+  ownerName: string | null;
+  cashInTxns: number;
+  cashOutTxns: number;
+  totalTxns: number;
+  totalValue: number;
+  isActive: boolean;
 }
 
 export interface WeeklyStatsEntry extends WeeklyWakalaStats {
   reportingWeek: string;
+  reportingMonth?: string;
   uploadedAt: string;
   byOwner: WeeklyOwnerBreakdown[];
 }
@@ -161,13 +191,24 @@ export function buildMsisdnOwnerResolver(
  */
 export function computeWeeklyStats(
   rows: any[],
-  resolveOwner?: (msisdn: string) => { ownerId: string; ownerName: string } | null
-): WeeklyWakalaStats & { byOwner: WeeklyOwnerBreakdown[] } | null {
+  resolveOwner?: (msisdn: string) => { ownerId: string; ownerName: string } | null,
+  rules: ActivityRules = getActivityRules()
+):
+  | (WeeklyWakalaStats & { byOwner: WeeklyOwnerBreakdown[]; evaluations: WeeklyWakalaEvaluation[] })
+  | null {
   if (!rows || rows.length === 0) return null;
 
   const wakalaMap = new Map<
     string,
-    { txns: number; val: number; isActiveStatus: boolean; hasStatusCol: boolean; servedStatus: boolean | null }
+    {
+      txns: number;
+      val: number;
+      cashIn: number;
+      cashOut: number;
+      countTotal: number;
+      hasStatusCol: boolean;
+      servedStatus: boolean | null;
+    }
   >();
 
   rows.forEach((row: any) => {
@@ -175,7 +216,7 @@ export function computeWeeklyStats(
     if (!msisdn) return;
     const txns = getFieldValue(row, TXN_KEYS);
     const val = getFieldValue(row, VAL_KEYS);
-    const rowActive = isRowStatusActive(row);
+    const counts = extractTxnCounts(row);
     const rowHasStatus = hasRowStatusKey(row);
     const rowServed = getServicedStatusFromColumn(row);
 
@@ -183,14 +224,18 @@ export function computeWeeklyStats(
     if (existing) {
       existing.txns += txns;
       existing.val += val;
-      if (rowActive) existing.isActiveStatus = true;
+      existing.cashIn += counts.cashIn;
+      existing.cashOut += counts.cashOut;
+      existing.countTotal += counts.total;
       if (rowHasStatus) existing.hasStatusCol = true;
       existing.servedStatus = mergeServicedStatus(existing.servedStatus, rowServed);
     } else {
       wakalaMap.set(msisdn, {
         txns,
         val,
-        isActiveStatus: rowActive,
+        cashIn: counts.cashIn,
+        cashOut: counts.cashOut,
+        countTotal: counts.total,
         hasStatusCol: rowHasStatus,
         servedStatus: rowServed,
       });
@@ -201,27 +246,49 @@ export function computeWeeklyStats(
   let servedCount = 0;
   let notServedCount = 0;
   let noStatusCount = 0;
-  let datasetHasStatusCol = false;
   let totalValue = 0;
   let totalTxns = 0;
+  let cashInTxns = 0;
+  let cashOutTxns = 0;
+  let baseValue = 0;
+  let iopValue = 0;
 
   const ownerAgg = new Map<string, WeeklyOwnerBreakdown>();
+  const evaluations: WeeklyWakalaEvaluation[] = [];
 
-  wakalaMap.forEach(({ txns, val, isActiveStatus, hasStatusCol, servedStatus }, msisdn) => {
-    if (hasStatusCol) datasetHasStatusCol = true;
-    // Weekly served/unserved comes straight from the uploaded servicing_status
-    // column — no computed threshold. Missing values are excluded, never
-    // counted as unserved.
-    if (isActiveStatus) activeCount++;
+  wakalaMap.forEach((entry, msisdn) => {
+    const { txns, val, cashIn, cashOut, countTotal, servedStatus } = entry;
+    // Active / inactive follows the configurable system rule (cash-in +
+    // cash-out transaction count against the threshold), never the raw
+    // status column. Served / unserved still comes from servicing_status.
+    const isActive = isActiveByRule({ cashIn, cashOut, total: countTotal }, rules);
+    if (isActive) activeCount++;
     if (servedStatus === true) servedCount++;
     else if (servedStatus === false) notServedCount++;
     else noStatusCount++;
     totalValue += val;
     totalTxns += txns;
+    cashInTxns += cashIn;
+    cashOutTxns += cashOut;
 
     const match = resolveOwner ? resolveOwner(msisdn) : null;
     const ownerId = match?.ownerId || UNASSIGNED_ID;
     const ownerName = match?.ownerName || 'Unassigned';
+    const isIop = !match;
+    if (isIop) iopValue += val;
+    else baseValue += val;
+
+    evaluations.push({
+      msisdn,
+      ownerId: match?.ownerId || null,
+      ownerName: match?.ownerName || null,
+      cashInTxns: cashIn,
+      cashOutTxns: cashOut,
+      totalTxns: countTotal || txns,
+      totalValue: val,
+      isActive,
+    });
+
     let agg = ownerAgg.get(ownerId);
     if (!agg) {
       agg = {
@@ -235,28 +302,25 @@ export function computeWeeklyStats(
         noStatus: 0,
         value: 0,
         txns: 0,
+        iopValue: 0,
+        penalty: 0,
       };
       ownerAgg.set(ownerId, agg);
     }
     agg.total++;
-    if (isActiveStatus) agg.active++;
+    if (isActive) agg.active++;
     else agg.inactive++;
     if (servedStatus === true) agg.served++;
     else if (servedStatus === false) agg.notServed++;
     else agg.noStatus++;
     agg.value += val;
     agg.txns += txns;
+    if (isIop) agg.iopValue += val;
   });
 
-  // Datasets without a status column: treat served wakalas as the active set,
-  // exactly as the monthly widget already does.
-  if (!datasetHasStatusCol && activeCount === 0) {
-    activeCount = servedCount;
-    ownerAgg.forEach(agg => {
-      agg.active = agg.served;
-      agg.inactive = agg.total - agg.served;
-    });
-  }
+  ownerAgg.forEach(agg => {
+    agg.penalty = calculatePenalty(agg.value, rules);
+  });
 
   const totalCount = wakalaMap.size;
   const served = servedCount;
@@ -275,7 +339,13 @@ export function computeWeeklyStats(
     notServedPercent: ((notServed / denom) * 100).toFixed(1),
     totalValue,
     totalTxns,
+    baseValue,
+    iopValue,
+    cashInTxns,
+    cashOutTxns,
+    penalty: calculatePenalty(totalValue, rules),
     byOwner: Array.from(ownerAgg.values()).sort((a, b) => b.value - a.value),
+    evaluations,
   };
 }
 
