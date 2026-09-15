@@ -1073,6 +1073,19 @@ export default function OwnerDetailsView({
             monthlyTarget={ownerMtdData.monthlyTarget || 0}
           />
 
+          {/* Owner -> Admin issue reporting for wakalas with problems */}
+          {isStandaloneAgent && (
+            <div className="mt-6">
+              <WakalaIssuesPanel
+                mode="owner"
+                ownerId={localOwner?.id || ''}
+                ownerName={localOwner?.name || ''}
+                senderName={localOwner?.name || 'Owner'}
+                wakalas={allWakalas.map((w: any) => ({ msisdn: w.msisdn, name: w.name }))}
+              />
+            </div>
+          )}
+
           {/* Collapsible Transaction History Section */}
           <div className="mt-6">
             <TransactionHistorySection 
