@@ -795,16 +795,46 @@ export default function BaseWakalaIndexView() {
                         </td>
 
                         <td className="px-4 py-3">
-                          <button
-                            onClick={() => toggleEntityStatus(entity.id)}
-                            className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full border cursor-pointer transition-all ${
-                              entity.status === 'ACTIVE'
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                                : 'bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200'
-                            }`}
-                          >
-                            {entity.status}
-                          </button>
+                          <div className="flex flex-col gap-1">
+                            <span
+                              title={
+                                statusRecord
+                                  ? `${statusRecord.reporting_week}: ${statusRecord.cash_in_txns} cash-in + ${statusRecord.cash_out_txns} cash-out (threshold ${statusRecord.threshold_used})`
+                                  : 'No weekly report covers this wakala yet'
+                              }
+                              className={`text-[10px] font-extrabold px-2.5 py-1 rounded-full border w-fit ${
+                                liveStatus === 'ACTIVE'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : liveStatus === 'INACTIVE'
+                                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                    : 'bg-slate-100 text-slate-500 border-slate-300'
+                              }`}
+                            >
+                              {liveStatus === 'NO_DATA' ? 'NO DATA' : liveStatus}
+                            </span>
+                            {statusRecord && (
+                              <span className="text-[9px] font-semibold text-slate-400">
+                                {statusRecord.reporting_week}
+                              </span>
+                            )}
+                            {monthHistory.length > 0 && (
+                              <div className="flex items-center gap-1">
+                                {monthHistory.map(h => (
+                                  <span
+                                    key={h.month}
+                                    title={`${h.month}: ${h.status === 'NO_DATA' ? 'no data' : h.status.toLowerCase()}`}
+                                    className={`h-1.5 w-4 rounded-full ${
+                                      h.status === 'ACTIVE'
+                                        ? 'bg-emerald-400'
+                                        : h.status === 'INACTIVE'
+                                          ? 'bg-rose-400'
+                                          : 'bg-slate-200'
+                                    }`}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </td>
 
                         <td className="px-4 py-3 text-right">
