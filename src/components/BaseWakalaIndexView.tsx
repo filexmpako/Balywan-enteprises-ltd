@@ -735,7 +735,7 @@ export default function BaseWakalaIndexView() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {pageItems.map(({ entity, ownerStatus, matchedOwner }) => {
+                {pageItems.map(({ entity, ownerStatus, matchedOwner, liveStatus, statusRecord, monthHistory }) => {
                   const isExpanded = expandedRows.has(entity.id);
                   const isResolving = resolvingId === entity.id;
 
