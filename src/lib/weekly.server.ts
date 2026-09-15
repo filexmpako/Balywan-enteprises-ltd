@@ -36,6 +36,17 @@ function pick(row: any, keys: string[]): any {
   return undefined;
 }
 
+/** Merges two rows for the same MSISDN, keeping any "served" reading. */
+function mergeRaw(a: any, b: any): any {
+  const merged = { ...(a && typeof a === 'object' ? a : {}), ...(b && typeof b === 'object' ? b : {}) };
+  const served = (row: any) =>
+    Number(
+      pick(row || {}, ['servicing_status', 'Servicing_Status', 'Servicing Status']) ?? NaN,
+    ) === 1;
+  if (served(a) || served(b)) merged.servicing_status = 1;
+  return merged;
+}
+
 export interface WeeklyRowInput {
   reportingWeek: string;
   reportingMonth?: string;
