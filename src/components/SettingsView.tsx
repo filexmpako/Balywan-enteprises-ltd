@@ -39,6 +39,38 @@ export default function SettingsView({
   const [showSaved, setShowSaved] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
+  // --- Active/Inactive rule configuration ---
+  const [rules, setRules] = useState(() => getActivityRules());
+  const [thresholdInput, setThresholdInput] = useState(String(rules.threshold));
+  const [modeInput, setModeInput] = useState<'combined' | 'separate'>(rules.mode);
+  const [penaltyInput, setPenaltyInput] = useState(String(rules.penaltyRate));
+  const [savingRules, setSavingRules] = useState(false);
+  const [rulesSaved, setRulesSaved] = useState(false);
+
+  const handleSaveRules = async () => {
+    setSavingRules(true);
+    setRulesSaved(false);
+    try {
+      const next = saveActivityRules({
+        threshold: Number(thresholdInput) || 0,
+        mode: modeInput,
+        window: 'weekly',
+        penaltyRate: Number(penaltyInput) || 0,
+      });
+      setRules(next);
+      // Re-run every stored week so recorded statuses follow the new rule.
+      await refreshWeeklyStatsHistory();
+      window.dispatchEvent(new Event('weekly-kpi-updated'));
+      setRulesSaved(true);
+      setTimeout(() => setRulesSaved(false), 3500);
+    } catch (err) {
+      console.error('Failed to save activity rule:', err);
+      setErrorMessage('Could not save the activity rule. Please try again.');
+    } finally {
+      setSavingRules(false);
+    }
+  };
+
   // Sync state with loaded user and company
   useEffect(() => {
     if (user) {
