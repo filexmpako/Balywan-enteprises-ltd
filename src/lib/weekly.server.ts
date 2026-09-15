@@ -83,10 +83,15 @@ export async function saveWeeklyRows(supabase: DB, input: WeeklyRowInput): Promi
       msisdn: msisdn || key,
       owner_id: null as string | null,
       owner_name: String(pick(raw, ['Owner_Name', 'owner_name', 'Wakala Name', 'owner']) ?? '') || null,
-      wakala_status: statusRaw === undefined ? null : Number(statusRaw) || 0,
+      // Merging duplicates must never downgrade a reading: an active/served
+      // value on any row for this MSISDN wins.
+      wakala_status: Math.max(
+        statusRaw === undefined || statusRaw === null ? 0 : Number(statusRaw) || 0,
+        existing ? Number(existing.wakala_status) || 0 : 0,
+      ),
       servicing_txns: existing ? Number(existing.servicing_txns) + txns : txns,
       servicing_val: existing ? Number(existing.servicing_val) + val : val,
-      raw,
+      raw: existing ? mergeRaw(existing.raw, raw) : raw,
       uploaded_by: input.uploadedBy ?? null,
     };
     byMsisdn.set(key, record);
