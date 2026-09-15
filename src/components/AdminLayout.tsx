@@ -26,6 +26,7 @@ export default function AdminLayout({
 }: AdminLayoutProps) {
   const { logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   return (
     <div className="min-h-screen bg-brand-bg flex text-brand-text antialiased selection:bg-brand-primary/10">
@@ -38,6 +39,8 @@ export default function AdminLayout({
         }} 
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
+        isCollapsed={sidebarCollapsed}
+        onToggleCollapsed={() => setSidebarCollapsed(value => !value)}
         onLogout={logout}
         userEmail={userEmail}
         adminName={adminName}
