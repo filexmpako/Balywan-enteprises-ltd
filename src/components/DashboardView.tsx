@@ -28,8 +28,11 @@ import {
   ShieldCheck,
   Sparkles,
   UserCog,
-  Target
+  Target,
+  UserCheck,
+  UserX
 } from 'lucide-react';
+import MetricCard from './MetricCard';
 import { motion } from 'motion/react';
 import PageHeaderBanner from './PageHeaderBanner';
 import { useCompany } from './CompanyContext';
