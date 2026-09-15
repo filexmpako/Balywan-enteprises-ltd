@@ -65,7 +65,7 @@ export const saveWakalaStatusHistory = createServerFn({ method: 'POST' })
         total_value: Number(e.totalValue) || 0,
         is_active: !!e.isActive,
         threshold_used: Number(data.threshold) || 0,
-        rule_mode: data.ruleMode === 'separate' ? 'separate' : 'combined',
+        rule_mode: String(data.ruleMode || 'combined').slice(0, 80),
         evaluated_at: new Date().toISOString(),
         });
       });

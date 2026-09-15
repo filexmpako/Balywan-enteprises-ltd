@@ -5,6 +5,7 @@
  * so weekly data survives sign-out, cache clears and device changes.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { normalizeMsisdn } from '../utils/msisdn';
 
 type DB = SupabaseClient<any, any, any>;
 
@@ -83,15 +84,23 @@ export async function saveWeeklyRows(supabase: DB, input: WeeklyRowInput): Promi
       // values that belong in the week's totals.
       skipped += 1;
     }
-    const key = msisdn || `__norow_${index}`;
+    const key = normalizeMsisdn(msisdn) || `__norow_${index}`;
     const existing = byMsisdn.get(key);
-    const txns = num(pick(raw, ['SA_Servicing_Txns', 'SA Servicing Txns']));
-    const val = num(pick(raw, ['SA_Servicing_Val', 'SA Servicing Val']));
+    const txns = num(pick(raw, [
+      'SA_Servicing_Txns', 'SA Servicing Txns', 'SA_Servicing_Transactions',
+      'SA Servicing Transactions', 'servicing_txns', 'Servicing Transactions',
+      'Transaction Count', 'Transactions', 'Txns',
+    ]));
+    const val = num(pick(raw, [
+      'SA_Servicing_Val', 'SA Servicing Val', 'SA_Servicing_Value',
+      'SA Servicing Value', 'servicing_val', 'Servicing Amount',
+      'Transaction Amount', 'Volume', 'Amount', 'Value',
+    ]));
     const statusRaw = pick(raw, ['Wakala_Status', 'Wakala Status', 'status']);
     const record = {
       reporting_week: week,
       reporting_month: input.reportingMonth || null,
-      msisdn: msisdn || key,
+      msisdn: key,
       owner_id: null as string | null,
       owner_name: String(pick(raw, ['Owner_Name', 'owner_name', 'Wakala Name', 'owner']) ?? '') || null,
       // Merging duplicates must never downgrade a reading: an active/served

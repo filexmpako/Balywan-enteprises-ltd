@@ -138,7 +138,7 @@ export async function refreshWeeklyStatsHistory(): Promise<WeeklyStatsEntry[]> {
           reportingWeek: week,
           reportingMonth: reportingMonth || null,
           threshold: rules.threshold,
-          ruleMode: rules.mode,
+          ruleMode: `${rules.mode}:transactions+amount`,
           evaluations: evaluations.map(e => ({
             msisdn: e.msisdn,
             ownerId: e.ownerId,

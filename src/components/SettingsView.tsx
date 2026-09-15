@@ -8,7 +8,10 @@ import {
   Sun,
   Moon,
   Settings,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Activity,
+  Banknote,
+  ShieldCheck
 } from 'lucide-react';
 import { getActivityRules, saveActivityRules } from '../utils/activityRules';
 import { refreshWeeklyStatsHistory } from '../utils/weeklyHistory';
@@ -16,6 +19,7 @@ import { motion } from 'motion/react';
 import PageHeaderBanner from './PageHeaderBanner';
 import { useAuth } from './AuthContext';
 import { useCompany } from './CompanyContext';
+import { Button } from './ui/button';
 
 interface SettingsViewProps {
   userEmail: string;
@@ -42,20 +46,33 @@ export default function SettingsView({
   // --- Active/Inactive rule configuration ---
   const [rules, setRules] = useState(() => getActivityRules());
   const [thresholdInput, setThresholdInput] = useState(String(rules.threshold));
+  const [amountThresholdInput, setAmountThresholdInput] = useState(String(rules.amountThreshold));
   const [modeInput, setModeInput] = useState<'combined' | 'separate'>(rules.mode);
   const [penaltyInput, setPenaltyInput] = useState(String(rules.penaltyRate));
   const [savingRules, setSavingRules] = useState(false);
   const [rulesSaved, setRulesSaved] = useState(false);
+  const transactionThreshold = Number(thresholdInput);
+  const amountThreshold = Number(amountThresholdInput);
+  const penaltyRate = Number(penaltyInput);
+  const ruleIsValid = Number.isFinite(transactionThreshold) && transactionThreshold > 0
+    && Number.isFinite(amountThreshold) && amountThreshold > 0
+    && Number.isFinite(penaltyRate) && penaltyRate >= 0;
 
   const handleSaveRules = async () => {
+    if (!ruleIsValid) {
+      setErrorMessage('Transaction and amount thresholds must be greater than zero, and the penalty rate cannot be negative.');
+      return;
+    }
+    setErrorMessage('');
     setSavingRules(true);
     setRulesSaved(false);
     try {
       const next = saveActivityRules({
-        threshold: Number(thresholdInput) || 0,
+        threshold: transactionThreshold,
+        amountThreshold,
         mode: modeInput,
         window: 'weekly',
-        penaltyRate: Number(penaltyInput) || 0,
+        penaltyRate,
       });
       setRules(next);
       // Re-run every stored week so recorded statuses follow the new rule.
@@ -126,12 +143,12 @@ export default function SettingsView({
       <PageHeaderBanner
         icon={Settings}
         title="Settings"
-        subtitle="Configure administrator profile, theme, and notification preferences."
+        subtitle="Manage your organization, weekly activity rules, appearance, and alerts."
       />
 
-      <div className="max-w-4xl">
+      <div className="grid max-w-6xl gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
         {/* Main Settings Form */}
-        <div className="rounded-2xl border border-brand-gray-border bg-brand-card p-6 shadow-ambient">
+        <div className="rounded-xl border border-brand-gray-border bg-brand-card p-6 shadow-ambient">
           <form onSubmit={handleSave} className="space-y-6">
             
             {/* Sec 1: Profile */}
@@ -184,8 +201,9 @@ export default function SettingsView({
               </h3>
               
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <button
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={() => onThemeChange?.('light')}
                   className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all cursor-pointer text-left ${
                     theme === 'light'
@@ -207,10 +225,11 @@ export default function SettingsView({
                       <CheckCircle className="h-4 w-4" />
                     </div>
                   )}
-                </button>
+                </Button>
 
-                <button
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={() => onThemeChange?.('dark')}
                   className={`flex items-center justify-between p-4 rounded-xl border-2 transition-all cursor-pointer text-left ${
                     theme === 'dark'
@@ -232,7 +251,7 @@ export default function SettingsView({
                       <CheckCircle className="h-4 w-4" />
                     </div>
                   )}
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -270,34 +289,39 @@ export default function SettingsView({
                     Settings saved successfully!
                   </div>
                 ) : <div />}
-                <button
+                <Button
                   type="submit"
-                  className="rounded-xl bg-brand-primary px-5 py-2.5 text-xs font-bold text-white shadow-ambient hover:bg-brand-primary-light transition-all flex items-center gap-1.5 cursor-pointer"
+                  className="h-10 rounded-lg bg-brand-primary px-5 text-xs font-bold text-white shadow-ambient hover:bg-brand-primary-light"
                   id="save-settings-btn"
                 >
                   <Save className="h-4 w-4" />
                   Save Settings
-                </button>
+                </Button>
               </div>
             </div>
           </form>
         </div>
 
         {/* Activity rule: what makes a wakala Active for a reporting week */}
-        <div className="rounded-2xl border border-brand-gray-border bg-brand-card p-6 shadow-ambient mt-6">
+        <div className="rounded-xl border border-brand-gray-border bg-brand-card p-6 shadow-ambient xl:sticky xl:top-24 xl:self-start">
           <h3 className="text-sm font-bold uppercase tracking-wider text-brand-primary border-b border-brand-gray-border pb-2.5 mb-4 flex items-center gap-1.5">
             <SlidersHorizontal className="h-4.5 w-4.5" />
             Active / Inactive Wakala Rule
           </h3>
-          <p className="text-xs text-brand-text-variant mb-4">
-            A wakala counts as active for a reporting week when its cash-in and cash-out
-            transactions reach the number below. Changing this re-evaluates every stored week.
-          </p>
+          <div className="mb-5 rounded-lg border border-brand-primary/20 bg-brand-primary-container/40 p-4">
+            <div className="flex items-start gap-3">
+              <div className="rounded-lg bg-brand-primary p-2 text-white"><ShieldCheck className="h-4 w-4" /></div>
+              <div>
+                <p className="text-sm font-bold text-brand-text">Both conditions are required</p>
+                <p className="mt-1 text-xs leading-5 text-brand-text-variant">A Wakala is active only after meeting the transaction threshold and the servicing amount threshold in the same week.</p>
+              </div>
+            </div>
+          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <div>
               <label className="block text-xs font-bold text-brand-text uppercase tracking-wider mb-1.5">
-                Transactions required
+                <span className="flex items-center gap-2"><Activity className="h-4 w-4 text-brand-primary" /> Transactions required</span>
               </label>
               <input
                 type="number"
@@ -306,6 +330,22 @@ export default function SettingsView({
                 onChange={(e) => setThresholdInput(e.target.value)}
                 className="w-full rounded-xl bg-brand-bg border-2 border-transparent px-4 py-2.5 text-sm text-brand-text outline-none focus:border-brand-primary focus:bg-white transition-all font-semibold"
               />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-brand-text uppercase tracking-wider mb-1.5">
+                <span className="flex items-center gap-2"><Banknote className="h-4 w-4 text-brand-primary" /> Amount required</span>
+              </label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-brand-text-variant">TZS</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="1000"
+                  value={amountThresholdInput}
+                  onChange={(e) => setAmountThresholdInput(e.target.value)}
+                  className="w-full rounded-xl bg-brand-bg border-2 border-transparent py-2.5 pl-14 pr-4 text-sm text-brand-text outline-none focus:border-brand-primary focus:bg-white transition-all font-semibold"
+                />
+              </div>
             </div>
             <div>
               <label className="block text-xs font-bold text-brand-text uppercase tracking-wider mb-1.5">
@@ -335,7 +375,12 @@ export default function SettingsView({
             </div>
           </div>
 
-          <div className="flex items-center justify-between border-t border-brand-gray-border pt-5 mt-5">
+          <div className="mt-5 rounded-lg bg-brand-bg p-4 text-xs text-brand-text-variant">
+            <span className="font-bold text-brand-text">Current decision:</span>{' '}
+            {modeInput === 'combined' ? 'combined transactions' : 'cash-in and cash-out individually'} ≥ {Number(thresholdInput || 0).toLocaleString()} <span className="font-bold text-brand-primary">AND</span> amount ≥ TZS {Number(amountThresholdInput || 0).toLocaleString()}.
+          </div>
+
+          <div className="flex flex-col gap-3 border-t border-brand-gray-border pt-5 mt-5 sm:flex-row sm:items-center sm:justify-between">
             {rulesSaved ? (
               <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600">
                 <CheckCircle className="h-4.5 w-4.5" />
@@ -343,18 +388,18 @@ export default function SettingsView({
               </div>
             ) : (
               <span className="text-xs text-brand-text-variant">
-                Current rule: {rules.threshold} transactions ({rules.mode === 'combined' ? 'combined' : 'each'}) per week
+                 Saved: {rules.threshold.toLocaleString()} transactions and TZS {rules.amountThreshold.toLocaleString()} per week
               </span>
             )}
-            <button
+            <Button
               type="button"
-              disabled={savingRules}
+              disabled={savingRules || !ruleIsValid}
               onClick={handleSaveRules}
-              className="rounded-xl bg-brand-primary px-5 py-2.5 text-xs font-bold text-white shadow-ambient hover:bg-brand-primary-light transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+              className="h-10 rounded-lg bg-brand-primary px-5 text-xs font-bold text-white shadow-ambient hover:bg-brand-primary-light"
             >
               <Save className="h-4 w-4" />
               {savingRules ? 'Re-evaluating…' : 'Save Rule'}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

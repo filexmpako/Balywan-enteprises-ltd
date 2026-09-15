@@ -16,6 +16,8 @@ export const ACTIVITY_RULES_KEY = 'activityRules';
 export interface ActivityRules {
   /** Minimum transaction count for a wakala to be Active in the window. */
   threshold: number;
+  /** Minimum servicing amount for a wakala to be Active in the window. */
+  amountThreshold: number;
   /** combined = CI + CO counted together; separate = each must reach it. */
   mode: 'combined' | 'separate';
   /** Evaluation window. Weekly is the specification default. */
@@ -26,6 +28,7 @@ export interface ActivityRules {
 
 export const DEFAULT_ACTIVITY_RULES: ActivityRules = {
   threshold: 25,
+  amountThreshold: 600000,
   mode: 'combined',
   window: 'weekly',
   penaltyRate: 0.05,
@@ -33,9 +36,14 @@ export const DEFAULT_ACTIVITY_RULES: ActivityRules = {
 
 export function normalizeActivityRules(raw: any): ActivityRules {
   const threshold = Number(raw?.threshold);
+  const amountThreshold = Number(raw?.amountThreshold);
   const penaltyRate = Number(raw?.penaltyRate);
   return {
     threshold: Number.isFinite(threshold) && threshold >= 0 ? threshold : DEFAULT_ACTIVITY_RULES.threshold,
+    amountThreshold:
+      Number.isFinite(amountThreshold) && amountThreshold >= 0
+        ? amountThreshold
+        : DEFAULT_ACTIVITY_RULES.amountThreshold,
     mode: raw?.mode === 'separate' ? 'separate' : 'combined',
     window: 'weekly',
     penaltyRate:
@@ -69,11 +77,25 @@ export interface TxnCounts {
   cashIn: number;
   cashOut: number;
   total: number;
+  amount?: number;
 }
 
 const CI_TXN_KEYS = ['CI_txns', 'CI txns', 'ci_txns', 'Cash In Txns', 'Cash-In Txns', 'CI_Count', 'CI count'];
 const CO_TXN_KEYS = ['CO_txns', 'CO txns', 'co_txns', 'Cash Out Txns', 'Cash-Out Txns', 'CO_Count', 'CO count'];
 const TOTAL_TXN_KEYS = ['SA_Servicing_Txns', 'SA Servicing Txns', 'sa_servicing_txns', 'Transactions', 'txns'];
+const AMOUNT_KEYS = [
+  'SA_Servicing_Val',
+  'SA Servicing Val',
+  'SA_Servicing_Value',
+  'SA Servicing Value',
+  'sa_servicing_val',
+  'servicing_val',
+  'Servicing Amount',
+  'Transaction Amount',
+  'Volume',
+  'Amount',
+  'Value',
+];
 
 function readNumber(row: any, keys: string[]): number {
   if (!row) return 0;
@@ -102,20 +124,22 @@ function readNumber(row: any, keys: string[]): number {
 export function extractTxnCounts(row: any): TxnCounts {
   const cashIn = readNumber(row, CI_TXN_KEYS);
   const cashOut = readNumber(row, CO_TXN_KEYS);
+  const amount = readNumber(row, AMOUNT_KEYS);
   if (cashIn > 0 || cashOut > 0) {
-    return { cashIn, cashOut, total: cashIn + cashOut };
+    return { cashIn, cashOut, total: cashIn + cashOut, amount };
   }
   const total = readNumber(row, TOTAL_TXN_KEYS);
-  return { cashIn: 0, cashOut: 0, total };
+  return { cashIn: 0, cashOut: 0, total, amount };
 }
 
 /** The single Active/Inactive decision used everywhere. */
 export function isActiveByRule(counts: TxnCounts, rules: ActivityRules = getActivityRules()): boolean {
+  const meetsAmount = (Number(counts.amount) || 0) >= rules.amountThreshold;
   if (rules.mode === 'separate') {
-    return counts.cashIn >= rules.threshold && counts.cashOut >= rules.threshold;
+    return counts.cashIn >= rules.threshold && counts.cashOut >= rules.threshold && meetsAmount;
   }
   const combined = counts.cashIn + counts.cashOut > 0 ? counts.cashIn + counts.cashOut : counts.total;
-  return combined >= rules.threshold;
+  return combined >= rules.threshold && meetsAmount;
 }
 
 /** Month-end telco penalty on the volume the bank served to wakalas. */

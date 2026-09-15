@@ -13,13 +13,14 @@ import { formatNumberWithAbbreviation } from '../utils/numberFormat';
 interface Props {
   ownerId: string;
   monthlyTarget: number;
+  onLatestActivity?: (active: number, inactive: number) => void;
 }
 
 /**
  * Per-owner weekly checkpoints: this owner's slice of every uploaded weekly
  * workbook, accumulating toward their own monthly KPI 1 target.
  */
-export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget }: Props) {
+export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget, onLatestActivity }: Props) {
   const [history, setHistory] = useState<WeeklyStatsEntry[]>(() => readWeeklyStatsHistory());
 
   useEffect(() => {
@@ -39,12 +40,16 @@ export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget }: Props
     };
   }, []);
 
-  if (!ownerId || history.length === 0) return null;
-
   const series = ownerWeeklySeries(history, ownerId);
-  if (series.every(s => !s.breakdown)) return null;
+  const latest = [...series].reverse().find(entry => entry.breakdown) || null;
+  useEffect(() => {
+    if (!latest?.breakdown || !onLatestActivity) return;
+    const active = latest.breakdown.active ?? 0;
+    const total = latest.breakdown.total ?? (active + (latest.breakdown.inactive ?? 0));
+    onLatestActivity(active, Math.max(0, total - active));
+  }, [latest?.reportingWeek, latest?.breakdown?.active, latest?.breakdown?.inactive, latest?.breakdown?.total, onLatestActivity]);
+  if (!ownerId || history.length === 0 || !latest) return null;
 
-  const latest = series[series.length - 1];
   const progress = monthlyTarget > 0 ? (latest.cumulativeValue / monthlyTarget) * 100 : 0;
   const pace = paceLabel(progress, weekNumberOf(latest.reportingWeek) || series.length);
   const toneClass =
