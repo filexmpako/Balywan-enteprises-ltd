@@ -2941,6 +2941,95 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
           </motion.div>
         )}
 
+        {/* REGISTERED SA TILLS MANAGEMENT SECTION — standalone home, outside the upload flow */}
+        <motion.div
+          key="sa-till-registry-section"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-brand-card p-6 rounded-2xl border border-brand-gray-border shadow-xs space-y-4"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-brand-gray-border pb-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-brand-primary" />
+                <h3 className="text-base font-black text-brand-text">Registered SA Tills</h3>
+                <span className="bg-brand-primary/10 text-brand-primary text-xs font-bold px-2.5 py-0.5 rounded-full">
+                  {saTills.length} Accounts
+                </span>
+              </div>
+              {saTillLastUpdated ? (
+                <p className="text-xs text-brand-text-variant flex items-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                  <span>SA Till Registry last updated: <strong className="text-brand-text">{saTillLastUpdated}</strong></span>
+                </p>
+              ) : (
+                <p className="text-xs text-brand-text-variant">
+                  No SA Till Registry records uploaded yet. Upload a registry spreadsheet above to populate parent account mappings.
+                </p>
+              )}
+            </div>
+
+            {saTills.length > 0 && (
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={saTillSearchQuery}
+                  onChange={(e) => setSaTillSearchQuery(e.target.value)}
+                  placeholder="Search SA MSISDN or Owner..."
+                  className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-brand-primary"
+                />
+              </div>
+            )}
+          </div>
+
+          {saTills.length > 0 ? (
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full text-left text-xs font-sans">
+                <thead className="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
+                  <tr>
+                    <th className="px-4 py-3">Till MSISDN</th>
+                    <th className="px-4 py-3">Owner / Organization</th>
+                    <th className="px-4 py-3">Registered At</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white">
+                  {saTills
+                    .filter(t => {
+                      if (!saTillSearchQuery.trim()) return true;
+                      const q = saTillSearchQuery.toLowerCase();
+                      return t.tillMsisdn.includes(q) || (t.ownerName && t.ownerName.toLowerCase().includes(q));
+                    })
+                    .map((till) => (
+                      <tr key={till.tillMsisdn} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-2.5 font-mono font-bold text-slate-900">{till.tillMsisdn}</td>
+                        <td className="px-4 py-2.5 font-semibold text-slate-700">{till.ownerName || 'SA Owner'}</td>
+                        <td className="px-4 py-2.5 text-slate-500 font-mono text-[11px]">{till.registeredAt}</td>
+                        <td className="px-4 py-2.5 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSaTill(till.tillMsisdn)}
+                            title="Remove SA Till Entry"
+                            className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-8 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+              <Building2 className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+              <p className="text-xs font-bold text-slate-500">Registry is currently empty</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">Select "SA Till Registry" from the dropdown above to upload your MSISDN sheet.</p>
+            </div>
+          )}
+        </motion.div>
+
         {/* 2. RECONCILIATION PREVIEW SCREEN (THE GOLD STANDARD OF SPRINT 2) */}
         {importState === 'reconciliation' && (
           <motion.div
