@@ -466,6 +466,13 @@ function AppContent() {
     } else if (hash === "#/admin/audit") {
       currentView = ViewType.CLASSIFICATION_AUDIT;
       contentNode = <ClassificationAuditLogView />;
+    } else if (hash === "#/admin/issues") {
+      currentView = ViewType.WAKALA_ISSUES;
+      contentNode = (
+        <div className="max-w-[1440px] mx-auto p-4 sm:p-6 lg:p-8">
+          <WakalaIssuesPanel mode="admin" senderName={user.name} />
+        </div>
+      );
     } else if (hash === "#/admin/targets") {
       currentView = ViewType.TARGETS;
       contentNode = <TargetsView />;
