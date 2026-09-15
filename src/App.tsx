@@ -326,6 +326,7 @@ function AppContent() {
             else if (view === ViewType.FIELD_MAP) window.location.hash = "#/admin/map";
             else if (view === ViewType.REPORT_HISTORY) window.location.hash = "#/admin/history";
             else if (view === ViewType.CLASSIFICATION_AUDIT) window.location.hash = "#/admin/audit";
+            else if (view === ViewType.WAKALA_ISSUES) window.location.hash = "#/admin/issues";
           }}
           onSelectOwner={(name) => {
             setSelectedOwnerName(name);
@@ -500,6 +501,7 @@ function AppContent() {
             else if (view === ViewType.OWNERS || view === ViewType.PEOPLE_MGT) window.location.hash = "#/admin/owners";
             else if (view === ViewType.BASE_WAKALA) window.location.hash = "#/admin/base";
             else if (view === ViewType.CLASSIFICATION_AUDIT) window.location.hash = "#/admin/audit";
+            else if (view === ViewType.WAKALA_ISSUES) window.location.hash = "#/admin/issues";
             else if (view === ViewType.TARGETS) window.location.hash = "#/admin/targets";
             else if (view === ViewType.FLOAT_MANAGEMENT) window.location.hash = "#/admin/float";
             else if (view === ViewType.FIELD_MAP) window.location.hash = "#/admin/map";
