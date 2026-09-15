@@ -67,7 +67,10 @@ export const saveWakalaStatusHistory = createServerFn({ method: 'POST' })
         threshold_used: Number(data.threshold) || 0,
         rule_mode: data.ruleMode === 'separate' ? 'separate' : 'combined',
         evaluated_at: new Date().toISOString(),
-      }));
+        });
+      });
+
+    const rows = Array.from(byMsisdn.values());
 
     const { error: delError } = await supabase
       .from('wakala_status_history')
@@ -76,7 +79,9 @@ export const saveWakalaStatusHistory = createServerFn({ method: 'POST' })
     if (delError) throw new Error(`wakala_status_history clear: ${delError.message}`);
 
     for (let i = 0; i < rows.length; i += 500) {
-      const { error } = await supabase.from('wakala_status_history').insert(rows.slice(i, i + 500));
+      const { error } = await supabase
+        .from('wakala_status_history')
+        .upsert(rows.slice(i, i + 500), { onConflict: 'msisdn,reporting_week' });
       if (error) throw new Error(`wakala_status_history insert: ${error.message}`);
     }
 
