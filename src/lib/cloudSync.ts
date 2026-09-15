@@ -35,7 +35,20 @@ function enqueue(entry: QueueEntry) {
   writeQueue(queue);
 }
 
+async function hasSession(): Promise<boolean> {
+  try {
+    const { supabase } = await import('@/integrations/supabase/client');
+    const { data } = await supabase.auth.getSession();
+    return Boolean(data.session?.access_token);
+  } catch {
+    return false;
+  }
+}
+
 async function push(entry: QueueEntry) {
+  // No signed-in session => the protected server fn would 401. Keep the write
+  // in the offline queue instead and let flushQueue retry after sign-in.
+  if (!(await hasSession())) throw new Error('No active session; deferring sync');
   const parsed = JSON.parse(entry.value);
   if (entry.kind === 'collection') {
     await saveCollection({ data: { key: entry.key, items: Array.isArray(parsed) ? parsed : [] } });
