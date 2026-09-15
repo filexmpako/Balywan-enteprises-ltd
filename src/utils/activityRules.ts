@@ -20,6 +20,8 @@ export interface ActivityRules {
   amountThreshold: number;
   /** combined = CI + CO counted together; separate = each must reach it. */
   mode: 'combined' | 'separate';
+  /** both = transactions AND amount required; either = one is enough. */
+  requirement: 'both' | 'either';
   /** Evaluation window. Weekly is the specification default. */
   window: 'weekly';
   /** Telco penalty rate applied to bank-served volume at month end. */
@@ -30,6 +32,7 @@ export const DEFAULT_ACTIVITY_RULES: ActivityRules = {
   threshold: 25,
   amountThreshold: 600000,
   mode: 'combined',
+  requirement: 'both',
   window: 'weekly',
   penaltyRate: 0.05,
 };
@@ -45,6 +48,7 @@ export function normalizeActivityRules(raw: any): ActivityRules {
         ? amountThreshold
         : DEFAULT_ACTIVITY_RULES.amountThreshold,
     mode: raw?.mode === 'separate' ? 'separate' : 'combined',
+    requirement: raw?.requirement === 'either' ? 'either' : 'both',
     window: 'weekly',
     penaltyRate:
       Number.isFinite(penaltyRate) && penaltyRate >= 0 ? penaltyRate : DEFAULT_ACTIVITY_RULES.penaltyRate,
@@ -135,11 +139,11 @@ export function extractTxnCounts(row: any): TxnCounts {
 /** The single Active/Inactive decision used everywhere. */
 export function isActiveByRule(counts: TxnCounts, rules: ActivityRules = getActivityRules()): boolean {
   const meetsAmount = (Number(counts.amount) || 0) >= rules.amountThreshold;
-  if (rules.mode === 'separate') {
-    return counts.cashIn >= rules.threshold && counts.cashOut >= rules.threshold && meetsAmount;
-  }
-  const combined = counts.cashIn + counts.cashOut > 0 ? counts.cashIn + counts.cashOut : counts.total;
-  return combined >= rules.threshold && meetsAmount;
+  const meetsTxns =
+    rules.mode === 'separate'
+      ? counts.cashIn >= rules.threshold && counts.cashOut >= rules.threshold
+      : (counts.cashIn + counts.cashOut > 0 ? counts.cashIn + counts.cashOut : counts.total) >= rules.threshold;
+  return rules.requirement === 'either' ? meetsTxns || meetsAmount : meetsTxns && meetsAmount;
 }
 
 /** Month-end telco penalty on the volume the bank served to wakalas. */
