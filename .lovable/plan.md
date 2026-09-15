@@ -1,58 +1,59 @@
-# Agent Management, Category Thresholds & Period-Correct Reporting
+# Dashboard, Weekly Reports, Wakala Status & Owner Issues
 
-An agent = one wakala/till. Its owner is its team. Transaction counts and values come from the Daily MGT uploads. Categories are auto-assigned from the uploaded file on import and can be overridden by the admin.
+## 1. KPI cards instead of the dropdown
 
-Note on data: there are currently 1,704 wakala records but zero daily transaction rows in the database, so the new counts and Active/Inactive results will show zeros until Daily MGT files are uploaded. Nothing else blocks the build.
+Replace the KPI Performance Summary dropdown/list with a row of status cards, one per KPI:
 
-## Priority 1
+- KPI 1 — Servicing value vs monthly target
+- KPI 2 — Served wakala vs target
+- KPI 3 — Active vs inactive wakalas
+- KPI 4 — Products
 
-### Agent categories and thresholds (configuration)
-- New Settings section "Agent Categories": create/edit/delete a category with a name, required transaction count, required transaction value, and whether both or either must be met to count as Active.
-- A default category is seeded so every agent always has a threshold.
-- On upload, each agent is placed in a category from its file column (region/zone label) if a matching category exists, otherwise the default. Admin can change an agent's category individually or for a selected group.
+Each card shows: KPI name, target, achieved, percentage, and a colour status badge (Green 90%+, Blue 70%+, Yellow 60%+, Red below). All four are computed and recorded on daily and weekly data as it arrives — none of them waits for a monthly report. Clicking a card opens the matching detail page (targets / base wakala / audit).
 
-### Active / Inactive logic
-- One shared rule used everywhere: for the chosen period, total the agent's transactions and value from the daily records, compare against that agent's category requirement, and mark ACTIVE or INACTIVE.
-- Status is always computed for the period being viewed, never copied from "today".
+## 2. Transaction summary of the day
 
-### Agent Management page
-- Sortable, searchable table: agent name, agent number/ID, phone, category, team (owner), status badge, transaction count, transaction value, joining/registration date, region/district.
-- Search by name, number or phone. Filters for category, team, status and period.
-- Summary strip above the table: total / active / inactive agents, total transactions, total value.
+New summary block on the dashboard for the selected day: number of transactions, total value, cash-in, cash-out, commission, active tills, plus top movements. The same block is reused on the audit page, filtered to the audit's period, so both read from one component and one calculation.
 
-### Agent profile
-- Opens on clicking any agent row: identity details, category, team, current status, and location/contact info.
-- Transaction summary card: count, value, target required, progress against target.
-- Weekly and monthly performance blocks plus a status-history table.
-- Action buttons: call, SMS, WhatsApp, view transactions, view report.
+## 3. Weekly report parsing and appending
 
-### Transaction summary and period picker
-- Shared period selector: today, this week, this month, previous week, previous month, custom range.
-- Every agent screen and report respects the selected period.
+- Each uploaded week is stored as its own week and appended to the history; re-uploading a week replaces only that week.
+- Weekly totals accumulate across the month so that by the last week of the month the accumulated figures match the shape of the monthly report: total volume, base volume, IOP volume, transactions, active/inactive, served/unserved.
+- Add per-week **updated volume** and **IOP volume** columns to the weekly progression table and chart, with a running month-to-date total.
+- Weekly numbers feed KPI 1–4 and each owner's dashboard for the same period.
 
-## Priority 2
+## 4. Penalty
 
-### Weekly agent report
-- One row per agent: agent, category, transactions, value, target, status.
-- Filters: week, category, team, agent, status. Summary cards on top; table below; export/print.
+Month-end penalty charged by the telco on the money the bank serves to wakalas, at a rate of 0.05 (rate stored in settings, not hardcoded). Shown on the dashboard as an accruing month-to-date figure and per owner, calculated from the served volume for the month.
 
-### Monthly agent report
-- Totals: total agents, active, inactive, transaction count, value.
-- Breakdowns by category, by team, and per agent, computed from that month's actual transactions.
+## 5. Base Wakala — real Active/Inactive status
 
-### Month-end status and status history
-- At month end (and on demand for past months) the system stores each agent's transaction count, value, category requirement and resulting status for that month.
-- Historical reports read those stored rows, so an agent who becomes active later does not turn active in an older month's report.
-- Where a past month has no stored row yet, it is back-filled once from the stored daily transactions and then frozen.
+- The Active/Inactive column stops being a manual toggle and reflects the system rule: a wakala is **Active when its combined cash-in + cash-out transaction count for the week reaches the threshold (default 25)**, otherwise Inactive. Status refreshes every time a weekly report is uploaded.
+- Wakalas with no data for the week are shown as "No data", never silently Inactive.
+- **Status history:** every weekly evaluation is recorded, so each wakala's row can show its status for the previous month and the two months before that (and a full history view). Historical reports use the status that applied in the reported period, not today's status.
+- Filters gain "Active / Inactive / No data" driven by the computed status.
 
-### Team performance
-- Per-owner roll-up: agents, active/inactive split, transactions, value, attainment, and movement versus the previous period.
+## 6. Manual rule configuration
 
-## Deferred to a later pass (Priority 3)
-Clickable dashboard cards that drill into these new lists, the dedicated IOP report, and broader export/print polish. Say the word and I fold them in.
+A settings panel (admin only) for the counting rule:
+
+- Transaction threshold for Active (default 25)
+- Whether cash-in and cash-out are combined or counted separately
+- Evaluation window (weekly)
+- Penalty rate (default 0.05)
+
+Changes apply to future evaluations and can be re-run over stored weeks; every change is written to the audit log.
+
+## 7. Owner dashboard
+
+- Each owner sees their wakalas with the same real Active/Inactive status and the week it was measured, plus their served/unserved and volume figures.
+- **Report an issue:** an owner can send a message to the admin about a specific problem wakala (pick wakala, category, description). Admin gets it in an inbox with status Open / In progress / Resolved, can reply, and the owner sees the reply and resolution on their own dashboard. In-app only, no email.
 
 ## Technical notes
-- New tables: `agent_categories` (name, required txns, required value, rule mode), `agent_category_assignments` (wakala msisdn → category, source: auto/manual), `agent_status_history` (msisdn, period, period type, txns, value, required values, status, frozen_at). Staff-write / staff-read policies plus grants, matching existing tables.
-- New server functions in `src/lib/agents.functions.ts` for the agent list, agent detail, weekly/monthly report aggregation and month-end freezing, aggregating `daily_transaction_records` by `branch_msisdn` and `reporting_date` and joining `base_wakala_index` + `owners`.
-- A single shared status resolver (`src/utils/agentStatus.ts`) used by list, profile, reports and the freeze job — the existing Daily MGT and weekly servicing rules stay untouched.
-- New admin views: `AgentManagementView`, `AgentProfileView`, `AgentWeeklyReportView`, `AgentMonthlyReportView`, plus a categories panel in `SettingsView`, wired into the existing sidebar and hash routes.
+
+- New table `wakala_status_history` (msisdn, owner_id, period/week, transactions_ci, transactions_co, is_active, evaluated_at) with owner-scoped read policies and staff write; written by weekly ingestion.
+- New table `wakala_issues` (+ `wakala_issue_messages`) for the owner→admin thread; RLS so an owner sees only their own threads, staff see all.
+- Rule + penalty settings stored in the existing `app_settings` table under a single `activity_rules` key, read through one helper so dashboard, weekly engine and base wakala all use the same values.
+- Activity rule implemented as one shared function used by the weekly engine, base wakala view and KPI 3 — Daily MGT's existing served/unserved rule and the `servicing_status` column reading stay unchanged.
+- Weekly accumulation extends the existing weekly engine/history utilities; daily figures come from the existing daily transaction records.
+- KPI cards, the day transaction summary and the penalty figure are presentation layers over these shared calculations.
