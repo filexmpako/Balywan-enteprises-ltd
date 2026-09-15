@@ -7,8 +7,11 @@ import {
   CheckCircle, 
   Sun,
   Moon,
-  Settings
+  Settings,
+  SlidersHorizontal
 } from 'lucide-react';
+import { getActivityRules, saveActivityRules } from '../utils/activityRules';
+import { refreshWeeklyStatsHistory } from '../utils/weeklyHistory';
 import { motion } from 'motion/react';
 import PageHeaderBanner from './PageHeaderBanner';
 import { useAuth } from './AuthContext';
