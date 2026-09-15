@@ -686,6 +686,7 @@ export default function BaseWakalaIndexView() {
             <option value="ALL">All Statuses</option>
             <option value="ACTIVE">ACTIVE</option>
             <option value="INACTIVE">INACTIVE</option>
+            <option value="NO_DATA">NO DATA</option>
           </select>
 
           {/* Owner Filter */}
