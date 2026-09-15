@@ -16,10 +16,30 @@ export interface Workspace {
   documents: Record<string, any>;
 }
 
+/**
+ * Reads every row of a table, page by page. The Data API caps a single
+ * response at 1000 rows regardless of .limit(), so a Base Wakala file with
+ * thousands of rows silently came back truncated before this paging existed.
+ */
+const PAGE_SIZE = 1000;
+
+async function selectAll(supabase: DB, table: string, columns: string, filter?: (q: any) => any): Promise<any[]> {
+  const out: any[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    let query = supabase.from(table).select(columns);
+    if (filter) query = filter(query);
+    const { data, error } = await query.range(from, from + PAGE_SIZE - 1);
+    if (error) throw new Error(`${table}: ${error.message}`);
+    const page = data ?? [];
+    out.push(...page);
+    if (page.length < PAGE_SIZE) break;
+  }
+  return out;
+}
+
 export async function loadCollection(supabase: DB, mapper: CollectionMapper): Promise<any[]> {
-  const { data, error } = await supabase.from(mapper.table).select('*').limit(20000);
-  if (error) throw new Error(`${mapper.table}: ${error.message}`);
-  return (data ?? []).map((row: any) => fromRow(mapper, row));
+  const rows = await selectAll(supabase, mapper.table, '*');
+  return rows.map((row: any) => fromRow(mapper, row));
 }
 
 export async function loadWorkspace(supabase: DB): Promise<Workspace> {
@@ -102,8 +122,7 @@ export async function saveCollection(supabase: DB, key: string, items: any[]): P
   // Prune by diffing existing PKs instead of sending one giant NOT IN filter
   // (that overflows the request URL and fails with an empty error message).
   const keepIds = new Set(rows.map((r) => String(r[mapper.pk])));
-  const { data: existing, error: listError } = await supabase.from(mapper.table).select(mapper.pk);
-  if (listError) throw new Error(`${mapper.table} list: ${listError.message}`);
+  const existing = await selectAll(supabase, mapper.table, mapper.pk);
 
   const staleIds = (existing ?? [])
     .map((r: any) => String(r[mapper.pk]))
@@ -250,9 +269,14 @@ export async function recordUpload(
 
 /** Owner-scoped MTD transaction read used by the KPI engines. */
 export async function loadTransactions(supabase: DB, period?: string) {
-  let query = supabase.from('daily_transaction_records').select('raw, bucket, attributed_owner_id, reporting_date, amount').eq('is_active', true).limit(50000);
-  if (period) query = query.eq('reporting_period', period);
-  const { data, error } = await query;
-  if (error) throw new Error(`daily_transaction_records read: ${error.message}`);
-  return (data ?? []).map((r: any) => r.raw);
+  const rows = await selectAll(
+    supabase,
+    'daily_transaction_records',
+    'raw, bucket, attributed_owner_id, reporting_date, amount',
+    (q) => {
+      const scoped = q.eq('is_active', true);
+      return period ? scoped.eq('reporting_period', period) : scoped;
+    },
+  );
+  return rows.map((r: any) => r.raw);
 }
