@@ -975,6 +975,8 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                       <td className="py-2.5 font-sans text-xs font-bold text-brand-success">{entry.served}</td>
                       <td className="py-2.5 font-sans text-xs font-bold text-brand-error">{entry.notServed}</td>
                       <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation(entry.totalValue)}</td>
+                      <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation((entry as any).iopValue || 0)}</td>
+                      <td className="py-2.5 font-sans text-xs font-bold text-brand-error">{formatNumberWithAbbreviation((entry as any).penalty || 0)}</td>
                       <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation(entry.cumulativeValue)}</td>
                       <td className="py-2.5 font-sans text-xs font-bold text-brand-primary">
                         {target > 0 ? `${((entry.cumulativeValue / target) * 100).toFixed(1)}%` : '—'}
