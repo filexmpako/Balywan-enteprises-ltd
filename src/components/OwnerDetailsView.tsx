@@ -896,54 +896,31 @@ export default function OwnerDetailsView({
         <>
           {/* Primary Metrics Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* Metric 1: Wakala Breakdown */}
-            <div className="rounded-2xl border border-brand-gray-border bg-brand-card p-5 shadow-ambient flex flex-col justify-between">
-              <span className="block font-sans text-[10px] font-bold text-brand-text-variant uppercase tracking-wider">Wakala</span>
-              <div className="mt-2 grid grid-cols-3 gap-2 border-t border-brand-gray-border/50 pt-2">
-                <div>
-                  <span className="block font-sans text-[9px] font-semibold text-brand-text-variant uppercase">Total</span>
-                  <span className="font-sans text-base sm:text-lg font-black text-brand-text">{allWakalas.length}</span>
-                </div>
-                <div>
-                  <span className="block font-sans text-[9px] font-semibold text-brand-text-variant uppercase">Priority</span>
-                  <span className={`font-sans text-xs sm:text-sm font-black ${hasPriorityData ? 'text-brand-primary font-mono' : 'text-brand-text-variant'}`}>
-                    {hasPriorityData ? priorityWakalaCount : 'Not yet synced'}
-                  </span>
-                </div>
-                <div>
-                  <span className="block font-sans text-[9px] font-semibold text-brand-text-variant uppercase">Normal</span>
-                  <span className={`font-sans text-xs sm:text-sm font-black ${hasPriorityData ? 'text-brand-text font-mono' : 'text-brand-text-variant'}`}>
-                    {hasPriorityData ? normalWakalaCount : 'Not yet synced'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Metric 2: Active Wakala */}
-            <div className="rounded-2xl border border-brand-gray-border bg-brand-card p-5 shadow-ambient">
-              <span className="block font-sans text-[10px] font-bold text-brand-text-variant uppercase tracking-wider">Active Wakala</span>
-              <div className="mt-2 flex items-baseline justify-between">
-                <span className={`font-sans text-2xl font-black ${isSynced ? 'text-brand-text' : 'text-brand-text-variant text-base'}`}>
-                  {isSynced ? activeWakalaCount : 'Not yet synced'}
-                </span>
-                <span className={`font-sans text-[10px] font-bold px-2 py-0.5 rounded-full ${isSynced ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
-                  {isSynced ? 'HIGH GROWTH' : 'Awaiting Ingestion'}
-                </span>
-              </div>
-            </div>
-
-            {/* Metric 3: Inactive Wakala */}
-            <div className="rounded-2xl border border-brand-gray-border bg-brand-card p-5 shadow-ambient">
-              <span className="block font-sans text-[10px] font-bold text-brand-text-variant uppercase tracking-wider">Inactive Wakala</span>
-              <div className="mt-2 flex items-baseline justify-between">
-                <span className={`font-sans text-2xl font-black ${isSynced ? 'text-rose-600' : 'text-brand-text-variant text-base'}`}>
-                  {isSynced ? inactiveWakalaCount : 'Not yet synced'}
-                </span>
-                <span className={`font-sans text-[10px] font-bold px-2 py-0.5 rounded-full ${isSynced ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-400'}`}>
-                  {isSynced ? 'REQUIRES REVIEW' : 'Awaiting Ingestion'}
-                </span>
-              </div>
-            </div>
+            <MetricCard
+              title="Wakala"
+              value={allWakalas.length}
+              subValue={
+                hasPriorityData
+                  ? `${priorityWakalaCount} Priority · ${normalWakalaCount} Normal`
+                  : 'Awaiting Ingestion'
+              }
+              icon={Users}
+              variant="blue"
+            />
+            <MetricCard
+              title="Active Wakala"
+              value={isSynced ? activeWakalaCount : 'Not yet synced'}
+              subValue={isSynced ? 'HIGH GROWTH' : 'Awaiting Ingestion'}
+              icon={UserCheck}
+              variant="green"
+            />
+            <MetricCard
+              title="Inactive Wakala"
+              value={isSynced ? inactiveWakalaCount : 'Not yet synced'}
+              subValue={isSynced ? 'REQUIRES REVIEW' : 'Awaiting Ingestion'}
+              icon={UserX}
+              variant="red"
+            />
           </div>
 
           {/* Daily Performance KPIs Section */}
