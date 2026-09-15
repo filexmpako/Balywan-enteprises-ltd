@@ -1113,18 +1113,51 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
 
     if (sheet2Exists && sheet2Name) {
       const sheet2 = workbook.Sheets[sheet2Name];
-      sheet2Data = XLSX.utils.sheet_to_json(sheet2, { header: 1 });
-      
+      // defval keeps short/sparse rows aligned with the header positions, so
+      // trailing blank cells no longer shift values into the wrong columns.
+      sheet2Data = XLSX.utils.sheet_to_json(sheet2, { header: 1, defval: '', blankrows: false });
+
+      // A title/banner row above the real header used to be taken as the
+      // header, which silently mislabelled every column. Score candidate rows
+      // and pick the one that actually looks like a header.
+      const scoreHeaderRow = (row: any[]): number => {
+        if (!row || !Array.isArray(row)) return -1;
+        const cells = row.map(c => String(c ?? '').trim()).filter(v => v !== '');
+        if (cells.length < 2) return -1;
+        const textCells = cells.filter(v => isNaN(Number(v.replace(/,/g, ''))));
+        if (textCells.length < Math.max(2, Math.ceil(cells.length * 0.6))) return -1;
+        let score = cells.length;
+        const norm = cells.map(v => v.toLowerCase().replace(/[\s_-]+/g, ''));
+        if (norm.some(v => v.includes('msisdn') || v.includes('phone'))) score += 100;
+        if (norm.some(v => v.includes('status'))) score += 20;
+        if (norm.some(v => v.includes('servicing') || v.includes('txn') || v.includes('val'))) score += 20;
+        return score;
+      };
+
       const findSheet2HeaderRow = () => {
-        for (let r = 0; r < Math.min(sheet2Data.length, 10); r++) {
-          const row = sheet2Data[r];
-          if (row && Array.isArray(row) && row.some(cell => cell !== undefined && cell !== null && String(cell).trim() !== '')) {
-            sheet2HeaderIdx = r;
-            sheet2Headers = row.map(cell => String(cell || '').trim());
-            return true;
+        let bestIdx = -1;
+        let bestScore = 0;
+        for (let r = 0; r < Math.min(sheet2Data.length, 15); r++) {
+          const score = scoreHeaderRow(sheet2Data[r]);
+          if (score > bestScore) {
+            bestScore = score;
+            bestIdx = r;
           }
         }
-        return false;
+        if (bestIdx === -1) {
+          // Fallback: first non-empty row (previous behaviour).
+          for (let r = 0; r < Math.min(sheet2Data.length, 10); r++) {
+            const row = sheet2Data[r];
+            if (row && Array.isArray(row) && row.some(cell => String(cell ?? '').trim() !== '')) {
+              bestIdx = r;
+              break;
+            }
+          }
+        }
+        if (bestIdx === -1) return false;
+        sheet2HeaderIdx = bestIdx;
+        sheet2Headers = (sheet2Data[bestIdx] as any[]).map(cell => String(cell ?? '').trim());
+        return true;
       };
 
       const hasSheet2Headers = findSheet2HeaderRow();
