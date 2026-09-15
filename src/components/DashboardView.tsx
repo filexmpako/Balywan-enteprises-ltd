@@ -953,6 +953,25 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                   {target > 0 ? ` / ${formatNumberWithAbbreviation(target)}` : ''}
                 </p>
               </div>
+              {(() => {
+                const month = (latest as any).reportingMonth;
+                const monthEntries = month
+                  ? series.filter(e => (e as any).reportingMonth === month)
+                  : series;
+                const penaltyMtd = monthEntries.reduce((s, e) => s + ((e as any).penalty || 0), 0);
+                const iopMtd = monthEntries.reduce((s, e) => s + ((e as any).iopValue || 0), 0);
+                return (
+                  <div className="rounded-xl bg-brand-gray-hover p-4">
+                    <p className="font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Penalty (Month to date)</p>
+                    <p className="font-sans text-xl font-bold text-brand-error mt-1">
+                      {formatNumberWithAbbreviation(penaltyMtd)}
+                    </p>
+                    <p className="font-sans text-[10px] text-brand-text-variant mt-0.5">
+                      IOP volume {formatNumberWithAbbreviation(iopMtd)}
+                    </p>
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="mt-5 overflow-x-auto">
