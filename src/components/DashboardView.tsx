@@ -731,6 +731,125 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
         </>
       )}
 
+      {/* Weekly KPI Progression — appended per uploaded weekly workbook */}
+      {weeklyStats.length > 0 && (() => {
+        const series = withCumulativeValue(weeklyStats);
+        const latest = series[series.length - 1];
+        const target = monthlyGoal?.hasAny ? monthlyGoal.total : 0;
+        const progress = target > 0 ? (latest.cumulativeValue / target) * 100 : 0;
+        const pace = paceLabel(progress, weekNumberOf(latest.reportingWeek) || series.length);
+        const toneClass =
+          pace.tone === 'ahead'
+            ? 'bg-brand-success-container/40 text-brand-success'
+            : pace.tone === 'ontrack'
+              ? 'bg-brand-primary-container/40 text-brand-primary'
+              : 'bg-brand-error-container/40 text-brand-error';
+
+        return (
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="rounded-2xl border border-brand-gray-border bg-brand-card p-6 shadow-ambient"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-brand-gray-border pb-5">
+              <div>
+                <h3 className="font-sans text-lg font-bold text-brand-text">Weekly KPI Progression</h3>
+                <p className="font-sans text-xs text-brand-text-variant mt-0.5">
+                  Served / unserved wakalas per uploaded week, accumulating toward the monthly KPI 1 target.
+                </p>
+              </div>
+              <span className={`inline-flex items-center rounded-full px-3 py-1 font-sans text-[10px] font-bold tracking-wider ${toneClass}`}>
+                {pace.label}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 pt-5">
+              <MetricCard
+                title="Latest Week"
+                value={latest.reportingWeek}
+                icon={Calendar}
+                variant="blue"
+              />
+              <MetricCard
+                title="Served Wakalas"
+                value={latest.served}
+                subValue={`(${latest.servedPercent}%)`}
+                icon={UserCheck}
+                variant="green"
+              />
+              <MetricCard
+                title="Unserved Wakalas"
+                value={latest.notServed}
+                subValue={`(${latest.notServedPercent}%)`}
+                icon={UserX}
+                variant="red"
+              />
+              <MetricCard
+                title="Cumulative vs Target"
+                value={target > 0 ? `${progress.toFixed(1)}%` : '—'}
+                subValue={
+                  <>
+                    {formatNumberWithAbbreviation(latest.cumulativeValue)}
+                    {target > 0 ? ` / ${formatNumberWithAbbreviation(target)}` : ''}
+                  </>
+                }
+                icon={Target}
+                variant="indigo"
+              />
+              {(() => {
+                const month = (latest as any).reportingMonth;
+                const monthEntries = month
+                  ? series.filter(e => (e as any).reportingMonth === month)
+                  : series;
+                const penaltyMtd = monthEntries.reduce((s, e) => s + ((e as any).penalty || 0), 0);
+                const iopMtd = monthEntries.reduce((s, e) => s + ((e as any).iopValue || 0), 0);
+                return (
+                  <MetricCard
+                    title="Penalty (Month to date)"
+                    value={formatNumberWithAbbreviation(penaltyMtd)}
+                    subValue={`IOP volume ${formatNumberWithAbbreviation(iopMtd)}`}
+                    icon={AlertTriangle}
+                    variant="amber"
+                  />
+                );
+              })()}
+            </div>
+
+            <div className="mt-5 overflow-x-auto">
+              <table className="w-full min-w-[640px] text-left">
+                <thead>
+                  <tr className="border-b border-brand-gray-border">
+                    {['Week', 'Active', 'Inactive', 'Served', 'Unserved', 'Weekly Value', 'IOP Value', 'Penalty', 'Cumulative', 'vs Target'].map(h => (
+                      <th key={h} className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {series.map(entry => (
+                    <tr key={entry.reportingWeek} className="border-b border-brand-gray-border/50">
+                      <td className="py-2.5 font-sans text-xs font-bold text-brand-text">{entry.reportingWeek}</td>
+                      <td className="py-2.5 font-sans text-xs text-brand-text">{entry.active}</td>
+                      <td className="py-2.5 font-sans text-xs text-brand-text">{entry.inactive}</td>
+                      <td className="py-2.5 font-sans text-xs font-bold text-brand-success">{entry.served}</td>
+                      <td className="py-2.5 font-sans text-xs font-bold text-brand-error">{entry.notServed}</td>
+                      <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation(entry.totalValue)}</td>
+                      <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation((entry as any).iopValue || 0)}</td>
+                      <td className="py-2.5 font-sans text-xs font-bold text-brand-error">{formatNumberWithAbbreviation((entry as any).penalty || 0)}</td>
+                      <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation(entry.cumulativeValue)}</td>
+                      <td className="py-2.5 font-sans text-xs font-bold text-brand-primary">
+                        {target > 0 ? `${((entry.cumulativeValue / target) * 100).toFixed(1)}%` : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </motion.div>
+        );
+      })()}
+
       {/* 1. KPI Performance Summary Container (Upper big card) */}
       <motion.div 
         initial={{ y: 20, opacity: 0 }}
@@ -897,124 +1016,6 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
         )}
       </motion.div>
 
-      {/* Weekly KPI Progression — appended per uploaded weekly workbook */}
-      {weeklyStats.length > 0 && (() => {
-        const series = withCumulativeValue(weeklyStats);
-        const latest = series[series.length - 1];
-        const target = monthlyGoal?.hasAny ? monthlyGoal.total : 0;
-        const progress = target > 0 ? (latest.cumulativeValue / target) * 100 : 0;
-        const pace = paceLabel(progress, weekNumberOf(latest.reportingWeek) || series.length);
-        const toneClass =
-          pace.tone === 'ahead'
-            ? 'bg-brand-success-container/40 text-brand-success'
-            : pace.tone === 'ontrack'
-              ? 'bg-brand-primary-container/40 text-brand-primary'
-              : 'bg-brand-error-container/40 text-brand-error';
-
-        return (
-          <motion.div
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            className="rounded-2xl border border-brand-gray-border bg-brand-card p-6 shadow-ambient"
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-brand-gray-border pb-5">
-              <div>
-                <h3 className="font-sans text-lg font-bold text-brand-text">Weekly KPI Progression</h3>
-                <p className="font-sans text-xs text-brand-text-variant mt-0.5">
-                  Served / unserved wakalas per uploaded week, accumulating toward the monthly KPI 1 target.
-                </p>
-              </div>
-              <span className={`inline-flex items-center rounded-full px-3 py-1 font-sans text-[10px] font-bold tracking-wider ${toneClass}`}>
-                {pace.label}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 pt-5">
-              <MetricCard
-                title="Latest Week"
-                value={latest.reportingWeek}
-                icon={Calendar}
-                variant="blue"
-              />
-              <MetricCard
-                title="Served Wakalas"
-                value={latest.served}
-                subValue={`(${latest.servedPercent}%)`}
-                icon={UserCheck}
-                variant="green"
-              />
-              <MetricCard
-                title="Unserved Wakalas"
-                value={latest.notServed}
-                subValue={`(${latest.notServedPercent}%)`}
-                icon={UserX}
-                variant="red"
-              />
-              <MetricCard
-                title="Cumulative vs Target"
-                value={target > 0 ? `${progress.toFixed(1)}%` : '—'}
-                subValue={
-                  <>
-                    {formatNumberWithAbbreviation(latest.cumulativeValue)}
-                    {target > 0 ? ` / ${formatNumberWithAbbreviation(target)}` : ''}
-                  </>
-                }
-                icon={Target}
-                variant="indigo"
-              />
-              {(() => {
-                const month = (latest as any).reportingMonth;
-                const monthEntries = month
-                  ? series.filter(e => (e as any).reportingMonth === month)
-                  : series;
-                const penaltyMtd = monthEntries.reduce((s, e) => s + ((e as any).penalty || 0), 0);
-                const iopMtd = monthEntries.reduce((s, e) => s + ((e as any).iopValue || 0), 0);
-                return (
-                  <MetricCard
-                    title="Penalty (Month to date)"
-                    value={formatNumberWithAbbreviation(penaltyMtd)}
-                    subValue={`IOP volume ${formatNumberWithAbbreviation(iopMtd)}`}
-                    icon={AlertTriangle}
-                    variant="amber"
-                  />
-                );
-              })()}
-            </div>
-
-            <div className="mt-5 overflow-x-auto">
-              <table className="w-full min-w-[640px] text-left">
-                <thead>
-                  <tr className="border-b border-brand-gray-border">
-                    {['Week', 'Active', 'Inactive', 'Served', 'Unserved', 'Weekly Value', 'IOP Value', 'Penalty', 'Cumulative', 'vs Target'].map(h => (
-                      <th key={h} className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {series.map(entry => (
-                    <tr key={entry.reportingWeek} className="border-b border-brand-gray-border/50">
-                      <td className="py-2.5 font-sans text-xs font-bold text-brand-text">{entry.reportingWeek}</td>
-                      <td className="py-2.5 font-sans text-xs text-brand-text">{entry.active}</td>
-                      <td className="py-2.5 font-sans text-xs text-brand-text">{entry.inactive}</td>
-                      <td className="py-2.5 font-sans text-xs font-bold text-brand-success">{entry.served}</td>
-                      <td className="py-2.5 font-sans text-xs font-bold text-brand-error">{entry.notServed}</td>
-                      <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation(entry.totalValue)}</td>
-                      <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation((entry as any).iopValue || 0)}</td>
-                      <td className="py-2.5 font-sans text-xs font-bold text-brand-error">{formatNumberWithAbbreviation((entry as any).penalty || 0)}</td>
-                      <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation(entry.cumulativeValue)}</td>
-                      <td className="py-2.5 font-sans text-xs font-bold text-brand-primary">
-                        {target > 0 ? `${((entry.cumulativeValue / target) * 100).toFixed(1)}%` : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </motion.div>
-        );
-      })()}
     </motion.div>
   );
 }
