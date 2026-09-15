@@ -959,7 +959,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
               <table className="w-full min-w-[640px] text-left">
                 <thead>
                   <tr className="border-b border-brand-gray-border">
-                    {['Week', 'Active', 'Inactive', 'Served', 'Unserved', 'Weekly Value', 'Cumulative', 'vs Target'].map(h => (
+                    {['Week', 'Active', 'Inactive', 'Served', 'Unserved', 'Weekly Value', 'IOP Value', 'Penalty', 'Cumulative', 'vs Target'].map(h => (
                       <th key={h} className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">
                         {h}
                       </th>
