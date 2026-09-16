@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { ViewType, Owner, WakalaEntry, BaseWakala, PriorityWakala } from '../types';
 import { normalizeMsisdn } from '../utils/msisdn';
 import { buildOwnerWakalaMap } from '../utils/wakalaMapping';
+import { getOwnerPortfolio } from '../utils/ownerPortfolio';
 import { ownersList } from '../data';
 import WorkLocationSection from './WorkLocationSection';
 import TransactionHistorySection from './TransactionHistorySection';
