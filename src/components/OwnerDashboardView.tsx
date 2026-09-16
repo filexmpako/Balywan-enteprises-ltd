@@ -18,9 +18,9 @@ import OwnerWeeklyCheckpoints from './OwnerWeeklyCheckpoints';
 import WakalaIssuesPanel from './WakalaIssuesPanel';
 import { useAuth } from './AuthContext';
 import { useReportingPeriod } from './ReportingPeriodContext';
-import { kvJson } from '../lib/hasidadi/kv';
 import { normalizeMsisdn } from '../utils/msisdn';
-import { buildOwnerWakalaMap } from '../utils/wakalaMapping';
+import { getOwnerPortfolio } from '../utils/ownerPortfolio';
+import { CLOUD_HYDRATED_EVENT } from '../lib/cloudSync';
 import { listStoredWeeks, loadWeeklyRows } from '../utils/weeklyStore';
 import { extractTxnCounts, getActivityRules, isActiveByRule } from '../utils/activityRules';
 import { getServicedStatusFromColumn } from '../utils/servicingStatus';
@@ -29,7 +29,7 @@ import { readWeeklyStatsHistory, refreshWeeklyStatsHistory } from '../utils/week
 import { getSavedManualOwnerTargets, resolveOwnerTarget } from '../utils/targetResolution';
 import { formatNumberWithAbbreviation } from '../utils/numberFormat';
 import { listWakalaIssues, type WakalaIssue } from '../lib/issues.functions';
-import type { BaseWakala, Owner, WakalaEntry } from '../types';
+
 
 type Tab = 'overview' | 'wakalas' | 'reports';
 
