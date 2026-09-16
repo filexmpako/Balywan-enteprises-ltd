@@ -21,7 +21,6 @@ import { getServicingRows } from '../utils/indexedDB';
 import { formatShortDate } from '../utils/dateFormat';
 import { refreshWeeklyStatsHistory } from '../utils/weeklyHistory';
 import { getServicedStatusFromColumn, mergeServicedStatus } from '../utils/servicingStatus';
-import { getActivityRules, isActiveByRule, extractTxnCounts } from '../utils/activityRules';
 import type { WeeklyStatsEntry } from '../utils/weeklyKpiEngine';
 import { calculateCompanyKPIs } from '../utils/mappingEngine';
 import { exportKPIAnalysisToPDF } from '../utils/pdfExport';
@@ -229,10 +228,16 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
         return;
       }
 
-      // Active/inactive follows the same configurable system rule as the
-      // weekly engine (transaction count + amount thresholds from Settings)
-      // instead of a raw status column, so Monthly and Weekly never disagree.
-      const rules = getActivityRules();
+      // Active/inactive is read from the wakala_status column the monthly
+      // KPI upload already carries (that status is sourced upstream, not
+      // computed here) — confirmed against the weekly-vs-monthly rule
+      // discrepancy this file used to have before this was clarified.
+      const isRowStatusActive = (row: any): boolean => {
+        if (!row) return false;
+        const val = row.wakala_status ?? row.Wakala_Status ?? row['Wakala Status'] ?? row['wakala status'] ?? row.status ?? row.Status;
+        if (val === undefined || val === null || val === '') return false;
+        return Number(val) === 1;
+      };
 
       const getFieldValue = (row: any, keys: string[]): number => {
         for (const k of keys) {
@@ -268,7 +273,7 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
         const val = getFieldValue(row, ['SA_Servicing_Val', 'SA Servicing Val', 'sa_servicing_val']);
         const productSellerVal = getFieldValue(row, ['SA_Product_Sellers', 'SA Product Sellers', 'product_sellers', 'product_seller', 'Product_Sales', 'Product Sales']);
         const isProductSeller = productSellerVal > 0 || row.Product_Seller === true || String(row.Product_Seller).toLowerCase() === 'true' || String(row.Product_Seller).toLowerCase() === 'yes';
-        const rowActive = isActiveByRule(extractTxnCounts(row), rules);
+        const rowActive = isRowStatusActive(row);
 
         const ci = getFieldValue(row, ['CI_val', 'CI val', 'ci_val', 'Cash In Value', 'Cash-In Value', 'Cash-In', 'Cash In', 'deposit', 'Deposit']);
         const co = getFieldValue(row, ['CO_val', 'CO val', 'co_val', 'Cash Out Value', 'Cash-Out Value', 'Cash-Out', 'Cash Out', 'withdrawal', 'Withdrawal']);
