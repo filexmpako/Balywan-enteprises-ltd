@@ -17,7 +17,7 @@ import { Target, X, ArrowLeft, Loader2, SlidersHorizontal, MoreVertical } from '
 import PageHeaderBanner from './PageHeaderBanner';
 import PeriodSelector from './PeriodSelector';
 import { useReportingPeriod } from './ReportingPeriodContext';
-import { CLOUD_HYDRATED_EVENT } from '../lib/cloudSync';
+import { CLOUD_HYDRATED_EVENT } from '../lib/cloudSyncEvents';
 
 export default function TargetsView() {
   const { user } = useAuth();

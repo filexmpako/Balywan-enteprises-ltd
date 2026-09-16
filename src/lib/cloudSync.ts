@@ -7,10 +7,9 @@
  */
 import { COLLECTION_KEYS, DOCUMENT_KEYS } from './hasidadi/collections';
 import { fetchWorkspace, saveCollection, saveDocument } from './hasidadi.functions';
+import { CLOUD_HYDRATED_EVENT } from './cloudSyncEvents';
 
 const QUEUE_KEY = 'hasidadi_sync_queue';
-/** Fired on window once the offline cache has been refreshed from Postgres. */
-export const CLOUD_HYDRATED_EVENT = 'hasidadi:cloud-hydrated';
 const SYNCED = new Set<string>([...COLLECTION_KEYS, ...(DOCUMENT_KEYS as readonly string[])]);
 
 let installed = false;
