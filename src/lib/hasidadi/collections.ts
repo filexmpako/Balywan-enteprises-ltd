@@ -167,7 +167,7 @@ export const COLLECTIONS: CollectionMapper[] = [
       wakalaCode: 'wakala_code',
       importedAt: 'imported_at',
     },
-    makeId: (p) => `${String(p.msisdn || '').trim()}|${p.period || ''}`,
+    makeId: (p) => deterministicUuid(`${String(p.msisdn || '').trim()}|${p.period || ''}`),
   }),
   define({
     key: 'agentTargets',
