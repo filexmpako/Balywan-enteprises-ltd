@@ -18,6 +18,7 @@ import { ReportingPeriodProvider } from "./components/ReportingPeriodContext";
 import DashboardView from "./components/DashboardView";
 import OwnersView from "./components/OwnersView";
 import OwnerDetailsView from "./components/OwnerDetailsView";
+import OwnerDashboardView from "./components/OwnerDashboardView";
 import UploadReportsView from "./components/UploadReportsView";
 import KPIReportsView from "./components/KPIReportsView";
 import ReportHistoryView from "./components/ReportHistoryView";
@@ -253,13 +254,23 @@ function AppContent() {
     }
 
     // Owner allowed views
-    if (hash === "#/owner/dashboard" || hash === "#/owner/profile" || hash === "#/" || hash === "#/login") {
+    if (hash === "#/owner/dashboard" || hash === "#/" || hash === "#/login") {
+      return (
+        <ProtectedRoute allowedRoles={["Owner"]}>
+          <OwnerLayout ownerName={user.name}>
+            <OwnerDashboardView />
+          </OwnerLayout>
+        </ProtectedRoute>
+      );
+    }
+
+    if (hash === "#/owner/profile") {
       return (
         <ProtectedRoute allowedRoles={["Owner"]}>
           <OwnerLayout ownerName={user.name}>
             <OwnerDetailsView
-              onNavigate={(view) => {
-                // If they try navigating inside the details view (not fully supported for owners yet)
+              onNavigate={() => {
+                /* owners navigate via the dashboard */
               }}
               selectedOwnerName={user.name}
               isStandaloneAgent={true}

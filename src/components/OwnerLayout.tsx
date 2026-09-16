@@ -27,6 +27,30 @@ export default function OwnerLayout({ ownerName, children }: OwnerLayoutProps) {
         </div>
         
         <div className="flex items-center gap-4">
+          <nav className="flex items-center gap-1">
+            {[
+              { hash: '#/owner/dashboard', label: 'Dashboard' },
+              { hash: '#/owner/profile', label: 'My Profile' },
+            ].map((item) => {
+              const active =
+                typeof window !== 'undefined' &&
+                (window.location.hash === item.hash ||
+                  (item.hash === '#/owner/dashboard' && (window.location.hash === '#/' || window.location.hash === '')));
+              return (
+                <a
+                  key={item.hash}
+                  href={item.hash}
+                  className={`rounded-xl px-3 py-2 font-sans text-xs font-bold transition-colors ${
+                    active
+                      ? 'bg-brand-primary-container/40 text-brand-primary'
+                      : 'text-brand-text-variant hover:text-brand-text'
+                  }`}
+                >
+                  {item.label}
+                </a>
+              );
+            })}
+          </nav>
           <span className="hidden sm:inline font-sans text-xs font-semibold text-brand-text-variant">
             Agent: <strong className="text-brand-text">{ownerName}</strong>
           </span>
