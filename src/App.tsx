@@ -18,6 +18,7 @@ import { ReportingPeriodProvider } from "./components/ReportingPeriodContext";
 import DashboardView from "./components/DashboardView";
 import OwnersView from "./components/OwnersView";
 import OwnerDetailsView from "./components/OwnerDetailsView";
+import OwnerDashboardView from "./components/OwnerDashboardView";
 import UploadReportsView from "./components/UploadReportsView";
 import KPIReportsView from "./components/KPIReportsView";
 import ReportHistoryView from "./components/ReportHistoryView";
