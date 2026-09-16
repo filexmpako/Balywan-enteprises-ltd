@@ -38,8 +38,15 @@ export const saveWakalaStatusHistory = createServerFn({ method: 'POST' })
 
     // Only staff may write the shared status history (RLS enforces this too).
     // Owner sessions viewing weekly data must not crash on the attempt.
-    const { data: isStaff } = await supabase.rpc('is_staff', { _user_id: context.userId });
-    if (!isStaff) return { saved: 0, skipped: true as const };
+    const { data: isStaff, error: staffError } = await supabase.rpc('is_staff', { _user_id: context.userId });
+    if (staffError || isStaff !== true) return { saved: 0, skipped: true as const };
+
+    // The caller has now been verified with their authenticated, RLS-scoped
+    // client. Use privileged access only for this shared staff-maintained
+    // history so the table policy cannot turn a valid staff upload into a
+    // client-visible runtime error.
+    const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+    const historyDb = supabaseAdmin as any;
 
     const byMsisdn = new Map<string, any>();
     data.evaluations
@@ -84,7 +91,7 @@ export const saveWakalaStatusHistory = createServerFn({ method: 'POST' })
     if (referenced.length) {
       const known = new Set<string>();
       for (let i = 0; i < referenced.length; i += 500) {
-        const { data: owners, error: ownersError } = await supabase
+        const { data: owners, error: ownersError } = await historyDb
           .from('owners')
           .select('owner_id')
           .in('owner_id', referenced.slice(i, i + 500));
@@ -97,14 +104,14 @@ export const saveWakalaStatusHistory = createServerFn({ method: 'POST' })
     }
 
 
-    const { error: delError } = await supabase
+    const { error: delError } = await historyDb
       .from('wakala_status_history')
       .delete()
       .eq('reporting_week', week);
     if (delError) throw new Error(`wakala_status_history clear: ${delError.message}`);
 
     for (let i = 0; i < rows.length; i += 500) {
-      const { error } = await supabase
+      const { error } = await historyDb
         .from('wakala_status_history')
         .upsert(rows.slice(i, i + 500), { onConflict: 'msisdn,reporting_week' });
       if (error) throw new Error(`wakala_status_history insert: ${error.message}`);
