@@ -33,6 +33,7 @@ import {
   UserX
 } from 'lucide-react';
 import MetricCard from './MetricCard';
+import WakalaStatusDetailModal from './WakalaStatusDetailModal';
 import { motion } from 'motion/react';
 import PageHeaderBanner from './PageHeaderBanner';
 import { useCompany } from './CompanyContext';
@@ -257,6 +258,10 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
   const [companyKPIs, setCompanyKPIs] = useState<CompanyKPIsResult>(defaultCompanyKPIs);
   const [topOwnersList, setTopOwnersList] = useState<TopOwner[]>([]);
   const [monthlyGoal, setMonthlyGoal] = useState<{ total: number; hasAny: boolean }>({ total: 0, hasAny: false });
+
+  // Company-wide Served/Unserved wakala drill-down, opened from the
+  // Weekly KPI Progression cards below.
+  const [wakalaStatusModal, setWakalaStatusModal] = useState<'served' | 'unserved' | null>(null);
 
   // Dynamic Recent Reports list derived from the persisted audit history logs
   const [recentReportsList, setRecentReportsList] = useState<RecentReport[]>(() => {
@@ -776,6 +781,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                 subValue={`(${latest.servedPercent}%)`}
                 icon={UserCheck}
                 variant="green"
+                onClick={() => setWakalaStatusModal('served')}
               />
               <MetricCard
                 title="Unserved Wakalas"
@@ -783,6 +789,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                 subValue={`(${latest.notServedPercent}%)`}
                 icon={UserX}
                 variant="red"
+                onClick={() => setWakalaStatusModal('unserved')}
               />
               <MetricCard
                 title="Cumulative vs Target"
@@ -846,6 +853,13 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                 </tbody>
               </table>
             </div>
+
+            <WakalaStatusDetailModal
+              isOpen={wakalaStatusModal !== null}
+              reportingWeek={latest.reportingWeek}
+              status={wakalaStatusModal || 'served'}
+              onClose={() => setWakalaStatusModal(null)}
+            />
           </motion.div>
         );
       })()}
