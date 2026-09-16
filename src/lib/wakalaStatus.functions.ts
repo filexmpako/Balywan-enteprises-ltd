@@ -10,6 +10,8 @@ export interface WakalaStatusEvaluationInput {
   totalTxns?: number;
   totalValue?: number;
   isActive: boolean;
+  /** null when the week's rows carried no servicing_status value at all. */
+  isServed?: boolean | null;
 }
 
 /**
@@ -48,6 +50,14 @@ export const saveWakalaStatusHistory = createServerFn({ method: 'POST' })
     const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
     const historyDb = supabaseAdmin as any;
 
+    // Combines two servicing_status reads for the same wakala in one week:
+    // served wins over unserved, and either beats no status at all.
+    const mergeServed = (a: boolean | null | undefined, b: boolean | null | undefined): boolean | null => {
+      if (a === true || b === true) return true;
+      if (a === false || b === false) return false;
+      return null;
+    };
+
     const byMsisdn = new Map<string, any>();
     data.evaluations
       .filter(e => e && String(e.msisdn || '').trim())
@@ -61,6 +71,7 @@ export const saveWakalaStatusHistory = createServerFn({ method: 'POST' })
           prev.total_txns += Number(e.totalTxns) || 0;
           prev.total_value += Number(e.totalValue) || 0;
           prev.is_active = prev.is_active || !!e.isActive;
+          prev.is_served = mergeServed(prev.is_served, e.isServed);
           prev.owner_id = prev.owner_id || e.ownerId || null;
           prev.owner_name = prev.owner_name || e.ownerName || null;
           return;
@@ -75,6 +86,7 @@ export const saveWakalaStatusHistory = createServerFn({ method: 'POST' })
         cash_out_txns: Number(e.cashOutTxns) || 0,
         total_txns: Number(e.totalTxns) || 0,
         total_value: Number(e.totalValue) || 0,
+        is_served: e.isServed ?? null,
         is_active: !!e.isActive,
         threshold_used: Number(data.threshold) || 0,
         rule_mode: String(data.ruleMode || 'combined').slice(0, 80),
