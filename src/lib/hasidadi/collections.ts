@@ -187,7 +187,7 @@ export const COLLECTIONS: CollectionMapper[] = [
       matchedTillMsisdn: 'matched_till_msisdn',
       importedAt: 'imported_at',
     },
-    makeId: (t) => `${(t.ownerId || t.ownerName || '').toString().toLowerCase()}|${t.period || ''}`,
+    makeId: (t) => deterministicUuid(`${(t.ownerId || t.ownerName || '').toString().toLowerCase()}|${t.period || ''}`),
   }),
   define({
     key: 'manualOwnerTargets',
