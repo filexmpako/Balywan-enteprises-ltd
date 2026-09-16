@@ -121,6 +121,15 @@ export async function purgeUpload(supabase: DB, input: PurgeInput): Promise<Purg
       .select('id');
     if (error) throw new Error(`weekly_servicing_records delete: ${error.message}`);
     result.weeklyRows = (data ?? []).length;
+
+    // The weekly upload is what produced this week's active/inactive verdicts.
+    const { data: history, error: historyError } = await supabase
+      .from('wakala_status_history')
+      .delete()
+      .eq('reporting_week', input.reportingWeek)
+      .select('id');
+    if (historyError) throw new Error(`wakala_status_history delete: ${historyError.message}`);
+    result.statusHistoryRows += (history ?? []).length;
   }
 
   // 4. Monthly uploads feed the month-scoped target/summary/snapshot tables.
