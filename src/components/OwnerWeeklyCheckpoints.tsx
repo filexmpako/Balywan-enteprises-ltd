@@ -204,10 +204,10 @@ export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget, onLates
                               )}
                               {Array.isArray(detail) && detail.length > 0 && (
                                 <div className="overflow-x-auto">
-                                  <table className="w-full min-w-[520px] text-left">
+                                  <table className="w-full min-w-[620px] text-left">
                                     <thead>
                                       <tr>
-                                        {['Wakala', 'MSISDN', 'Status', 'Served', 'Txns', 'Value'].map(h => (
+                                        {['Wakala', 'MSISDN', 'Status', 'Served', 'Txns', 'Total Value', 'Served Value'].map(h => (
                                           <th key={h} className="py-1.5 font-sans text-[9px] font-bold uppercase tracking-wider text-brand-text-variant">
                                             {h}
                                           </th>
@@ -238,6 +238,9 @@ export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget, onLates
                                             </td>
                                             <td className="py-1.5 font-sans text-xs text-brand-text">{w.total_txns}</td>
                                             <td className="py-1.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation(w.total_value)}</td>
+                                            <td className="py-1.5 font-sans text-xs font-bold text-brand-success">
+                                              {w.is_served ? formatNumberWithAbbreviation(w.total_value) : '—'}
+                                            </td>
                                           </tr>
                                         );
                                       })}
