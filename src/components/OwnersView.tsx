@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { ViewType, Owner } from '../types';
 import { ownersList as initialOwners } from '../data';
 import OwnerAvatar from './OwnerAvatar';
+import { formatMonthYear } from '../utils/dateFormat';
 import { 
   Users, 
   Search, 
@@ -95,7 +96,7 @@ export default function OwnersView({ onNavigate, onSelectOwner }: OwnersViewProp
       name: newOwner.name,
       masterAgentId: randomId,
       region: newOwner.region,
-      memberSince: 'Jul 2026',
+      memberSince: formatMonthYear(new Date()),
       avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
       wakalas: Number(newOwner.wakalas),
       portfolioSize: newOwner.portfolioSize,
@@ -152,8 +153,9 @@ export default function OwnersView({ onNavigate, onSelectOwner }: OwnersViewProp
     const highPerformers = mfsOwners.filter(o => o.performance >= 90).length;
     const highPerformersRate = totalCount > 0 ? ((highPerformers / totalCount) * 100).toFixed(0) : '0';
 
-    // Growth subtext new this month (memberSince has current or latest month/year, e.g., 'Jul 2026')
-    const newThisMonth = mfsOwners.filter(o => o.memberSince?.includes('Jul 2026') || o.memberSince?.includes('2026')).length;
+    // Growth subtext: owners whose memberSince matches the current month/year.
+    const currentMonthLabel = formatMonthYear(new Date());
+    const newThisMonth = mfsOwners.filter(o => o.memberSince === currentMonthLabel).length;
     // Just a realistic percentage growth
     const growthPercentStr = totalCount > 0 ? `+${((newThisMonth / totalCount) * 100).toFixed(1)}%` : '+0.0%';
 

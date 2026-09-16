@@ -117,6 +117,55 @@ export const REPORT_TYPES: ReportTypeConfig[] = [
   },
 ];
 
+const UPLOAD_MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/** Recent months, newest first: 1 ahead through 5 back from today. */
+function buildUploadMonthOptions(): string[] {
+  const now = new Date();
+  const options: string[] = [];
+  for (let offset = 1; offset >= -5; offset--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    options.push(`${UPLOAD_MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`);
+  }
+  return options;
+}
+
+function currentUploadMonthLabel(): string {
+  const now = new Date();
+  return `${UPLOAD_MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}`;
+}
+
+/** Day-chunked (1-7, 8-14, ...) week labels for the given "Month YYYY" string. */
+function buildUploadWeekOptions(monthLabel: string): string[] {
+  const [monthName, yearStr] = monthLabel.split(' ');
+  const monthIndex = UPLOAD_MONTH_NAMES.indexOf(monthName);
+  const year = Number(yearStr);
+  if (monthIndex < 0 || !year) return [];
+  const totalDays = new Date(year, monthIndex + 1, 0).getDate();
+  const weeks: string[] = [];
+  let weekNum = 1;
+  for (let start = 1; start <= totalDays; start += 7) {
+    const end = Math.min(start + 6, totalDays);
+    weeks.push(`Week ${weekNum} (${monthName} ${start} - ${monthName} ${end}, ${year})`);
+    weekNum++;
+  }
+  return weeks;
+}
+
+/** The week option containing today, when monthLabel is the current month; otherwise the first week. */
+function defaultUploadWeek(monthLabel: string, weeks: string[]): string {
+  if (weeks.length === 0) return '';
+  if (monthLabel === currentUploadMonthLabel()) {
+    const today = new Date().getDate();
+    const idx = Math.min(weeks.length - 1, Math.floor((today - 1) / 7));
+    return weeks[idx];
+  }
+  return weeks[0];
+}
+
 interface UploadReportsViewProps {
   onNavigate: (view: ViewType) => void;
   onAddAuditReport: (report: AuditReport) => void;
@@ -157,8 +206,14 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
 
   // Report selection state
   const [reportType, setReportType] = useState<'kpi' | 'weekly_kpi' | 'mgt' | 'till_sync' | 'base_wakala_list' | 'priority_wakala' | null>(null);
-  const [uploadMonth, setUploadMonth] = useState('July 2026');
-  const [uploadWeek, setUploadWeek] = useState('Week 2 (July 8 - July 14, 2026)');
+  const uploadMonthOptions = useMemo(buildUploadMonthOptions, []);
+  const [uploadMonth, setUploadMonthState] = useState(currentUploadMonthLabel);
+  const [uploadWeek, setUploadWeek] = useState(() => defaultUploadWeek(currentUploadMonthLabel(), buildUploadWeekOptions(currentUploadMonthLabel())));
+  const uploadWeekOptions = useMemo(() => buildUploadWeekOptions(uploadMonth), [uploadMonth]);
+  const setUploadMonth = (month: string) => {
+    setUploadMonthState(month);
+    setUploadWeek(defaultUploadWeek(month, buildUploadWeekOptions(month)));
+  };
 
   // Priority Wakala List persistence & state
   const [priorityWakalas, setPriorityWakalas] = useState<PriorityWakala[]>(() => {
@@ -422,7 +477,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
         id: `base_wakala_${Date.now()}`,
         fileName: 'Base_Wakala_List.xlsx',
         type: 'Base Wakala List',
-        uploadedBy: 'System Admin',
+        uploadedBy: lastUploadedBy,
         date: nowStr,
         size: `${stagedBaseWakalas.length} records`,
         status: 'Success',
@@ -603,7 +658,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
         id: `priority_wakala_${Date.now()}`,
         fileName: 'Priority_Wakala_List.xlsx',
         type: 'Priority Wakala List',
-        uploadedBy: 'System Admin',
+        uploadedBy: lastUploadedBy,
         date: nowStr,
         size: `${stagedPriorityWakalas.length} records (${priorityWakalaPeriod})`,
         status: 'Success',
@@ -2301,10 +2356,9 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
                           onChange={(e) => setUploadMonth(e.target.value)}
                           className="w-full rounded-xl border border-slate-300 bg-white text-slate-900 px-4 py-2.5 text-xs font-bold focus:border-brand-primary focus:outline-none"
                         >
-                          <option value="July 2026" className="bg-white text-slate-900">July 2026</option>
-                          <option value="June 2026" className="bg-white text-slate-900">June 2026</option>
-                          <option value="May 2026" className="bg-white text-slate-900">May 2026</option>
-                          <option value="August 2026" className="bg-white text-slate-900">August 2026</option>
+                          {uploadMonthOptions.map(month => (
+                            <option key={month} value={month} className="bg-white text-slate-900">{month}</option>
+                          ))}
                         </select>
                         <p className="text-[10px] text-brand-text-variant mt-1.5 leading-relaxed">
                           This associates the KPI upload with the monthly target framework of the selected month.
@@ -2321,10 +2375,9 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
                             onChange={(e) => setUploadWeek(e.target.value)}
                             className="w-full rounded-xl border border-slate-300 bg-white text-slate-900 px-4 py-2.5 text-xs font-bold focus:border-brand-primary focus:outline-none"
                           >
-                            <option value="Week 1 (July 1 - July 7, 2026)" className="bg-white text-slate-900">Week 1 (July 1 - July 7, 2026)</option>
-                            <option value="Week 2 (July 8 - July 14, 2026)" className="bg-white text-slate-900">Week 2 (July 8 - July 14, 2026)</option>
-                            <option value="Week 3 (July 15 - July 21, 2026)" className="bg-white text-slate-900">Week 3 (July 15 - July 21, 2026)</option>
-                            <option value="Week 4 (July 22 - July 28, 2026)" className="bg-white text-slate-900">Week 4 (July 22 - July 28, 2026)</option>
+                            {uploadWeekOptions.map(week => (
+                              <option key={week} value={week} className="bg-white text-slate-900">{week}</option>
+                            ))}
                           </select>
                           <p className="text-[10px] text-brand-text-variant mt-1.5 leading-relaxed">
                             Specify the exact weekly reporting checkpoint for incremental performance analysis.

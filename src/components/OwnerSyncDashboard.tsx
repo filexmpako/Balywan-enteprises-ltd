@@ -27,6 +27,7 @@ import { formatDateTime, formatMonthYear } from '../utils/dateFormat';
 import { Owner } from '../types';
 import { getAvatarUrl } from '../utils/avatar';
 import { recalculateAllPerformances } from '../utils/mappingEngine';
+import { useAuth } from './AuthContext';
 
 interface OwnerSyncDashboardProps {
   onCancel: () => void;
@@ -44,6 +45,7 @@ export interface Till {
 }
 
 export default function OwnerSyncDashboard({ onCancel, onAddAuditReport, onSyncComplete }: OwnerSyncDashboardProps) {
+  const { user: currentUser } = useAuth();
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<{ name: string; size: number } | null>(null);
   const [isParsing, setIsParsing] = useState(false);
@@ -575,7 +577,7 @@ export default function OwnerSyncDashboard({ onCancel, onAddAuditReport, onSyncC
       id: `REP-${Math.floor(90000 + Math.random() * 9000)}`,
       fileName: selectedFile?.name || "Till_Name_Registry.xlsx",
       type: "Master Sync",
-      uploadedBy: "K. Kamkg",
+      uploadedBy: currentUser?.name || "System Admin",
       date: formatDateTime(new Date()),
       size: `${((selectedFile?.size || 54120) / 1024).toFixed(1)} KB`,
       status: 'Success'
