@@ -18,7 +18,6 @@ import { ReportingPeriodProvider } from "./components/ReportingPeriodContext";
 import DashboardView from "./components/DashboardView";
 import OwnersView from "./components/OwnersView";
 import OwnerDetailsView from "./components/OwnerDetailsView";
-import OwnerDashboardView from "./components/OwnerDashboardView";
 import UploadReportsView from "./components/UploadReportsView";
 import KPIReportsView from "./components/KPIReportsView";
 import ReportHistoryView from "./components/ReportHistoryView";
@@ -253,18 +252,8 @@ function AppContent() {
       );
     }
 
-    // Owner allowed views
-    if (hash === "#/owner/dashboard" || hash === "#/" || hash === "#/login") {
-      return (
-        <ProtectedRoute allowedRoles={["Owner"]}>
-          <OwnerLayout ownerName={user.name}>
-            <OwnerDashboardView />
-          </OwnerLayout>
-        </ProtectedRoute>
-      );
-    }
-
-    if (hash === "#/owner/profile") {
+    // Owner allowed views — the profile page is the owner's only view now.
+    if (hash === "#/owner/dashboard" || hash === "#/owner/profile" || hash === "#/" || hash === "#/login") {
       return (
         <ProtectedRoute allowedRoles={["Owner"]}>
           <OwnerLayout ownerName={user.name}>
