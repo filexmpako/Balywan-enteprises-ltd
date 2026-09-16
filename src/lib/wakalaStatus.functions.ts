@@ -36,6 +36,11 @@ export const saveWakalaStatusHistory = createServerFn({ method: 'POST' })
     const supabase = context.supabase as any;
     const week = String(data.reportingWeek).trim();
 
+    // Only staff may write the shared status history (RLS enforces this too).
+    // Owner sessions viewing weekly data must not crash on the attempt.
+    const { data: isStaff } = await supabase.rpc('is_staff', { _user_id: context.userId });
+    if (!isStaff) return { saved: 0, skipped: true as const };
+
     const byMsisdn = new Map<string, any>();
     data.evaluations
       .filter(e => e && String(e.msisdn || '').trim())
