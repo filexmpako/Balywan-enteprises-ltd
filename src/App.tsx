@@ -31,6 +31,7 @@ import WakalaIssuesPanel from "./components/WakalaIssuesPanel";
 import TargetsView from "./components/TargetsView";
 import FloatManagerView from "./components/FloatManagerView";
 import { deleteUploadedReport } from "./lib/uploads.functions";
+import { hydrateFromCloud } from "./lib/cloudSync";
 import { clearWeeklyServicingData, deleteDailyServicingRowsByRefs } from "./utils/indexedDB";
 import { removeMonth } from "./utils/monthlyStore";
 import { invalidateClassificationCache } from "./utils/classificationCache";
