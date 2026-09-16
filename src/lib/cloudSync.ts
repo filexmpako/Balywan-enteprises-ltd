@@ -7,6 +7,7 @@
  */
 import { COLLECTION_KEYS, DOCUMENT_KEYS } from './hasidadi/collections';
 import { fetchWorkspace, saveCollection, saveDocument } from './hasidadi.functions';
+import { CLOUD_HYDRATED_EVENT } from './cloudSyncEvents';
 
 const QUEUE_KEY = 'hasidadi_sync_queue';
 const SYNCED = new Set<string>([...COLLECTION_KEYS, ...(DOCUMENT_KEYS as readonly string[])]);
