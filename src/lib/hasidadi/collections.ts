@@ -205,7 +205,7 @@ export const COLLECTIONS: CollectionMapper[] = [
       setBy: 'set_by',
       setAt: 'set_at',
     },
-    makeId: (t) => `${t.ownerId || ''}|${t.period || ''}`,
+    makeId: (t) => deterministicUuid(`${t.ownerId || ''}|${t.period || ''}`),
   }),
   define({
     key: 'floatRequests',
