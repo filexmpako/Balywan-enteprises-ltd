@@ -1,17 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { ViewType } from '../types';
-import { 
-  User, 
-  Bell, 
-  Save, 
-  CheckCircle, 
+import {
+  User,
+  Bell,
+  Save,
+  CheckCircle,
   Sun,
   Moon,
   Settings,
   SlidersHorizontal,
   Activity,
   Banknote,
-  ShieldCheck
+  ShieldCheck,
+  Building2,
+  Mail,
+  Palette
 } from 'lucide-react';
 import { getActivityRules, saveActivityRules } from '../utils/activityRules';
 import { refreshWeeklyStatsHistory } from '../utils/weeklyHistory';
@@ -42,6 +45,7 @@ export default function SettingsView({
   const [companyNameInput, setCompanyNameInput] = useState(companyName);
   const [showSaved, setShowSaved] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [activeTab, setActiveTab] = useState<'organization' | 'appearance' | 'notifications'>('organization');
 
   // --- Active/Inactive rule configuration ---
   const [rules, setRules] = useState(() => getActivityRules());
@@ -135,8 +139,16 @@ export default function SettingsView({
     }
   };
 
+  const ruleSummary = `${rules.threshold.toLocaleString()} txns ${rules.requirement === 'both' ? '&' : 'or'} TZS ${rules.amountThreshold.toLocaleString()}`;
+
+  const tabs: { id: typeof activeTab; label: string; icon: typeof Building2 }[] = [
+    { id: 'organization', label: 'Organization', icon: Building2 },
+    { id: 'appearance', label: 'Appearance', icon: Palette },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
+  ];
+
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       className="space-y-6 max-w-[1440px] mx-auto p-4 sm:p-6 lg:p-8 font-sans"
@@ -148,21 +160,80 @@ export default function SettingsView({
         subtitle="Manage your organization, weekly activity rules, appearance, and alerts."
       />
 
+      {/* Quick-glance overview */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="rounded-2xl border border-brand-gray-border bg-brand-card p-5 shadow-ambient flex items-center gap-4">
+          <div className="h-11 w-11 shrink-0 rounded-xl bg-blue-50 dark:bg-brand-primary/10 text-brand-primary flex items-center justify-center">
+            <Building2 className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold text-brand-text-variant uppercase tracking-wider">Organization</p>
+            <p className="text-sm font-black text-brand-text truncate">{companyName || '—'}</p>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-brand-gray-border bg-brand-card p-5 shadow-ambient flex items-center gap-4">
+          <div className="h-11 w-11 shrink-0 rounded-xl bg-blue-50 dark:bg-brand-primary/10 text-brand-primary flex items-center justify-center">
+            <User className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold text-brand-text-variant uppercase tracking-wider">Administrator</p>
+            <p className="text-sm font-black text-brand-text truncate">{user?.name || adminName || '—'}</p>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-brand-gray-border bg-brand-card p-5 shadow-ambient flex items-center gap-4">
+          <div className={`h-11 w-11 shrink-0 rounded-xl flex items-center justify-center ${theme === 'dark' ? 'bg-blue-950 text-blue-400' : 'bg-amber-100 text-amber-600'}`}>
+            {theme === 'dark' ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
+          </div>
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold text-brand-text-variant uppercase tracking-wider">Theme</p>
+            <p className="text-sm font-black text-brand-text capitalize truncate">{theme}</p>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-brand-gray-border bg-brand-card p-5 shadow-ambient flex items-center gap-4">
+          <div className="h-11 w-11 shrink-0 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold text-brand-text-variant uppercase tracking-wider">Active Rule</p>
+            <p className="text-sm font-black text-brand-text truncate" title={ruleSummary}>{ruleSummary}</p>
+          </div>
+        </div>
+      </div>
+
       <div className="grid max-w-6xl gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
         {/* Main Settings Form */}
         <div className="rounded-xl border border-brand-gray-border bg-brand-card p-6 shadow-ambient">
+          {/* Section tabs */}
+          <div className="flex flex-wrap items-center gap-2 mb-6">
+            {tabs.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActiveTab(id)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === id
+                    ? 'bg-brand-primary text-white shadow-md'
+                    : 'bg-brand-bg text-brand-text-variant hover:bg-brand-gray-hover border border-brand-gray-border'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </button>
+            ))}
+          </div>
+
           <form onSubmit={handleSave} className="space-y-6">
-            
-            {/* Sec 1: Profile */}
-            <div>
-              <h3 className="text-sm font-bold uppercase tracking-wider text-brand-primary border-b border-brand-gray-border pb-2.5 mb-4 flex items-center gap-1.5">
-                <User className="h-4.5 w-4.5" />
-                Administrator Profile & Organization
-              </h3>
-              
+
+            {/* Sec 1: Profile & Organization */}
+            <div className={activeTab === 'organization' ? 'space-y-4' : 'hidden'}>
+              <p className="text-xs text-brand-text-variant leading-5">
+                The name, administrator, and contact details used across reports and audit exports.
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-bold text-brand-text uppercase tracking-wider mb-1.5">Company / Organization Name</label>
+                  <label className="block text-xs font-bold text-brand-text uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <Building2 className="h-3.5 w-3.5 text-brand-primary" /> Company / Organization Name
+                  </label>
                   <input
                     type="text"
                     required
@@ -173,7 +244,9 @@ export default function SettingsView({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-brand-text uppercase tracking-wider mb-1.5">Administrator Display Name</label>
+                  <label className="block text-xs font-bold text-brand-text uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <User className="h-3.5 w-3.5 text-brand-primary" /> Administrator Display Name
+                  </label>
                   <input
                     type="text"
                     required
@@ -183,7 +256,9 @@ export default function SettingsView({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-brand-text uppercase tracking-wider mb-1.5">Primary Contact Email</label>
+                  <label className="block text-xs font-bold text-brand-text uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <Mail className="h-3.5 w-3.5 text-brand-primary" /> Primary Contact Email
+                  </label>
                   <input
                     type="email"
                     required
@@ -196,12 +271,10 @@ export default function SettingsView({
             </div>
 
             {/* Sec 2: Theme & Appearance */}
-            <div>
-              <h3 className="text-sm font-bold uppercase tracking-wider text-brand-primary border-b border-brand-gray-border pb-2.5 mb-4 flex items-center gap-1.5">
-                <Sun className="h-4.5 w-4.5" />
-                Theme & Appearance
-              </h3>
-              
+            <div className={activeTab === 'appearance' ? 'space-y-4' : 'hidden'}>
+              <p className="text-xs text-brand-text-variant leading-5">
+                Choose the interface theme used across every portal on this device.
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Button
                   type="button"
@@ -258,22 +331,24 @@ export default function SettingsView({
             </div>
 
             {/* Sec 3: Alerts */}
-            <div>
-              <h3 className="text-sm font-bold uppercase tracking-wider text-brand-primary border-b border-brand-gray-border pb-2.5 mb-4 flex items-center gap-1.5">
-                <Bell className="h-4.5 w-4.5" />
-                Notification Handshakes
-              </h3>
-              
-              <div className="space-y-3 font-sans text-xs font-semibold text-brand-text">
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input type="checkbox" defaultChecked className="rounded text-brand-primary focus:ring-brand-primary h-4.5 w-4.5 border-slate-300" />
-                  <span>Send slack alert upon failed schema uploads on MGT files</span>
-                </label>
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <input type="checkbox" defaultChecked className="rounded text-brand-primary focus:ring-brand-primary h-4.5 w-4.5 border-slate-300" />
-                  <span>Transmit weekly transaction reports to {companyName} audits</span>
-                </label>
-              </div>
+            <div className={activeTab === 'notifications' ? 'space-y-3' : 'hidden'}>
+              <p className="text-xs text-brand-text-variant leading-5 mb-1">
+                Choose which automated notifications this organization receives.
+              </p>
+              <label className="flex items-start gap-3 rounded-xl border border-brand-gray-border bg-brand-bg p-4 cursor-pointer hover:border-brand-primary-light/40 transition-all">
+                <input type="checkbox" defaultChecked className="mt-0.5 rounded text-brand-primary focus:ring-brand-primary h-4.5 w-4.5 border-slate-300" />
+                <span>
+                  <span className="block text-sm font-bold text-brand-text">Failed upload alerts</span>
+                  <span className="block text-xs text-brand-text-variant mt-0.5">Send a Slack alert whenever a Daily MGT file fails schema validation on upload.</span>
+                </span>
+              </label>
+              <label className="flex items-start gap-3 rounded-xl border border-brand-gray-border bg-brand-bg p-4 cursor-pointer hover:border-brand-primary-light/40 transition-all">
+                <input type="checkbox" defaultChecked className="mt-0.5 rounded text-brand-primary focus:ring-brand-primary h-4.5 w-4.5 border-slate-300" />
+                <span>
+                  <span className="block text-sm font-bold text-brand-text">Weekly audit reports</span>
+                  <span className="block text-xs text-brand-text-variant mt-0.5">Transmit weekly transaction reports to {companyName} audits.</span>
+                </span>
+              </label>
             </div>
 
             {/* Save trigger button */}
@@ -283,7 +358,7 @@ export default function SettingsView({
                   {errorMessage}
                 </div>
               )}
-              
+
               <div className="flex items-center justify-between">
                 {showSaved ? (
                   <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-600">
@@ -306,10 +381,17 @@ export default function SettingsView({
 
         {/* Activity rule: what makes a wakala Active for a reporting week */}
         <div className="rounded-xl border border-brand-gray-border bg-brand-card p-6 shadow-ambient xl:sticky xl:top-24 xl:self-start">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-brand-primary border-b border-brand-gray-border pb-2.5 mb-4 flex items-center gap-1.5">
-            <SlidersHorizontal className="h-4.5 w-4.5" />
-            Active / Inactive Wakala Rule
-          </h3>
+          <div className="flex items-center gap-3 border-b border-brand-gray-border pb-4 mb-4">
+            <div className="h-10 w-10 shrink-0 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center">
+              <SlidersHorizontal className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-brand-primary">
+                Active / Inactive Wakala Rule
+              </h3>
+              <p className="text-[11px] text-brand-text-variant mt-0.5">Applies to weekly reporting, KPI, and penalty calculations</p>
+            </div>
+          </div>
           <div className="mb-5 rounded-lg border border-brand-primary/20 bg-brand-primary-container/40 p-4">
             <div className="flex items-start gap-3">
               <div className="rounded-lg bg-brand-primary p-2 text-white"><ShieldCheck className="h-4 w-4" /></div>
