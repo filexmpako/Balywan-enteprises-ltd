@@ -73,6 +73,8 @@ export interface WeeklyWakalaEvaluation {
   totalTxns: number;
   totalValue: number;
   isActive: boolean;
+  /** null when the week's rows carried no servicing_status value at all. */
+  isServed: boolean | null;
 }
 
 export interface WeeklyStatsEntry extends WeeklyWakalaStats {
@@ -296,6 +298,7 @@ export function computeWeeklyStats(
       totalTxns: countTotal || txns,
       totalValue: val,
       isActive,
+      isServed: servedStatus,
     });
 
     let agg = ownerAgg.get(ownerId);

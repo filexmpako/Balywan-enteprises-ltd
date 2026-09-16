@@ -151,6 +151,7 @@ export async function refreshWeeklyStatsHistory(): Promise<WeeklyStatsEntry[]> {
             totalTxns: e.totalTxns,
             totalValue: e.totalValue,
             isActive: e.isActive,
+            isServed: e.isServed,
           })),
         },
       });
