@@ -133,6 +133,9 @@ export async function refreshWeeklyStatsHistory(): Promise<WeeklyStatsEntry[]> {
     // Record the status that applied in this week so historical reports keep
     // it, instead of re-reading today's status.
     try {
+      const { supabase } = await import('../integrations/supabase/client');
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) continue; // not signed in yet — nothing to record
       await saveWakalaStatusHistory({
         data: {
           reportingWeek: week,
