@@ -37,8 +37,17 @@ export const saveDocument = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data, context }) => {
     const { saveDocument: save } = await import('./hasidadi/repo.server');
-    await save(context.supabase as any, data.key, data.value, context.userId);
-    return { ok: true };
+    // Shared settings/analytics documents are staff-writable only. Owners view
+    // the same data, so a derived write from an owner session is skipped rather
+    // than surfaced as a fatal RLS error.
+    try {
+      await save(context.supabase as any, data.key, data.value, context.userId);
+      return { ok: true };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (/row-level security/i.test(message)) return { ok: false, skipped: true as const };
+      throw err;
+    }
   });
 
 export const appendAuditLog = createServerFn({ method: 'POST' })
