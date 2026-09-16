@@ -23,6 +23,10 @@ export interface PurgeResult {
   auditRecords: number;
   weeklyRows: number;
   monthlyRowsDeleted: number;
+  monthlyServicingRows: number;
+  statusHistoryRows: number;
+  documentsPruned: string[];
+  targetDates: string[];
   transactionRefs: string[];
 }
 
