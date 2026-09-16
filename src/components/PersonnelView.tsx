@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { ViewType, Personnel } from '../types';
 import { getAvatarUrl } from '../utils/avatar';
+import { formatDateTime, formatMonthYear } from '../utils/dateFormat';
 import { 
   Users, 
   Search, 
@@ -93,9 +94,9 @@ export default function PersonnelView({ onNavigate }: PersonnelViewProps) {
       title: newPerson.title,
       location: newPerson.location,
       status: newPerson.status,
-      memberSince: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+      memberSince: formatMonthYear(new Date()),
       avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
-      lastSyncDate: new Date().toLocaleDateString('en-US') + ", " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+      lastSyncDate: formatDateTime(new Date())
     };
 
     const updatedPersonnel = [addedPerson, ...personnel];

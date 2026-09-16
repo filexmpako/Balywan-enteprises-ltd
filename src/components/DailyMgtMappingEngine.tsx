@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getDailyServicingRows, saveDailyServicingData } from '../utils/indexedDB';
+import { formatDateTime } from '../utils/dateFormat';
 import { 
   CheckCircle2, 
   AlertTriangle, 
@@ -261,7 +262,7 @@ export default function DailyMgtMappingEngine({
             ...o,
             performance: Math.round(ownerSum.contributionPercent),
             portfolioSize: `TZS ${((parseFloat(o.portfolioSize.replace(/[^0-9.]/g, '')) || 5) + ownerSum.totalValue / 1000000).toFixed(1)}M`,
-            lastSyncDate: new Date().toLocaleDateString('en-US') + ", " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+            lastSyncDate: formatDateTime(new Date()),
             status: 'Active' as const,
             openingFloat: ownerSum.openingFloat,
             servedAmount: ownerSum.servedAmount,
@@ -283,7 +284,7 @@ export default function DailyMgtMappingEngine({
         if (pSum && pSum.transactionsCount > 0) {
           return {
             ...p,
-            lastSyncDate: new Date().toLocaleDateString('en-US') + ", " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+            lastSyncDate: formatDateTime(new Date()),
             status: 'Active' as const,
             openingFloat: pSum.openingFloat,
             servedAmount: pSum.servedAmount,
@@ -342,7 +343,7 @@ export default function DailyMgtMappingEngine({
         fileName: "Daily_MGT_Report_Mapped.csv",
         type: "Daily MGT",
         uploadedBy: "K. Kamkg",
-        date: new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }) + " " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+        date: formatDateTime(new Date()),
         size: "45.2 KB",
         status: 'Success'
       };

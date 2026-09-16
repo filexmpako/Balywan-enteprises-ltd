@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getCompanyName } from '../utils/company';
+import { formatDateTime, formatMonthYear } from '../utils/dateFormat';
 import { Owner } from '../types';
 import { getAvatarUrl } from '../utils/avatar';
 import { recalculateAllPerformances } from '../utils/mappingEngine';
@@ -468,7 +469,7 @@ export default function OwnerSyncDashboard({ onCancel, onAddAuditReport, onSyncC
           // Store extended attributes
           title: details.title,
           assignedTills: assignedTills,
-          lastSyncDate: new Date().toLocaleDateString('en-US') + ", " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          lastSyncDate: formatDateTime(new Date()),
           nameAliases: Array.from(new Set([...(currentOwners[matchIdx].nameAliases || []), oName]))
         } as any;
       } else {
@@ -479,7 +480,7 @@ export default function OwnerSyncDashboard({ onCancel, onAddAuditReport, onSyncC
           name: oName,
           masterAgentId: randomId,
           region: details.location,
-          memberSince: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+          memberSince: formatMonthYear(new Date()),
           avatar: getAvatarUrl(oName),
           wakalas: assignedTills.length,
           portfolioSize: 'TZS 5.0M',
@@ -488,7 +489,7 @@ export default function OwnerSyncDashboard({ onCancel, onAddAuditReport, onSyncC
           status: details.status,
           title: details.title,
           assignedTills: assignedTills,
-          lastSyncDate: new Date().toLocaleDateString('en-US') + ", " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          lastSyncDate: formatDateTime(new Date()),
           nameAliases: [oName]
         } as any;
 
@@ -513,7 +514,7 @@ export default function OwnerSyncDashboard({ onCancel, onAddAuditReport, onSyncC
           location: details.location,
           assignedTill: assignedTills.join(', '),
           status: details.status,
-          lastSyncDate: new Date().toLocaleDateString('en-US') + ", " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+          lastSyncDate: formatDateTime(new Date())
         };
       } else {
         // Create new Personnel
@@ -524,9 +525,9 @@ export default function OwnerSyncDashboard({ onCancel, onAddAuditReport, onSyncC
           location: details.location,
           assignedTill: assignedTills.join(', '),
           status: details.status,
-          memberSince: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+          memberSince: formatMonthYear(new Date()),
           avatar: getAvatarUrl(pName),
-          lastSyncDate: new Date().toLocaleDateString('en-US') + ", " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+          lastSyncDate: formatDateTime(new Date())
         });
       }
     });
@@ -575,7 +576,7 @@ export default function OwnerSyncDashboard({ onCancel, onAddAuditReport, onSyncC
       fileName: selectedFile?.name || "Till_Name_Registry.xlsx",
       type: "Master Sync",
       uploadedBy: "K. Kamkg",
-      date: new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }) + " " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      date: formatDateTime(new Date()),
       size: `${((selectedFile?.size || 54120) / 1024).toFixed(1)} KB`,
       status: 'Success'
     };

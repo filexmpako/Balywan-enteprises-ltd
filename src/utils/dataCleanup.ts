@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import { normalizeMsisdn } from './msisdn';
 import { initDB } from './indexedDB';
+import { formatDate } from './dateFormat';
 import { AuditReport } from '../types';
 
 export interface ReferenceRoster {
@@ -587,11 +588,7 @@ export async function purgeNonBalwynData(
       fileName: 'Balwyn Data Integrity Purge',
       type: 'Data Cleanup Audit',
       uploadedBy: 'System Integrity Engine',
-      date: new Date().toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      }),
+      date: formatDate(new Date()),
       size: `${summary.flaggedCount} records purged`,
       status: 'Success',
     };

@@ -179,6 +179,12 @@ export function getAvailableReportingPeriods(): string[] {
     }
   } catch (e) {}
 
+  // The real current month is always a valid, selectable reporting period —
+  // even before any data has been uploaded for it.
+  const now = new Date();
+  const currentIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  periodsSet.add(currentIso);
+
   // Parse all discovered period strings and sort chronologically (newest first)
   const parsedList: ParsedPeriod[] = [];
   periodsSet.forEach(p => {
@@ -194,25 +200,16 @@ export function getAvailableReportingPeriods(): string[] {
     return b.month - a.month;
   });
 
-  if (parsedList.length > 0) {
-    return parsedList.map(p => p.iso);
-  }
-
-  // Fallback to current year-month
-  const now = new Date();
-  const currentIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  return [currentIso];
+  return parsedList.map(p => p.iso);
 }
 
 /**
  * Consolidated single auto-derivation function.
- * Returns the newest available period across all data sources, or current month if none.
+ * Always the real current calendar month — the "reporting month" is what we are
+ * reporting for *now*, not the newest month that happens to have uploaded data.
+ * (Historical periods with data remain browsable via getAvailableReportingPeriods().)
  */
 export function deriveAutoReportingPeriod(): string {
-  const available = getAvailableReportingPeriods();
-  if (available.length > 0) {
-    return available[0];
-  }
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }

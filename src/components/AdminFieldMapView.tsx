@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import PageHeaderBanner from './PageHeaderBanner';
 import { Owner, WakalaEntry } from '../types';
+import { formatDate } from '../utils/dateFormat';
 import { getPhotosByOwner, WorkPhoto } from '../utils/db';
 
 interface AdminFieldMapViewProps {
@@ -618,7 +619,7 @@ export default function AdminFieldMapView({ onSelectOwner, onNavigate }: AdminFi
                             <span>Region: <strong className="text-slate-800">{entity.district}</strong></span>
                             {entity.capturedAt && (
                               <span className="font-mono text-[9px]">
-                                {new Date(entity.capturedAt).toLocaleDateString('en-GB')}
+                                {formatDate(entity.capturedAt)}
                               </span>
                             )}
                           </div>

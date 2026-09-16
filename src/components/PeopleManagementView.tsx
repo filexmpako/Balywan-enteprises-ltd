@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { ViewType, Owner, Personnel, BaseWakala } from '../types';
 import { buildOwnerWakalaMap } from '../utils/wakalaMapping';
+import { formatDateTime } from '../utils/dateFormat';
 import {
   listUserAccounts,
   createUserAccount,
@@ -346,7 +347,7 @@ export default function PeopleManagementView({
           portfolioGrowth: editOwnerForm.portfolioGrowth,
           performance: Number(editOwnerForm.performance),
           assignedTills: tillsArr,
-          lastSyncDate: new Date().toLocaleDateString('en-US') + ", " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+          lastSyncDate: formatDateTime(new Date())
         } as any;
       }
       return o;
@@ -383,7 +384,7 @@ export default function PeopleManagementView({
           title: editPersonnelForm.title,
           location: editPersonnelForm.location,
           status: editPersonnelForm.status,
-          lastSyncDate: new Date().toLocaleDateString('en-US') + ", " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+          lastSyncDate: formatDateTime(new Date())
         };
       }
       return p;
@@ -510,7 +511,7 @@ export default function PeopleManagementView({
     const newLog = {
       id: `audit-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
       eventType,
-      date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ", " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      date: formatDateTime(new Date()),
       administrator,
       oldRole,
       newRole,
@@ -593,7 +594,7 @@ export default function PeopleManagementView({
             status: item.originalObj.status || 'Active',
             memberSince: item.originalObj.memberSince || 'Jul 2026',
             avatar: item.originalObj.avatar,
-            lastSyncDate: new Date().toLocaleDateString('en-US') + ", " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+            lastSyncDate: formatDateTime(new Date())
           });
         }
 
@@ -631,7 +632,7 @@ export default function PeopleManagementView({
             status: item.originalObj.status || 'Active',
             title: item.title,
             assignedTills: tillsArr,
-            lastSyncDate: new Date().toLocaleDateString('en-US') + ", " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+            lastSyncDate: formatDateTime(new Date())
           } as any);
         }
 
@@ -846,7 +847,7 @@ export default function PeopleManagementView({
       status: addOwnerForm.status,
       title: addOwnerForm.title,
       assignedTills: tillsArr,
-      lastSyncDate: new Date().toLocaleDateString('en-US') + ", " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+      lastSyncDate: formatDateTime(new Date())
     } as any;
 
     setOwners([newO, ...owners]);
@@ -897,7 +898,7 @@ export default function PeopleManagementView({
       status: addPersonnelForm.status,
       memberSince: 'Jul 2026',
       avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
-      lastSyncDate: new Date().toLocaleDateString('en-US') + ", " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+      lastSyncDate: formatDateTime(new Date())
     };
 
     const updatedPersonnel = [newP, ...personnel];
