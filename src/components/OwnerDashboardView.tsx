@@ -44,6 +44,7 @@ interface WakalaRow {
   isActive: boolean;
   served: boolean | null;
   hasWeeklyData: boolean;
+  isPriority: boolean;
 }
 
 /**
@@ -186,6 +187,7 @@ export default function OwnerDashboardView() {
           isActive: weekly?.isActive ?? false,
           served: weekly?.served ?? null,
           hasWeeklyData: Boolean(weekly),
+          isPriority: w.isPriority,
         };
       }),
     [wakalas, weeklyByMsisdn],
@@ -355,7 +357,7 @@ export default function OwnerDashboardView() {
             <MetricCard
               title="My Wakalas"
               value={rows.length}
-              subValue={`${rows.filter(r => r.kind === 'IOP').length} IOP · ${rows.filter(r => r.kind === 'Base').length} Base`}
+              subValue={`${portfolio?.priorityCount ?? 0} Priority · ${portfolio?.normalCount ?? 0} Normal`}
               icon={Users}
               variant="purple"
               onClick={() => setTab('wakalas')}
@@ -448,7 +450,14 @@ export default function OwnerDashboardView() {
                     <tr key={r.msisdn} className="border-b border-brand-gray-border/50">
                       <td className="py-2.5 font-sans text-xs font-bold text-brand-text">{r.name}</td>
                       <td className="py-2.5 font-mono text-xs text-brand-text-variant">{r.msisdn}</td>
-                      <td className="py-2.5 font-sans text-xs text-brand-text-variant">{r.kind}</td>
+                      <td className="py-2.5 font-sans text-xs text-brand-text-variant">
+                        {r.kind}
+                        {r.isPriority && (
+                          <span className="ml-1.5 rounded-full bg-amber-50 px-2 py-0.5 font-sans text-[9px] font-bold text-amber-700">
+                            PRIORITY
+                          </span>
+                        )}
+                      </td>
                       <td className="py-2.5 font-sans text-xs text-brand-text-variant">{r.region}</td>
                       <td className="py-2.5">
                         <span
