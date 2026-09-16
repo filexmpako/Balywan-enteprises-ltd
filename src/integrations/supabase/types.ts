@@ -1375,6 +1375,7 @@ export type Database = {
           evaluated_at: string
           id: number
           is_active: boolean
+          is_served: boolean | null
           msisdn: string
           owner_id: string | null
           owner_name: string | null
@@ -1392,6 +1393,7 @@ export type Database = {
           evaluated_at?: string
           id?: number
           is_active?: boolean
+          is_served?: boolean | null
           msisdn: string
           owner_id?: string | null
           owner_name?: string | null
@@ -1409,6 +1411,7 @@ export type Database = {
           evaluated_at?: string
           id?: number
           is_active?: boolean
+          is_served?: boolean | null
           msisdn?: string
           owner_id?: string | null
           owner_name?: string | null

@@ -1,0 +1,1 @@
+ALTER TABLE public.wakala_status_history ADD COLUMN IF NOT EXISTS is_served boolean;
