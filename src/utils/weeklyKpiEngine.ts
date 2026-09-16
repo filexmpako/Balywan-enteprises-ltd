@@ -3,9 +3,10 @@
  *
  * Pure/derived analysis of uploaded Weekly KPI workbooks (Sheet 2 servicing
  * rows). Mirrors the exact activity rules already used for Monthly data:
- *   - a wakala is ACTIVE only when both configured transaction and amount
- *     thresholds are reached
- *   - a wakala is SERVED only from the uploaded servicing_status column
+ *   - a wakala is ACTIVE once its CI+CO transaction count reaches the
+ *     configured threshold (count only — amount plays no part)
+ *   - a wakala is SERVED when either the uploaded servicing_status column
+ *     or the computed amount/transaction rule says so (see isServedByRule)
  *
  * Adds a per-owner breakdown by resolving each row's MSISDN through the
  * Base Wakala index / till registry, so weekly results can be shown on the
@@ -21,6 +22,7 @@ import { getServicedStatusFromColumn, mergeServicedStatus } from './servicingSta
 import {
   getActivityRules,
   isActiveByRule,
+  isServedByRule,
   extractTxnCounts,
   calculatePenalty,
   type ActivityRules,
@@ -271,11 +273,15 @@ export function computeWeeklyStats(
     const { txns, val, cashIn, cashOut, countTotal, servedStatus } = entry;
     // Active / inactive follows the configurable system rule (cash-in +
     // cash-out transaction count against the threshold), never the raw
-    // status column. Served / unserved still comes from servicing_status.
-    const isActive = isActiveByRule({ cashIn, cashOut, total: countTotal || txns, amount: val }, rules);
+    // status column. Served / unserved is the uploaded servicing_status
+    // column merged with the computed amount/transaction rule — a "served"
+    // reading from either source wins.
+    const counts = { cashIn, cashOut, total: countTotal || txns, amount: val };
+    const isActive = isActiveByRule(counts, rules);
+    const finalServed = mergeServicedStatus(servedStatus, isServedByRule(counts, isActive, rules));
     if (isActive) activeCount++;
-    if (servedStatus === true) servedCount++;
-    else if (servedStatus === false) notServedCount++;
+    if (finalServed === true) servedCount++;
+    else if (finalServed === false) notServedCount++;
     else noStatusCount++;
     totalValue += val;
     totalTxns += txns;
@@ -298,7 +304,7 @@ export function computeWeeklyStats(
       totalTxns: countTotal || txns,
       totalValue: val,
       isActive,
-      isServed: servedStatus,
+      isServed: finalServed,
     });
 
     let agg = ownerAgg.get(ownerId);
@@ -322,8 +328,8 @@ export function computeWeeklyStats(
     agg.total++;
     if (isActive) agg.active++;
     else agg.inactive++;
-    if (servedStatus === true) agg.served++;
-    else if (servedStatus === false) agg.notServed++;
+    if (finalServed === true) agg.served++;
+    else if (finalServed === false) agg.notServed++;
     else agg.noStatus++;
     agg.value += val;
     agg.txns += txns;

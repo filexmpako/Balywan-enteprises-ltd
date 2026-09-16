@@ -47,25 +47,27 @@ export default function SettingsView({
   const [errorMessage, setErrorMessage] = useState('');
   const [activeTab, setActiveTab] = useState<'organization' | 'appearance' | 'notifications'>('organization');
 
-  // --- Active/Inactive rule configuration ---
+  // --- Active/Inactive & Served/Unserved rule configuration ---
   const [rules, setRules] = useState(() => getActivityRules());
   const [thresholdInput, setThresholdInput] = useState(String(rules.threshold));
   const [amountThresholdInput, setAmountThresholdInput] = useState(String(rules.amountThreshold));
+  const [servedTxnThresholdInput, setServedTxnThresholdInput] = useState(String(rules.servedTxnThreshold));
   const [modeInput, setModeInput] = useState<'combined' | 'separate'>(rules.mode);
-  const [requirementInput, setRequirementInput] = useState<'both' | 'either'>(rules.requirement);
   const [penaltyInput, setPenaltyInput] = useState(String(rules.penaltyRate));
   const [savingRules, setSavingRules] = useState(false);
   const [rulesSaved, setRulesSaved] = useState(false);
   const transactionThreshold = Number(thresholdInput);
   const amountThreshold = Number(amountThresholdInput);
+  const servedTxnThreshold = Number(servedTxnThresholdInput);
   const penaltyRate = Number(penaltyInput);
   const ruleIsValid = Number.isFinite(transactionThreshold) && transactionThreshold > 0
     && Number.isFinite(amountThreshold) && amountThreshold > 0
+    && Number.isFinite(servedTxnThreshold) && servedTxnThreshold > 0
     && Number.isFinite(penaltyRate) && penaltyRate >= 0;
 
   const handleSaveRules = async () => {
     if (!ruleIsValid) {
-      setErrorMessage('Transaction and amount thresholds must be greater than zero, and the penalty rate cannot be negative.');
+      setErrorMessage('Transaction, served value, and served transaction thresholds must be greater than zero, and the penalty rate cannot be negative.');
       return;
     }
     setErrorMessage('');
@@ -75,8 +77,8 @@ export default function SettingsView({
       const next = saveActivityRules({
         threshold: transactionThreshold,
         amountThreshold,
+        servedTxnThreshold,
         mode: modeInput,
-        requirement: requirementInput,
         window: 'weekly',
         penaltyRate,
       });
@@ -139,7 +141,7 @@ export default function SettingsView({
     }
   };
 
-  const ruleSummary = `${rules.threshold.toLocaleString()} txns ${rules.requirement === 'both' ? '&' : 'or'} TZS ${rules.amountThreshold.toLocaleString()}`;
+  const ruleSummary = `${rules.threshold.toLocaleString()} CI+CO txns active · TZS ${rules.amountThreshold.toLocaleString()} or ${rules.servedTxnThreshold.toLocaleString()} txns served`;
 
   const tabs: { id: typeof activeTab; label: string; icon: typeof Building2 }[] = [
     { id: 'organization', label: 'Organization', icon: Building2 },
@@ -387,22 +389,18 @@ export default function SettingsView({
             </div>
             <div>
               <h3 className="text-sm font-bold uppercase tracking-wider text-brand-primary">
-                Active / Inactive Wakala Rule
+                Active / Inactive &amp; Served Rules
               </h3>
-              <p className="text-[11px] text-brand-text-variant mt-0.5">Applies to weekly reporting, KPI, and penalty calculations</p>
+              <p className="text-[11px] text-brand-text-variant mt-0.5">Applies to weekly and monthly reporting, KPI, and penalty calculations</p>
             </div>
           </div>
           <div className="mb-5 rounded-lg border border-brand-primary/20 bg-brand-primary-container/40 p-4">
             <div className="flex items-start gap-3">
               <div className="rounded-lg bg-brand-primary p-2 text-white"><ShieldCheck className="h-4 w-4" /></div>
               <div>
-                <p className="text-sm font-bold text-brand-text">
-                  {requirementInput === 'both' ? 'Both conditions are required' : 'Either condition is enough'}
-                </p>
+                <p className="text-sm font-bold text-brand-text">Active/Inactive is transaction count only</p>
                 <p className="mt-1 text-xs leading-5 text-brand-text-variant">
-                  {requirementInput === 'both'
-                    ? 'A Wakala is active only after meeting the transaction threshold and the servicing amount threshold in the same week.'
-                    : 'A Wakala is active once it meets either the transaction threshold or the servicing amount threshold in the week.'}
+                  A wakala is Active once its CI+CO transaction count reaches the threshold below — amount is never part of this decision. Served/Unserved is a separate rule, set below, that depends on whether the wakala is Active or Inactive.
                 </p>
               </div>
             </div>
@@ -411,7 +409,7 @@ export default function SettingsView({
           <div className="grid grid-cols-1 gap-4">
             <div>
               <label className="block text-xs font-bold text-brand-text uppercase tracking-wider mb-1.5">
-                <span className="flex items-center gap-2"><Activity className="h-4 w-4 text-brand-primary" /> Transactions required</span>
+                <span className="flex items-center gap-2"><Activity className="h-4 w-4 text-brand-primary" /> Transactions required to be Active</span>
               </label>
               <input
                 type="number"
@@ -423,7 +421,30 @@ export default function SettingsView({
             </div>
             <div>
               <label className="block text-xs font-bold text-brand-text uppercase tracking-wider mb-1.5">
-                <span className="flex items-center gap-2"><Banknote className="h-4 w-4 text-brand-primary" /> Amount required</span>
+                How transactions are counted
+              </label>
+              <select
+                value={modeInput}
+                onChange={(e) => setModeInput(e.target.value as 'combined' | 'separate')}
+                className="w-full rounded-xl bg-brand-bg border-2 border-transparent px-4 py-2.5 text-sm text-brand-text outline-none focus:border-brand-primary focus:bg-white transition-all font-semibold"
+              >
+                <option value="combined">Cash-in + cash-out together</option>
+                <option value="separate">Cash-in and cash-out each</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="mt-6 mb-4 border-t border-brand-gray-border pt-5">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-brand-text">Served / Unserved Rule</h4>
+            <p className="mt-1 text-[11px] leading-5 text-brand-text-variant">
+              Active wakala: served once servicing value reaches the threshold. Inactive wakala: served once either the transaction count or the servicing value reaches its threshold. Merged with any uploaded servicing_status column — a "served" reading from either source wins.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-brand-text uppercase tracking-wider mb-1.5">
+                <span className="flex items-center gap-2"><Banknote className="h-4 w-4 text-brand-primary" /> Served value threshold</span>
               </label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-brand-text-variant">TZS</span>
@@ -439,29 +460,15 @@ export default function SettingsView({
             </div>
             <div>
               <label className="block text-xs font-bold text-brand-text uppercase tracking-wider mb-1.5">
-                How the two conditions combine
+                <span className="flex items-center gap-2"><Activity className="h-4 w-4 text-brand-primary" /> Served transactions (Inactive wakala)</span>
               </label>
-              <select
-                value={requirementInput}
-                onChange={(e) => setRequirementInput(e.target.value as 'both' | 'either')}
+              <input
+                type="number"
+                min={0}
+                value={servedTxnThresholdInput}
+                onChange={(e) => setServedTxnThresholdInput(e.target.value)}
                 className="w-full rounded-xl bg-brand-bg border-2 border-transparent px-4 py-2.5 text-sm text-brand-text outline-none focus:border-brand-primary focus:bg-white transition-all font-semibold"
-              >
-                <option value="both">Transactions AND amount required</option>
-                <option value="either">Transactions OR amount is enough</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-brand-text uppercase tracking-wider mb-1.5">
-                How transactions are counted
-              </label>
-              <select
-                value={modeInput}
-                onChange={(e) => setModeInput(e.target.value as 'combined' | 'separate')}
-                className="w-full rounded-xl bg-brand-bg border-2 border-transparent px-4 py-2.5 text-sm text-brand-text outline-none focus:border-brand-primary focus:bg-white transition-all font-semibold"
-              >
-                <option value="combined">Cash-in + cash-out together</option>
-                <option value="separate">Cash-in and cash-out each</option>
-              </select>
+              />
             </div>
             <div>
               <label className="block text-xs font-bold text-brand-text uppercase tracking-wider mb-1.5">
@@ -478,9 +485,10 @@ export default function SettingsView({
             </div>
           </div>
 
-          <div className="mt-5 rounded-lg bg-brand-bg p-4 text-xs text-brand-text-variant">
-            <span className="font-bold text-brand-text">Current decision:</span>{' '}
-            {modeInput === 'combined' ? 'combined transactions' : 'cash-in and cash-out individually'} ≥ {Number(thresholdInput || 0).toLocaleString()} <span className="font-bold text-brand-primary">{requirementInput === 'both' ? 'AND' : 'OR'}</span> amount ≥ TZS {Number(amountThresholdInput || 0).toLocaleString()}.
+          <div className="mt-5 rounded-lg bg-brand-bg p-4 text-xs text-brand-text-variant space-y-1">
+            <div><span className="font-bold text-brand-text">Active:</span> {modeInput === 'combined' ? 'combined transactions' : 'cash-in and cash-out individually'} ≥ {Number(thresholdInput || 0).toLocaleString()}.</div>
+            <div><span className="font-bold text-brand-text">Served (Active wakala):</span> value ≥ TZS {Number(amountThresholdInput || 0).toLocaleString()}.</div>
+            <div><span className="font-bold text-brand-text">Served (Inactive wakala):</span> transactions ≥ {Number(servedTxnThresholdInput || 0).toLocaleString()} <span className="font-bold text-brand-primary">OR</span> value ≥ TZS {Number(amountThresholdInput || 0).toLocaleString()}.</div>
           </div>
 
           <div className="flex flex-col gap-3 border-t border-brand-gray-border pt-5 mt-5 sm:flex-row sm:items-center sm:justify-between">
@@ -491,7 +499,7 @@ export default function SettingsView({
               </div>
             ) : (
               <span className="text-xs text-brand-text-variant">
-                 Saved: {rules.threshold.toLocaleString()} transactions {rules.requirement === 'both' ? 'and' : 'or'} TZS {rules.amountThreshold.toLocaleString()} per week
+                 Saved: {rules.threshold.toLocaleString()} txns active · TZS {rules.amountThreshold.toLocaleString()} or {rules.servedTxnThreshold.toLocaleString()} txns served
               </span>
             )}
             <Button

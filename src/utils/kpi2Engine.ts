@@ -4,6 +4,7 @@ import { KPI1Status } from './kpiEngine';
 import { normalizeMsisdn } from './msisdn';
 import { buildOwnerWakalaMap } from './wakalaMapping';
 import { getSavedManualOwnerTargets } from './targetResolution';
+import { getActivityRules, isServedByRule } from './activityRules';
 
 export interface KPI2Result {
   ownerId: string;
@@ -57,6 +58,7 @@ export function calculateKPI2(
   servedOverride?: Map<string, boolean>
 ): KPI2Result[] {
   const actualManualTargets = (manualTargets && Array.isArray(manualTargets)) ? manualTargets : getSavedManualOwnerTargets();
+  const activityRules = getActivityRules();
   const priorityWakalas: PriorityWakala[] = priorityWakalasParam || (() => {
     try {
       const saved = localStorage.getItem('priorityWakalaList');
@@ -159,7 +161,7 @@ export function calculateKPI2(
         return Number(val) === 1;
       });
 
-      const computedServed = isActive ? (totalTxns > 6 || totalVal > 600000) : (totalTxns > 6);
+      const computedServed = isServedByRule({ cashIn: 0, cashOut: 0, total: totalTxns, amount: totalVal }, isActive, activityRules);
       const override = servedOverride?.get(wClean);
       const isServed = override !== undefined ? override : computedServed;
 

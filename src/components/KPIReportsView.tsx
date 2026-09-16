@@ -21,6 +21,7 @@ import { getServicingRows } from '../utils/indexedDB';
 import { formatShortDate } from '../utils/dateFormat';
 import { refreshWeeklyStatsHistory } from '../utils/weeklyHistory';
 import { getServicedStatusFromColumn, mergeServicedStatus } from '../utils/servicingStatus';
+import { getActivityRules, isActiveByRule, isServedByRule, extractTxnCounts, type TxnCounts } from '../utils/activityRules';
 import type { WeeklyStatsEntry } from '../utils/weeklyKpiEngine';
 import { calculateCompanyKPIs } from '../utils/mappingEngine';
 import { exportKPIAnalysisToPDF } from '../utils/pdfExport';
@@ -262,10 +263,11 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
       };
 
       // Company-wide totals for averages and stats
-      const companyWakalaMap = new Map<string, { txns: number; val: number; isProductSeller: boolean; isServed: boolean; isActiveStatus: boolean; servedStatus: boolean | null }>();
+      const companyWakalaMap = new Map<string, { txns: number; val: number; cashIn: number; cashOut: number; isProductSeller: boolean; isServed: boolean; isActiveStatus: boolean; servedStatus: boolean | null }>();
       let companyTotalCI = 0;
       let companyTotalCO = 0;
       let companyTotalServicingVal = 0;
+      const activityRules = getActivityRules();
 
       rows.forEach(row => {
         const msisdn = String(row.MSISDN || row.msisdn || row.phone || row.Phone || '').trim();
@@ -273,11 +275,14 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
         const val = getFieldValue(row, ['SA_Servicing_Val', 'SA Servicing Val', 'sa_servicing_val']);
         const productSellerVal = getFieldValue(row, ['SA_Product_Sellers', 'SA Product Sellers', 'product_sellers', 'product_seller', 'Product_Sales', 'Product Sales']);
         const isProductSeller = productSellerVal > 0 || row.Product_Seller === true || String(row.Product_Seller).toLowerCase() === 'true' || String(row.Product_Seller).toLowerCase() === 'yes';
-        const rowActive = isRowStatusActive(row);
+        // Active = uploaded status column OR the computed CI+CO transaction
+        // count rule — a reading of "active" from either source wins.
+        const rowTxnCounts = extractTxnCounts(row);
+        const rowActive = isRowStatusActive(row) || isActiveByRule(rowTxnCounts, activityRules);
 
         const ci = getFieldValue(row, ['CI_val', 'CI val', 'ci_val', 'Cash In Value', 'Cash-In Value', 'Cash-In', 'Cash In', 'deposit', 'Deposit']);
         const co = getFieldValue(row, ['CO_val', 'CO val', 'co_val', 'Cash Out Value', 'Cash-Out Value', 'Cash-Out', 'Cash Out', 'withdrawal', 'Withdrawal']);
-        
+
         companyTotalCI += ci;
         companyTotalCO += co;
         companyTotalServicingVal += val;
@@ -287,6 +292,8 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
           if (existing) {
             existing.txns += txns;
             existing.val += val;
+            existing.cashIn += rowTxnCounts.cashIn;
+            existing.cashOut += rowTxnCounts.cashOut;
             if (isProductSeller) existing.isProductSeller = true;
             if (txns > 0 || val > 0) existing.isServed = true;
             if (rowActive) existing.isActiveStatus = true;
@@ -295,6 +302,8 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
             companyWakalaMap.set(msisdn, {
               txns,
               val,
+              cashIn: rowTxnCounts.cashIn,
+              cashOut: rowTxnCounts.cashOut,
               isProductSeller,
               isServed: txns > 0 || val > 0,
               isActiveStatus: rowActive,
@@ -316,18 +325,20 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
       let companyNoStatusCount = 0;
       let companyNotServedCount = 0;
 
-      companyWakalaMap.forEach(({ isProductSeller, isActiveStatus, servedStatus }) => {
-        // Served/unserved is read from the uploaded servicing_status column.
-        // Monthly files do not carry it yet, so those rows are reported as
-        // "no status data" rather than guessed at.
-        const isServedWakala = servedStatus === true;
+      companyWakalaMap.forEach(({ txns, val, cashIn, cashOut, isProductSeller, isActiveStatus, servedStatus }) => {
+        // Served/unserved is the uploaded servicing_status column merged
+        // with the computed amount/transaction rule (isServedByRule) — a
+        // "served" reading from either source wins.
+        const wakalaCounts: TxnCounts = { cashIn, cashOut, total: txns, amount: val };
+        const finalServedStatus = mergeServicedStatus(servedStatus, isServedByRule(wakalaCounts, isActiveStatus, activityRules));
+        const isServedWakala = finalServedStatus === true;
 
         if (isActiveStatus) {
           companyActiveCount++;
         }
-        if (servedStatus === true) {
+        if (finalServedStatus === true) {
           companyServedCount++;
-        } else if (servedStatus === false) {
+        } else if (finalServedStatus === false) {
           companyNotServedCount++;
         } else {
           companyNoStatusCount++;
@@ -690,7 +701,7 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
                           Status Info
                         </span>
                         <div className="absolute right-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-900 text-white text-[11px] rounded-lg p-2.5 shadow-xl z-50 leading-relaxed font-normal">
-                          Active = Registered wakalas assigned Active status in telecom servicing records (wakala_status = 1)
+                          Active = uploaded telecom status shows Active, OR the wakala reached 25+ CI+CO transactions this period (no amount required)
                         </div>
                       </div>
                     </div>
@@ -757,7 +768,7 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
                           Rule Info
                         </span>
                         <div className="absolute right-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-900 text-white text-[11px] rounded-lg p-2.5 shadow-xl z-50 leading-relaxed font-normal">
-                          Served = Active status: &gt;6 txns or &gt;600,000 TZS value; Inactive status: &gt;6 txns only
+                          Served = Active wakala: value &ge;600,000 TZS; Inactive wakala: &ge;6 transactions OR value &ge;600,000 TZS — merged with the uploaded servicing_status column
                         </div>
                       </div>
                     </div>
