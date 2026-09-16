@@ -26,6 +26,30 @@ export interface CollectionMapper {
 
 const define = (m: CollectionMapper) => m;
 
+/**
+ * Tables whose primary key column is a uuid still need a stable, content
+ * derived id so re-uploads upsert instead of duplicating. Hash the natural
+ * business key into a deterministic uuid.
+ */
+export function deterministicUuid(input: string): string {
+  const hex = (seed: number) => {
+    let h = seed >>> 0;
+    for (let i = 0; i < input.length; i++) {
+      h ^= input.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h.toString(16).padStart(8, '0');
+  };
+  const raw = hex(0x811c9dc5) + hex(0x1b873593) + hex(0x85ebca6b) + hex(0xc2b2ae35);
+  return [
+    raw.slice(0, 8),
+    raw.slice(8, 12),
+    '5' + raw.slice(13, 16),
+    ((parseInt(raw[16]!, 16) & 0x3) | 0x8).toString(16) + raw.slice(17, 20),
+    raw.slice(20, 32),
+  ].join('-');
+}
+
 export const COLLECTIONS: CollectionMapper[] = [
   define({
     key: 'ownersList',
@@ -143,7 +167,7 @@ export const COLLECTIONS: CollectionMapper[] = [
       wakalaCode: 'wakala_code',
       importedAt: 'imported_at',
     },
-    makeId: (p) => `${String(p.msisdn || '').trim()}|${p.period || ''}`,
+    makeId: (p) => deterministicUuid(`${String(p.msisdn || '').trim()}|${p.period || ''}`),
   }),
   define({
     key: 'agentTargets',
@@ -163,7 +187,7 @@ export const COLLECTIONS: CollectionMapper[] = [
       matchedTillMsisdn: 'matched_till_msisdn',
       importedAt: 'imported_at',
     },
-    makeId: (t) => `${(t.ownerId || t.ownerName || '').toString().toLowerCase()}|${t.period || ''}`,
+    makeId: (t) => deterministicUuid(`${(t.ownerId || t.ownerName || '').toString().toLowerCase()}|${t.period || ''}`),
   }),
   define({
     key: 'manualOwnerTargets',
@@ -181,7 +205,7 @@ export const COLLECTIONS: CollectionMapper[] = [
       setBy: 'set_by',
       setAt: 'set_at',
     },
-    makeId: (t) => `${t.ownerId || ''}|${t.period || ''}`,
+    makeId: (t) => deterministicUuid(`${t.ownerId || ''}|${t.period || ''}`),
   }),
   define({
     key: 'floatRequests',
