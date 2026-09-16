@@ -75,7 +75,10 @@ export default function OwnerDashboardView() {
     const owners = kvJson<Owner[]>('ownersList', []);
     const base = kvJson<BaseWakala[]>('baseWakalaIndex', []);
     const mapping = buildOwnerWakalaMap(base, owners);
-    const mine = (mapping.byOwnerId.get(ownerId) || []).map(w => ({ ...w, kind: 'Base' as const }));
+    const mine: Array<WakalaEntry & { kind: 'Base' | 'IOP' }> = (mapping.byOwnerId.get(ownerId) || []).map(w => ({
+      ...w,
+      kind: 'Base' as 'Base' | 'IOP',
+    }));
 
     const seen = new Set(mine.map(w => normalizeMsisdn(w.msisdn)));
     const tills = kvJson<any[]>('tillsList', []).filter(t => String(t?.ownerId || '') === ownerId);
