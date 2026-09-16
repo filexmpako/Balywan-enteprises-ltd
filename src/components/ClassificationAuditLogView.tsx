@@ -13,9 +13,11 @@ import {
   HelpCircle, 
   Building2, 
   Phone, 
-  Tag, 
-  Clock, 
-  FileText
+  Tag,
+  Clock,
+  FileText,
+  Calendar,
+  RotateCcw
 } from 'lucide-react';
 import { ClassificationAuditRecord, ClassificationBucket } from '../types/classificationAudit';
 import PageHeaderBanner from './PageHeaderBanner';
@@ -51,10 +53,22 @@ export default function ClassificationAuditLogView() {
   }, []);
 
   // Filters & State
+  const todayIso = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  }, []);
   const [searchQuery, setSearchQuery] = useState('');
   const [bucketFilter, setBucketFilter] = useState<string>('ALL');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
+  const [dateFrom, setDateFrom] = useState<string>(todayIso);
+  const [dateTo, setDateTo] = useState<string>(todayIso);
   const [page, setPage] = useState(1);
+
+  const resetDateToToday = () => {
+    setDateFrom(todayIso);
+    setDateTo(todayIso);
+    setPage(1);
+  };
 
   // Sync / Refresh
   const handleRefresh = () => {
@@ -105,17 +119,32 @@ export default function ClassificationAuditLogView() {
     document.body.removeChild(link);
   };
 
+  // Logs within the selected date range (by timestamp's local calendar day).
+  // Drives both the summary cards and the detail table below, so the cards
+  // always reflect the same window ("today" by default) that the table shows.
+  const dateScopedLogs = useMemo(() => {
+    if (!dateFrom && !dateTo) return auditLogs;
+    return auditLogs.filter(log => {
+      const d = new Date(log.timestamp);
+      if (isNaN(d.getTime())) return false;
+      const dayIso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      if (dateFrom && dayIso < dateFrom) return false;
+      if (dateTo && dayIso > dateTo) return false;
+      return true;
+    });
+  }, [auditLogs, dateFrom, dateTo]);
+
   // Summary Metrics
   const metrics = useMemo(() => {
     const stats = {
-      totalCount: auditLogs.length,
+      totalCount: dateScopedLogs.length,
       totalVolume: 0,
       SA_INTERNAL: { count: 0, volume: 0 },
       BASE: { count: 0, volume: 0 },
       IOP: { count: 0, volume: 0 }
     };
 
-    auditLogs.forEach(log => {
+    dateScopedLogs.forEach(log => {
       const amt = Number(log.amount) || 0;
       stats.totalVolume += amt;
       if (stats[log.classificationBucket]) {
@@ -125,11 +154,11 @@ export default function ClassificationAuditLogView() {
     });
 
     return stats;
-  }, [auditLogs]);
+  }, [dateScopedLogs]);
 
   // Filtered dataset
   const filteredLogs = useMemo(() => {
-    return auditLogs.filter(log => {
+    return dateScopedLogs.filter(log => {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const hit =
@@ -152,7 +181,7 @@ export default function ClassificationAuditLogView() {
 
       return true;
     });
-  }, [auditLogs, searchQuery, bucketFilter, typeFilter]);
+  }, [dateScopedLogs, searchQuery, bucketFilter, typeFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredLogs.length / PAGE_SIZE));
   const pageSafe = Math.min(page, totalPages);
@@ -273,6 +302,35 @@ export default function ClassificationAuditLogView() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Date Range Filter — defaults to today, adjustable to any range */}
+          <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-1.5">
+            <Calendar className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+            <input
+              type="date"
+              value={dateFrom}
+              max={dateTo || undefined}
+              onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+              className="text-xs font-medium bg-transparent focus:outline-none"
+            />
+            <span className="text-slate-300">–</span>
+            <input
+              type="date"
+              value={dateTo}
+              min={dateFrom || undefined}
+              onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
+              className="text-xs font-medium bg-transparent focus:outline-none"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={resetDateToToday}
+            title="Reset to today"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 cursor-pointer"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            Today
+          </button>
+
           {/* Classification Bucket Filter */}
           <select
             value={bucketFilter}
