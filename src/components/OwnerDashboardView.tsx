@@ -20,7 +20,7 @@ import { useAuth } from './AuthContext';
 import { useReportingPeriod } from './ReportingPeriodContext';
 import { normalizeMsisdn } from '../utils/msisdn';
 import { getOwnerPortfolio } from '../utils/ownerPortfolio';
-import { CLOUD_HYDRATED_EVENT } from '../lib/cloudSync';
+import { CLOUD_HYDRATED_EVENT } from '../lib/cloudSyncEvents';
 import { listStoredWeeks, loadWeeklyRows } from '../utils/weeklyStore';
 import { extractTxnCounts, getActivityRules, isActiveByRule } from '../utils/activityRules';
 import { getServicedStatusFromColumn } from '../utils/servicingStatus';
