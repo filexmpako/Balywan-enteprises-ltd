@@ -146,6 +146,10 @@ function AppContent() {
           "kpiWorkbookHistory",
           JSON.stringify(monthly.filter((h: any) => h?.reportingMonth !== report.reportingMonth)),
         );
+        const dashboard = JSON.parse(localStorage.getItem("dashboardKPIs") || "[]");
+        if (Array.isArray(dashboard) && dashboard.length) {
+          localStorage.setItem("dashboardKPIs", JSON.stringify([]));
+        }
       }
       invalidateClassificationCache();
     } catch (e) {
@@ -157,6 +161,17 @@ function AppContent() {
       localStorage.setItem("auditHistoryReports", JSON.stringify(updated));
       return updated;
     });
+
+    // The server also stripped this period out of the shared derived caches;
+    // pull that authoritative state back so nothing reappears on refresh.
+    try {
+      await hydrateFromCloud();
+      const refreshed = JSON.parse(localStorage.getItem("auditHistoryReports") || "[]");
+      if (Array.isArray(refreshed)) setReportsList(refreshed);
+      window.dispatchEvent(new Event("weekly-kpi-updated"));
+    } catch (e) {
+      console.warn("Re-sync after upload deletion failed:", e);
+    }
   };
 
   const { companyName } = useCompany();
