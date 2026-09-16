@@ -1,7 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { ViewType, Owner, Personnel, BaseWakala } from '../types';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import * as XLSX from 'xlsx';
+import { ViewType, Owner, Personnel, BaseWakala, SATill, AuditReport } from '../types';
 import { buildOwnerWakalaMap } from '../utils/wakalaMapping';
-import { formatDateTime } from '../utils/dateFormat';
+import { formatDate, formatDateTime } from '../utils/dateFormat';
+import { invalidateClassificationCache } from '../utils/classificationCache';
 import {
   listUserAccounts,
   createUserAccount,
@@ -47,7 +49,11 @@ import {
   Copy,
   Check,
   Key,
-  User
+  User,
+  Building2,
+  UploadCloud,
+  ShieldCheck,
+  RotateCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import PageHeaderBanner from './PageHeaderBanner';
@@ -70,16 +76,218 @@ interface PeopleManagementViewProps {
   onNavigate: (view: ViewType) => void;
   onSelectOwner: (name: string) => void;
   defaultSubmodule?: 'owners' | 'personnel';
+  onAddAuditReport?: (report: AuditReport) => void;
 }
 
-export default function PeopleManagementView({ 
-  onNavigate, 
+export default function PeopleManagementView({
+  onNavigate,
   onSelectOwner,
-  defaultSubmodule = 'owners'
+  defaultSubmodule = 'owners',
+  onAddAuditReport
 }: PeopleManagementViewProps) {
   const { companyName } = useCompany();
   // --- SUBMODULE STATE ---
-  const [activeTab, setActiveTab] = useState<'owners' | 'personnel' | 'users'>((defaultSubmodule as string) === 'users' ? 'users' : (defaultSubmodule as any || 'owners'));
+  const [activeTab, setActiveTab] = useState<'owners' | 'personnel' | 'users' | 'satills'>((defaultSubmodule as string) === 'users' ? 'users' : (defaultSubmodule as any || 'owners'));
+
+  // --- SA TILL REGISTRY STATE (parent-account MSISDN mappings used to keep internal float
+  // movements out of served volume — see src/utils/classification.ts) ---
+  const [saTills, setSaTills] = useState<SATill[]>(() => {
+    try {
+      const stored = localStorage.getItem('saTillRegistry');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [saTillLastUpdated, setSaTillLastUpdated] = useState<string | null>(() => {
+    return localStorage.getItem('saTillRegistry_lastUpdated') || null;
+  });
+  const [stagedSaTills, setStagedSaTills] = useState<{ tillMsisdn: string; ownerName?: string; registeredAt: string; isUpdate?: boolean }[] | null>(null);
+  const [saTillSearchQuery, setSaTillSearchQuery] = useState('');
+  const [saTillDragActive, setSaTillDragActive] = useState(false);
+  const [saTillSelectedFile, setSaTillSelectedFile] = useState<{ name: string; size: number } | null>(null);
+  const [saTillUploading, setSaTillUploading] = useState(false);
+  const [saTillUploadProgress, setSaTillUploadProgress] = useState(0);
+  const saTillFileInputRef = useRef<HTMLInputElement>(null);
+
+  const parseSaTillFile = (data: any) => {
+    try {
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      const rows: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+      if (!rows || rows.length === 0) {
+        alert("No data rows found in the uploaded file.");
+        return;
+      }
+
+      const msisdnKeys = ['sa till', 'satill', 'till msisdn', 'tillmsisdn', 'msisdn', 'sa_till_msisdn', 'till', 'phone', 'mobile', 'sa_till', 'branch_msisdn', 'sa msisdn'];
+      const ownerKeys = ['owner', 'owner name', 'ownername', 'name', 'account name', 'registered owner', 'sa owner', 'sa_owner'];
+
+      const existingMsisdnSet = new Set(saTills.map(t => normalizeMsisdn(t.tillMsisdn)));
+
+      const parsed: { tillMsisdn: string; ownerName?: string; registeredAt: string; isUpdate?: boolean }[] = [];
+      const seenMsisdnInFile = new Set<string>();
+
+      const currentDate = formatDate(new Date());
+
+      for (const row of rows) {
+        let rawMsisdn = '';
+        let rawOwner = '';
+
+        for (const k of Object.keys(row)) {
+          const cleanK = k.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (!rawMsisdn) {
+            for (const target of msisdnKeys) {
+              if (cleanK === target.replace(/[^a-z0-9]/g, '') || cleanK.includes('msisdn') || cleanK.includes('satill')) {
+                rawMsisdn = String(row[k] || '').trim();
+                break;
+              }
+            }
+          }
+          if (!rawOwner) {
+            for (const target of ownerKeys) {
+              if (cleanK === target.replace(/[^a-z0-9]/g, '')) {
+                rawOwner = String(row[k] || '').trim();
+                break;
+              }
+            }
+          }
+        }
+
+        if (!rawMsisdn) {
+          for (const k of Object.keys(row)) {
+            if (/till|msisdn|phone|mobile|account/i.test(k)) {
+              rawMsisdn = String(row[k] || '').trim();
+              break;
+            }
+          }
+        }
+
+        const normalized = normalizeMsisdn(rawMsisdn);
+        if (normalized && !seenMsisdnInFile.has(normalized)) {
+          seenMsisdnInFile.add(normalized);
+          parsed.push({
+            tillMsisdn: normalized,
+            ownerName: rawOwner || 'SA Owner',
+            registeredAt: currentDate,
+            isUpdate: existingMsisdnSet.has(normalized)
+          });
+        }
+      }
+
+      if (parsed.length === 0) {
+        alert("No valid SA Till MSISDN numbers could be extracted from the file. Please check column headers (e.g. 'SA Till', 'Till MSISDN', 'Owner Name').");
+        return;
+      }
+
+      setStagedSaTills(parsed);
+    } catch (err) {
+      console.error("Error parsing SA Till Registry file:", err);
+      alert("Could not parse file. Please provide a valid CSV or Excel file.");
+    }
+  };
+
+  const handleConfirmSaTillCommit = () => {
+    if (!stagedSaTills) return;
+
+    const registryMap = new Map<string, SATill>();
+    for (const item of saTills) {
+      registryMap.set(normalizeMsisdn(item.tillMsisdn), item);
+    }
+
+    for (const item of stagedSaTills) {
+      registryMap.set(normalizeMsisdn(item.tillMsisdn), {
+        tillMsisdn: item.tillMsisdn,
+        ownerName: item.ownerName,
+        registeredAt: item.registeredAt
+      });
+    }
+
+    const updatedArray = Array.from(registryMap.values());
+    const nowStr = formatDateTime(new Date());
+
+    localStorage.setItem('saTillRegistry', JSON.stringify(updatedArray));
+    localStorage.setItem('saTillRegistry_lastUpdated', nowStr);
+    invalidateClassificationCache();
+
+    setSaTills(updatedArray);
+    setSaTillLastUpdated(nowStr);
+    setStagedSaTills(null);
+    setSaTillSelectedFile(null);
+
+    if (onAddAuditReport) {
+      onAddAuditReport({
+        id: `sa_till_${Date.now()}`,
+        fileName: 'SA_Till_Registry.xlsx',
+        type: 'SA Till Registry',
+        uploadedBy: 'System Admin',
+        date: nowStr,
+        size: `${stagedSaTills.length} records`,
+        status: 'Success',
+      });
+    }
+  };
+
+  const handleDeleteSaTill = (msisdnToDelete: string) => {
+    const normDelete = normalizeMsisdn(msisdnToDelete);
+    const filtered = saTills.filter(t => normalizeMsisdn(t.tillMsisdn) !== normDelete);
+    const nowStr = formatDateTime(new Date());
+
+    localStorage.setItem('saTillRegistry', JSON.stringify(filtered));
+    localStorage.setItem('saTillRegistry_lastUpdated', nowStr);
+    invalidateClassificationCache();
+    setSaTills(filtered);
+    setSaTillLastUpdated(nowStr);
+  };
+
+  const processSaTillFile = (file: File) => {
+    setSaTillSelectedFile({ name: file.name, size: file.size });
+    setSaTillUploading(true);
+    setSaTillUploadProgress(0);
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const data = e.target?.result;
+      let progress = 0;
+      const interval = setInterval(() => {
+        progress += 25;
+        setSaTillUploadProgress(progress);
+        if (progress >= 100) {
+          clearInterval(interval);
+          setSaTillUploading(false);
+          parseSaTillFile(data);
+        }
+      }, 80);
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleSaTillDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setSaTillDragActive(true);
+    } else if (e.type === "dragleave") {
+      setSaTillDragActive(false);
+    }
+  };
+
+  const handleSaTillDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSaTillDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      processSaTillFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleSaTillFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      processSaTillFile(e.target.files[0]);
+    }
+  };
 
   // --- USER ACCESS MANAGEMENT STATE ---
   const { user: currentUser } = useAuth();
@@ -1324,6 +1532,17 @@ export default function PeopleManagementView({
             <Lock className="h-3.5 w-3.5" />
             User Access
           </button>
+          <button
+            onClick={() => { setActiveTab('satills'); setSelectedProfile(null); }}
+            className={`px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'satills'
+                ? 'bg-brand-primary text-white shadow-ambient'
+                : 'text-brand-text-variant hover:text-brand-text hover:bg-white/50'
+            }`}
+          >
+            <Building2 className="h-3.5 w-3.5" />
+            SA Tills
+          </button>
         </div>
         </div>
       </div>
@@ -1860,6 +2079,237 @@ export default function PeopleManagementView({
                     </tbody>
                   </table>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================= */}
+          {/* SUBMODULE: SA TILL REGISTRY */}
+          {/* ========================================================= */}
+          {activeTab === 'satills' && (
+            <div className="space-y-6">
+              {/* Upload card */}
+              <div className="bg-brand-card p-6 rounded-2xl border border-brand-gray-border shadow-ambient space-y-4">
+                <div>
+                  <h3 className="text-base font-bold text-brand-text flex items-center gap-1.5">
+                    <Building2 className="h-4.5 w-4.5 text-brand-primary" />
+                    SA Till Registry
+                  </h3>
+                  <p className="text-xs text-brand-text-variant mt-0.5">
+                    Master Super Agent (SA) Till MSISDN registry — identifies parent-account transfers between the company's own tills so they are excluded from served volume instead of misclassified.
+                  </p>
+                </div>
+
+                <div
+                  onDragEnter={handleSaTillDrag}
+                  onDragOver={handleSaTillDrag}
+                  onDragLeave={handleSaTillDrag}
+                  onDrop={handleSaTillDrop}
+                  onClick={() => saTillFileInputRef.current?.click()}
+                  className={`relative rounded-2xl border-2 border-dashed p-8 flex flex-col items-center justify-center text-center transition-all cursor-pointer ${
+                    saTillDragActive
+                      ? 'border-brand-primary bg-brand-primary/5 scale-[0.99]'
+                      : 'border-brand-gray-border bg-brand-bg hover:border-brand-primary hover:bg-brand-primary/5'
+                  }`}
+                >
+                  <input
+                    type="file"
+                    ref={saTillFileInputRef}
+                    onChange={handleSaTillFileInput}
+                    accept=".csv, .xlsx, .xls, .xlx"
+                    className="hidden"
+                  />
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full mb-3 bg-brand-primary-container/50 text-brand-primary">
+                    <UploadCloud className="h-6 w-6" />
+                  </div>
+                  <h4 className="text-sm font-black text-brand-text">Drag and drop your SA Till Registry file here</h4>
+                  <p className="text-xs text-brand-text-variant mt-1">Supported formats: .CSV, .XLSX, .XLS, .XLX</p>
+                  <button
+                    type="button"
+                    className="mt-3 rounded-xl bg-brand-primary hover:bg-brand-primary-light text-white px-5 py-2.5 text-xs font-bold shadow-ambient transition-all"
+                  >
+                    Browse System Files
+                  </button>
+                </div>
+
+                {saTillUploading && saTillSelectedFile && (
+                  <div className="bg-brand-bg p-4 rounded-2xl border border-brand-gray-border">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="h-9 w-9 rounded-xl bg-brand-primary-container/40 text-brand-primary flex items-center justify-center shrink-0">
+                        <RotateCw className="h-4.5 w-4.5 animate-spin" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-black text-brand-text truncate max-w-sm">{saTillSelectedFile.name}</p>
+                        <p className="text-[10px] text-brand-text-variant font-mono mt-0.5">Uploading and parsing file...</p>
+                      </div>
+                    </div>
+                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-brand-primary rounded-full transition-all duration-300"
+                        style={{ width: `${saTillUploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {stagedSaTills && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-brand-bg p-5 rounded-2xl border border-brand-primary/30 space-y-4"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-brand-gray-border pb-4">
+                      <div>
+                        <h3 className="text-sm font-black text-brand-text">SA Till Registry Staging Preview</h3>
+                        <p className="text-xs text-brand-text-variant">Verify parsed Master SA Tills before committing.</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
+                          Total: {stagedSaTills.length}
+                        </span>
+                        <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+                          New: {stagedSaTills.filter(t => !t.isUpdate).length}
+                        </span>
+                        <span className="text-xs font-bold text-blue-700 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
+                          Updates: {stagedSaTills.filter(t => t.isUpdate).length}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="max-h-60 overflow-y-auto rounded-xl border border-slate-200">
+                      <table className="w-full text-left text-xs font-sans">
+                        <thead className="bg-slate-50 text-slate-700 font-extrabold sticky top-0 border-b border-slate-200">
+                          <tr>
+                            <th className="px-4 py-2.5">Till MSISDN</th>
+                            <th className="px-4 py-2.5">Owner / Account Name</th>
+                            <th className="px-4 py-2.5">Ingestion Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white">
+                          {stagedSaTills.map((till, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50">
+                              <td className="px-4 py-2 font-mono font-bold text-brand-text">{till.tillMsisdn}</td>
+                              <td className="px-4 py-2 font-semibold text-slate-700">{till.ownerName || '—'}</td>
+                              <td className="px-4 py-2">
+                                {till.isUpdate ? (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                                    Existing Update
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                    New Registration
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => { setStagedSaTills(null); setSaTillSelectedFile(null); }}
+                        className="rounded-xl border border-slate-300 bg-white hover:bg-slate-50 px-4 py-2.5 text-xs font-bold text-slate-700 transition-all cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleConfirmSaTillCommit}
+                        className="inline-flex items-center gap-2 rounded-xl bg-brand-primary hover:bg-brand-primary-light text-white px-5 py-2.5 text-xs font-bold shadow-md transition-all cursor-pointer"
+                      >
+                        <CheckCircle className="h-4 w-4" />
+                        Confirm & Commit to SA Till Registry
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+
+              {/* Registered SA Tills list */}
+              <div className="bg-brand-card p-6 rounded-2xl border border-brand-gray-border shadow-ambient space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-brand-gray-border pb-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-5 w-5 text-brand-primary" />
+                      <h3 className="text-base font-black text-brand-text">Registered SA Tills</h3>
+                      <span className="bg-brand-primary/10 text-brand-primary text-xs font-bold px-2.5 py-0.5 rounded-full">
+                        {saTills.length} Accounts
+                      </span>
+                    </div>
+                    {saTillLastUpdated ? (
+                      <p className="text-xs text-brand-text-variant flex items-center gap-1.5">
+                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                        <span>SA Till Registry last updated: <strong className="text-brand-text">{saTillLastUpdated}</strong></span>
+                      </p>
+                    ) : (
+                      <p className="text-xs text-brand-text-variant">
+                        No SA Till Registry records uploaded yet. Upload a registry spreadsheet above to populate parent account mappings.
+                      </p>
+                    )}
+                  </div>
+
+                  {saTills.length > 0 && (
+                    <div className="relative w-full sm:w-64">
+                      <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                      <input
+                        type="text"
+                        value={saTillSearchQuery}
+                        onChange={(e) => setSaTillSearchQuery(e.target.value)}
+                        placeholder="Search SA MSISDN or Owner..."
+                        className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-brand-primary"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {saTills.length > 0 ? (
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="w-full text-left text-xs font-sans">
+                      <thead className="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
+                        <tr>
+                          <th className="px-4 py-3">Till MSISDN</th>
+                          <th className="px-4 py-3">Owner / Organization</th>
+                          <th className="px-4 py-3">Registered At</th>
+                          <th className="px-4 py-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 bg-white">
+                        {saTills
+                          .filter(t => {
+                            if (!saTillSearchQuery.trim()) return true;
+                            const q = saTillSearchQuery.toLowerCase();
+                            return t.tillMsisdn.includes(q) || (t.ownerName && t.ownerName.toLowerCase().includes(q));
+                          })
+                          .map((till) => (
+                            <tr key={till.tillMsisdn} className="hover:bg-slate-50 transition-colors">
+                              <td className="px-4 py-2.5 font-mono font-bold text-slate-900">{till.tillMsisdn}</td>
+                              <td className="px-4 py-2.5 font-semibold text-slate-700">{till.ownerName || 'SA Owner'}</td>
+                              <td className="px-4 py-2.5 text-slate-500 font-mono text-[11px]">{till.registeredAt}</td>
+                              <td className="px-4 py-2.5 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteSaTill(till.tillMsisdn)}
+                                  title="Remove SA Till Entry"
+                                  className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                    <Building2 className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                    <p className="text-xs font-bold text-slate-500">Registry is currently empty</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Drag and drop a registry spreadsheet above to get started.</p>
+                  </div>
+                )}
               </div>
             </div>
           )}

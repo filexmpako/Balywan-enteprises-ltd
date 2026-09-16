@@ -380,6 +380,7 @@ function AppContent() {
             window.location.hash = "#/admin/owner-details";
           }}
           defaultSubmodule="owners"
+          onAddAuditReport={handleAddAuditReport}
         />
       );
     } else if (hash === "#/admin/owner-details") {
@@ -473,6 +474,7 @@ function AppContent() {
             window.location.hash = "#/admin/owner-details";
           }}
           defaultSubmodule="personnel"
+          onAddAuditReport={handleAddAuditReport}
         />
       );
     } else if (hash === "#/admin/map") {
