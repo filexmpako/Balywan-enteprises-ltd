@@ -17,6 +17,7 @@ import { Target, X, ArrowLeft, Loader2, SlidersHorizontal, MoreVertical } from '
 import PageHeaderBanner from './PageHeaderBanner';
 import PeriodSelector from './PeriodSelector';
 import { useReportingPeriod } from './ReportingPeriodContext';
+import { CLOUD_HYDRATED_EVENT } from '../lib/cloudSync';
 
 export default function TargetsView() {
   const { user } = useAuth();
@@ -79,6 +80,13 @@ export default function TargetsView() {
       setBaseWakalaIndex(savedBw ? JSON.parse(savedBw) : []);
     } catch (e) { setBaseWakalaIndex([]); }
   }, []);
+
+  // The Base Wakala Index and Priority Wakala list arrive from the server after
+  // sign-in, so re-read them whenever the cache is refreshed from the cloud.
+  useEffect(() => {
+    window.addEventListener(CLOUD_HYDRATED_EVENT, loadStaticData);
+    return () => window.removeEventListener(CLOUD_HYDRATED_EVENT, loadStaticData);
+  }, [loadStaticData]);
 
   useEffect(() => {
     loadStaticData();

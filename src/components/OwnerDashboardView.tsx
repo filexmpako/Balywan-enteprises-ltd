@@ -69,35 +69,19 @@ export default function OwnerDashboardView() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'served' | 'unserved'>('all');
 
-  // --- Owner portfolio (Base Wakala Index + manually assigned tills) ---
-  const wakalas = useMemo<Array<WakalaEntry & { kind: 'Base' | 'IOP' }>>(() => {
-    if (!ownerId) return [];
-    const owners = kvJson<Owner[]>('ownersList', []);
-    const base = kvJson<BaseWakala[]>('baseWakalaIndex', []);
-    const mapping = buildOwnerWakalaMap(base, owners);
-    const mine: Array<WakalaEntry & { kind: 'Base' | 'IOP' }> = (mapping.byOwnerId.get(ownerId) || []).map(w => ({
-      ...w,
-      kind: 'Base' as 'Base' | 'IOP',
-    }));
+  // --- Owner portfolio (shared resolver: Base Wakala Index + tills + priority list) ---
+  const [portfolioVersion, setPortfolioVersion] = useState(0);
+  useEffect(() => {
+    const bump = () => setPortfolioVersion(v => v + 1);
+    window.addEventListener(CLOUD_HYDRATED_EVENT, bump);
+    return () => window.removeEventListener(CLOUD_HYDRATED_EVENT, bump);
+  }, []);
 
-    const seen = new Set(mine.map(w => normalizeMsisdn(w.msisdn)));
-    const tills = kvJson<any[]>('tillsList', []).filter(t => String(t?.ownerId || '') === ownerId);
-    for (const till of tills) {
-      const msisdn = String(till.transactionTill || till.msisdn || '').trim();
-      const norm = normalizeMsisdn(msisdn);
-      if (!msisdn || seen.has(norm)) continue;
-      seen.add(norm);
-      mine.push({
-        id: `till-${msisdn}`,
-        name: till.tillName || till.name || msisdn,
-        msisdn,
-        region: till.location || till.region || 'Unknown',
-        dateAdded: till.dateAdded || '',
-        kind: String(till.kind || '').toLowerCase() === 'iop' ? 'IOP' : 'Base',
-      });
-    }
-    return mine;
-  }, [ownerId]);
+  const portfolio = useMemo(
+    () => (ownerId ? getOwnerPortfolio(ownerId, currentPeriod, ownerName) : null),
+    [ownerId, currentPeriod, ownerName, portfolioVersion],
+  );
+  const wakalas = portfolio?.wakalas ?? [];
 
   // --- Weekly data for the selected week ---
   useEffect(() => {
