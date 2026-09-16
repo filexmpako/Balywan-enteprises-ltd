@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { getAvatarUrl } from '../utils/avatar';
 import OwnerAvatar from './OwnerAvatar';
+import { useAuth } from './AuthContext';
 import { Owner, Personnel, AuditReport } from '../types';
 import { 
   mapTransactions, 
@@ -53,6 +54,8 @@ export default function DailyMgtMappingEngine({
   onCancel, 
   onImportCompleted 
 }: DailyMgtMappingEngineProps) {
+  const { user: currentUser } = useAuth();
+
   // Load database lists
   const currentOwners = useMemo<Owner[]>(() => {
     const saved = localStorage.getItem('ownersList');
@@ -342,7 +345,7 @@ export default function DailyMgtMappingEngine({
         id: `REP-${Math.floor(90000 + Math.random() * 9000)}`,
         fileName: "Daily_MGT_Report_Mapped.csv",
         type: "Daily MGT",
-        uploadedBy: "K. Kamkg",
+        uploadedBy: currentUser?.name || "System Admin",
         date: formatDateTime(new Date()),
         size: "45.2 KB",
         status: 'Success'

@@ -21,6 +21,7 @@ import { getServicingRows } from '../utils/indexedDB';
 import { formatShortDate } from '../utils/dateFormat';
 import { refreshWeeklyStatsHistory } from '../utils/weeklyHistory';
 import { getServicedStatusFromColumn, mergeServicedStatus } from '../utils/servicingStatus';
+import { getActivityRules, isActiveByRule, extractTxnCounts } from '../utils/activityRules';
 import type { WeeklyStatsEntry } from '../utils/weeklyKpiEngine';
 import { calculateCompanyKPIs } from '../utils/mappingEngine';
 import { exportKPIAnalysisToPDF } from '../utils/pdfExport';
@@ -228,24 +229,10 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
         return;
       }
 
-      const isRowStatusActive = (row: any): boolean => {
-        if (!row) return false;
-        const val = row.wakala_status ?? row.Wakala_Status ?? row['Wakala Status'] ?? row['wakala status'] ?? row.status ?? row.Status;
-        if (val === undefined || val === null || val === '') return false;
-        return Number(val) === 1;
-      };
-
-      const hasRowStatusKey = (row: any): boolean => {
-        if (!row) return false;
-        return (
-          'wakala_status' in row ||
-          'Wakala_Status' in row ||
-          'Wakala Status' in row ||
-          'wakala status' in row ||
-          'status' in row ||
-          'Status' in row
-        );
-      };
+      // Active/inactive follows the same configurable system rule as the
+      // weekly engine (transaction count + amount thresholds from Settings)
+      // instead of a raw status column, so Monthly and Weekly never disagree.
+      const rules = getActivityRules();
 
       const getFieldValue = (row: any, keys: string[]): number => {
         for (const k of keys) {
@@ -270,7 +257,7 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
       };
 
       // Company-wide totals for averages and stats
-      const companyWakalaMap = new Map<string, { txns: number; val: number; isProductSeller: boolean; isServed: boolean; isActiveStatus: boolean; hasStatusCol: boolean; servedStatus: boolean | null }>();
+      const companyWakalaMap = new Map<string, { txns: number; val: number; isProductSeller: boolean; isServed: boolean; isActiveStatus: boolean; servedStatus: boolean | null }>();
       let companyTotalCI = 0;
       let companyTotalCO = 0;
       let companyTotalServicingVal = 0;
@@ -281,8 +268,7 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
         const val = getFieldValue(row, ['SA_Servicing_Val', 'SA Servicing Val', 'sa_servicing_val']);
         const productSellerVal = getFieldValue(row, ['SA_Product_Sellers', 'SA Product Sellers', 'product_sellers', 'product_seller', 'Product_Sales', 'Product Sales']);
         const isProductSeller = productSellerVal > 0 || row.Product_Seller === true || String(row.Product_Seller).toLowerCase() === 'true' || String(row.Product_Seller).toLowerCase() === 'yes';
-        const rowActive = isRowStatusActive(row);
-        const rowHasStatus = hasRowStatusKey(row);
+        const rowActive = isActiveByRule(extractTxnCounts(row), rules);
 
         const ci = getFieldValue(row, ['CI_val', 'CI val', 'ci_val', 'Cash In Value', 'Cash-In Value', 'Cash-In', 'Cash In', 'deposit', 'Deposit']);
         const co = getFieldValue(row, ['CO_val', 'CO val', 'co_val', 'Cash Out Value', 'Cash-Out Value', 'Cash-Out', 'Cash Out', 'withdrawal', 'Withdrawal']);
@@ -299,7 +285,6 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
             if (isProductSeller) existing.isProductSeller = true;
             if (txns > 0 || val > 0) existing.isServed = true;
             if (rowActive) existing.isActiveStatus = true;
-            if (rowHasStatus) existing.hasStatusCol = true;
             existing.servedStatus = mergeServicedStatus(existing.servedStatus, getServicedStatusFromColumn(row));
           } else {
             companyWakalaMap.set(msisdn, {
@@ -308,7 +293,6 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
               isProductSeller,
               isServed: txns > 0 || val > 0,
               isActiveStatus: rowActive,
-              hasStatusCol: rowHasStatus,
               servedStatus: getServicedStatusFromColumn(row)
             });
           }
@@ -323,13 +307,11 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
       let activeAndNotServed = 0;
       let inactiveAndServed = 0;
       let inactiveAndNotServed = 0;
-      let datasetHasStatusCol = false;
 
       let companyNoStatusCount = 0;
       let companyNotServedCount = 0;
 
-      companyWakalaMap.forEach(({ isProductSeller, isActiveStatus, hasStatusCol, servedStatus }) => {
-        if (hasStatusCol) datasetHasStatusCol = true;
+      companyWakalaMap.forEach(({ isProductSeller, isActiveStatus, servedStatus }) => {
         // Served/unserved is read from the uploaded servicing_status column.
         // Monthly files do not carry it yet, so those rows are reported as
         // "no status data" rather than guessed at.

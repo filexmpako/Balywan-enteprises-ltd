@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { ViewType, Owner, Personnel, BaseWakala, SATill, AuditReport } from '../types';
 import { buildOwnerWakalaMap } from '../utils/wakalaMapping';
-import { formatDate, formatDateTime } from '../utils/dateFormat';
+import { formatDate, formatDateTime, formatMonthYear } from '../utils/dateFormat';
 import { invalidateClassificationCache } from '../utils/classificationCache';
 import {
   listUserAccounts,
@@ -222,7 +222,7 @@ export default function PeopleManagementView({
         id: `sa_till_${Date.now()}`,
         fileName: 'SA_Till_Registry.xlsx',
         type: 'SA Till Registry',
-        uploadedBy: 'System Admin',
+        uploadedBy: currentUser?.name || 'System Admin',
         date: nowStr,
         size: `${stagedSaTills.length} records`,
         status: 'Success',
@@ -574,7 +574,7 @@ export default function PeopleManagementView({
     setShowEditOwnerModal(false);
     setEditingOwner(null);
 
-    addAuditLog('Registry Update', 'K. Kamkg', 'Owner', 'Owner', editOwnerForm.name, 'Manual Administrator Registry Edit');
+    addAuditLog('Registry Update', (currentUser?.name || 'System Admin'), 'Owner', 'Owner', editOwnerForm.name, 'Manual Administrator Registry Edit');
 
     // Trigger update of duplicates and KPIs across tabs
     window.dispatchEvent(new Event('people-reclassified'));
@@ -604,7 +604,7 @@ export default function PeopleManagementView({
     setShowEditPersonnelModal(false);
     setEditingPersonnel(null);
 
-    addAuditLog('Registry Update', 'K. Kamkg', 'Personnel', 'Personnel', editPersonnelForm.name, 'Manual Administrator Registry Edit');
+    addAuditLog('Registry Update', (currentUser?.name || 'System Admin'), 'Personnel', 'Personnel', editPersonnelForm.name, 'Manual Administrator Registry Edit');
 
     // Trigger update of duplicates and KPIs across tabs
     window.dispatchEvent(new Event('people-reclassified'));
@@ -675,39 +675,7 @@ export default function PeopleManagementView({
     if (saved) {
       try { return JSON.parse(saved); } catch(e) {}
     }
-    // Default initial logs
-    return [
-      {
-        id: 'audit-init-1',
-        eventType: 'Role Change',
-        date: 'Jul 8, 2026, 09:15 AM',
-        administrator: 'K. Kamkg',
-        oldRole: 'Personnel',
-        newRole: 'Owner',
-        affectedUser: 'Juma Kapuya',
-        sourceFile: 'Title-to-Role Mapping Synchronization'
-      },
-      {
-        id: 'audit-init-2',
-        eventType: 'Synchronization Event',
-        date: 'Jul 8, 2026, 09:12 AM',
-        administrator: 'K. Kamkg',
-        oldRole: 'N/A',
-        newRole: 'Personnel',
-        affectedUser: 'Rashid Kassim',
-        sourceFile: 'Till_Master_v4_TZ.xlsx'
-      },
-      {
-        id: 'audit-init-3',
-        eventType: 'Role Change',
-        date: 'Jul 7, 2026, 11:20 AM',
-        administrator: 'Sarah Mndeme',
-        oldRole: 'Owner',
-        newRole: 'Personnel',
-        affectedUser: 'Grace Mushi',
-        sourceFile: 'Manual Administrator Override'
-      }
-    ];
+    return [];
   });
 
   useEffect(() => {
@@ -800,7 +768,7 @@ export default function PeopleManagementView({
             location: item.originalObj.region || 'Dar es Salaam',
             assignedTill: Array.isArray(tArr) ? tArr.join(', ') : String(tArr),
             status: item.originalObj.status || 'Active',
-            memberSince: item.originalObj.memberSince || 'Jul 2026',
+            memberSince: item.originalObj.memberSince || formatMonthYear(new Date()),
             avatar: item.originalObj.avatar,
             lastSyncDate: formatDateTime(new Date())
           });
@@ -809,7 +777,7 @@ export default function PeopleManagementView({
         // Add audit history log
         addAuditLog(
           'Role Change',
-          'K. Kamkg',
+          (currentUser?.name || 'System Admin'),
           'Owner',
           'Personnel',
           item.name,
@@ -831,7 +799,7 @@ export default function PeopleManagementView({
             name: item.name,
             masterAgentId: randomId,
             region: item.originalObj.location || 'Dar es Salaam',
-            memberSince: item.originalObj.memberSince || 'Jul 2026',
+            memberSince: item.originalObj.memberSince || formatMonthYear(new Date()),
             avatar: item.originalObj.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
             wakalas: tillsArr.length,
             portfolioSize: 'TZS 5.0M',
@@ -847,7 +815,7 @@ export default function PeopleManagementView({
         // Add audit history log
         addAuditLog(
           'Role Change',
-          'K. Kamkg',
+          (currentUser?.name || 'System Admin'),
           'Personnel',
           'Owner',
           item.name,
@@ -1046,7 +1014,7 @@ export default function PeopleManagementView({
       name: addOwnerForm.name,
       masterAgentId: randomId,
       region: addOwnerForm.region,
-      memberSince: 'Jul 2026',
+      memberSince: formatMonthYear(new Date()),
       avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
       wakalas: Number(addOwnerForm.wakalas),
       portfolioSize: addOwnerForm.portfolioSize,
@@ -1079,7 +1047,7 @@ export default function PeopleManagementView({
       assignedTillsStr: ''
     });
 
-    addAuditLog('Synchronization Event', 'K. Kamkg', 'N/A', 'Owner', newO.name, 'Manual Administrator Registry');
+    addAuditLog('Synchronization Event', (currentUser?.name || 'System Admin'), 'N/A', 'Owner', newO.name, 'Manual Administrator Registry');
   };
 
   const [showAddPersonnelModal, setShowAddPersonnelModal] = useState(false);
@@ -1104,7 +1072,7 @@ export default function PeopleManagementView({
       title: addPersonnelForm.title,
       location: addPersonnelForm.location,
       status: addPersonnelForm.status,
-      memberSince: 'Jul 2026',
+      memberSince: formatMonthYear(new Date()),
       avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
       lastSyncDate: formatDateTime(new Date())
     };
@@ -1128,7 +1096,7 @@ export default function PeopleManagementView({
       assignedTill: ''
     });
 
-    addAuditLog('Synchronization Event', 'K. Kamkg', 'N/A', 'Personnel', newP.name, 'Manual Administrator Registry');
+    addAuditLog('Synchronization Event', (currentUser?.name || 'System Admin'), 'N/A', 'Personnel', newP.name, 'Manual Administrator Registry');
   };
 
   // --- INDIVIDUAL COMPREHENSIVE PROFILE VIEWER STATE ---
@@ -1880,7 +1848,7 @@ export default function PeopleManagementView({
                                 <img src={getAvatarUrl(person.name)} alt={person.name} className="h-9 w-9 rounded-lg object-cover ring-2 ring-brand-primary/5" />
                                 <div>
                                   <span className="block font-bold text-brand-text">{person.name}</span>
-                                  <span className="block text-[10px] text-slate-400 mt-0.5">Joined {person.memberSince || 'Jul 2026'}</span>
+                                  <span className="block text-[10px] text-slate-400 mt-0.5">Joined {person.memberSince || '—'}</span>
                                 </div>
                               </div>
                             </td>
@@ -1890,7 +1858,7 @@ export default function PeopleManagementView({
                               </span>
                             </td>
                             <td className="px-5 py-4">{person.location}</td>
-                            <td className="px-5 py-4 text-slate-400 font-bold">{person.lastSyncDate || 'Jul 8, 2026'}</td>
+                            <td className="px-5 py-4 text-slate-400 font-bold">{person.lastSyncDate || '—'}</td>
                             <td className="px-5 py-4 text-center">
                               <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold ${
                                 person.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
@@ -2383,7 +2351,7 @@ export default function PeopleManagementView({
                   <div className="bg-slate-50 p-3.5 border border-slate-200/80 rounded-xl">
                     <span className="block text-[9px] text-slate-400 uppercase font-extrabold">MEMBER SINCE</span>
                     <span className="text-xs text-slate-800 font-bold block mt-1">
-                      {selectedProfile.record.memberSince || 'Jul 2026'}
+                      {selectedProfile.record.memberSince || '—'}
                     </span>
                   </div>
                 </div>
@@ -2391,7 +2359,7 @@ export default function PeopleManagementView({
                 <div className="bg-slate-50 p-3.5 border border-slate-200/80 rounded-xl">
                   <span className="block text-[9px] text-slate-400 uppercase font-extrabold">LAST SYNCHRONIZATION</span>
                   <span className="text-xs text-slate-600 font-medium block mt-1">
-                    {selectedProfile.record.lastSyncDate || 'Jul 8, 2026, 09:12 AM'}
+                    {selectedProfile.record.lastSyncDate || '—'}
                   </span>
                 </div>
               </div>

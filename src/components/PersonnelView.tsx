@@ -358,7 +358,7 @@ export default function PersonnelView({ onNavigate }: PersonnelViewProps) {
                         <td className="px-6 py-4 font-sans text-xs text-brand-text-variant">
                           <div className="flex items-center gap-1">
                             <Calendar className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                            {person.memberSince || 'Jul 2026'}
+                            {person.memberSince || '—'}
                           </div>
                         </td>
 
@@ -395,7 +395,7 @@ export default function PersonnelView({ onNavigate }: PersonnelViewProps) {
                                   </p>
                                 </div>
                                 <span className="text-[10px] font-mono font-black text-brand-text-variant bg-white border border-brand-gray-border px-2.5 py-1 rounded">
-                                  LAST SYNC: {person.lastSyncDate || "Jul 8, 2026"}
+                                  LAST SYNC: {person.lastSyncDate || '—'}
                                 </span>
                               </div>
 
@@ -410,7 +410,7 @@ export default function PersonnelView({ onNavigate }: PersonnelViewProps) {
                                 </div>
                                 <div className="rounded-xl border border-brand-gray-border/80 bg-white p-4 shadow-sm">
                                   <span className="block text-[10px] font-bold text-brand-text-variant uppercase tracking-wider">Member Since</span>
-                                  <span className="text-xs font-bold text-slate-800 block mt-1">{person.memberSince || 'Jul 2026'}</span>
+                                  <span className="text-xs font-bold text-slate-800 block mt-1">{person.memberSince || '—'}</span>
                                 </div>
                                 <div className="rounded-xl border border-brand-gray-border/80 bg-white p-4 shadow-sm">
                                   <span className="block text-[10px] font-bold text-brand-text-variant uppercase tracking-wider">Account Status</span>

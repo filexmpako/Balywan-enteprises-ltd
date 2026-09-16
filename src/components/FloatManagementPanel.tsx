@@ -8,6 +8,7 @@ import {
   getLoanRecordsForOwner, submitLoanRepayment
 } from '../utils/floatManagement';
 import { savePhoto, getPhoto } from '../utils/db';
+import { useAuth } from './AuthContext';
 import { Banknote, X, Camera, CheckCircle2, AlertTriangle, Clock, FileText, XCircle, DollarSign, Send, Check } from 'lucide-react';
 
 interface FloatManagementPanelProps {
@@ -24,6 +25,7 @@ interface DraftReturnRow {
 }
 
 export default function FloatManagementPanel({ ownerId, isAdmin, embedded = false }: FloatManagementPanelProps) {
+  const { user: currentUser } = useAuth();
   const [requests, setRequests] = useState<FloatRequest[]>(() => getFloatRequestsForOwner(ownerId));
   const [loans, setLoans] = useState<LoanRecord[]>(() => getLoanRecordsForOwner(ownerId));
   const [managers, setManagers] = useState<Personnel[]>([]);
@@ -658,7 +660,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                             <div className="flex flex-wrap items-center gap-2 mt-1">
                               <button
                                 onClick={() => {
-                                  setConfirmRejectTarget({ request: r, managerId: 'admin', managerName: 'System Admin' });
+                                  setConfirmRejectTarget({ request: r, managerId: currentUser?.username || 'admin', managerName: currentUser?.name || 'System Admin' });
                                 }}
                                 className="text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-lg border border-rose-200 transition-all cursor-pointer inline-flex items-center gap-1"
                               >
@@ -667,7 +669,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                               {getTotalReturned(r) < r.requestedAmount && r.shortfallReason && (
                                 <button
                                   onClick={() => {
-                                    approveLoanForShortfall(r.id, 'admin', 'System Admin');
+                                    approveLoanForShortfall(r.id, currentUser?.username || 'admin', currentUser?.name || 'System Admin');
                                     refresh();
                                   }}
                                   className="text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg border border-indigo-200 transition-all cursor-pointer inline-flex items-center gap-1"
