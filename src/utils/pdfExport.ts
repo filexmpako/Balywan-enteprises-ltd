@@ -3,6 +3,7 @@ import { KPIMetric } from '../types';
 import { abbreviateNumberString } from './numberFormat';
 import { getCompanyName } from './company';
 import { formatDateTime } from './dateFormat';
+import { getActivityRules } from './activityRules';
 
 /**
  * Helper to identify if a KPI name is monetary
@@ -708,7 +709,12 @@ export function exportKPIAnalysisToPDF({
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(71, 85, 105);
-    doc.text('Our active standards filter out low-volume agents. Threshold: min 6 transactions & 600,000 TZS volume per month.', margin, currentY);
+    const activityRules = getActivityRules();
+    doc.text(
+      `Active: min ${activityRules.threshold} CI+CO transactions. Served: TZS ${activityRules.amountThreshold.toLocaleString()} volume (Active wakala), or ${activityRules.servedTxnThreshold} transactions / TZS ${activityRules.amountThreshold.toLocaleString()} volume (Inactive wakala).`,
+      margin,
+      currentY
+    );
     currentY += 4;
 
     // Draw a cohesive callout block for internal activity stats

@@ -4,6 +4,7 @@ import { normalizeMsisdn } from '../utils/msisdn';
 import { formatDate } from '../utils/dateFormat';
 import { buildOwnerWakalaMap } from '../utils/wakalaMapping';
 import { getOwnerPortfolio } from '../utils/ownerPortfolio';
+import { getActivityRules, isServedByRule } from '../utils/activityRules';
 import { ownersList } from '../data';
 import WorkLocationSection from './WorkLocationSection';
 import TransactionHistorySection from './TransactionHistorySection';
@@ -548,7 +549,7 @@ export default function OwnerDetailsView({
           return Number(val) === 1;
         });
 
-        const isServed = isActiveRowStatus ? (totalTxns > 6 || totalVal > 600000) : (totalTxns > 6);
+        const isServed = isServedByRule({ cashIn: 0, cashOut: 0, total: totalTxns, amount: totalVal }, isActiveRowStatus, getActivityRules());
         if (isServed) {
           active++;
         }

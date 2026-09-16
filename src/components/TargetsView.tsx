@@ -11,6 +11,7 @@ import { calculateKPI2, KPI2Result } from '../utils/kpi2Engine';
 import { getDailyServicingRows } from '../utils/indexedDB';
 import { loadAllWeeklyRows } from '../utils/weeklyStore';
 import { getServicedStatusFromColumn, mergeServicedStatus } from '../utils/servicingStatus';
+import { getActivityRules, isActiveByRule, isServedByRule, extractTxnCounts, type TxnCounts } from '../utils/activityRules';
 import { normalizeMsisdn } from '../utils/msisdn';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
 import { Target, X, ArrowLeft, Loader2, SlidersHorizontal, MoreVertical } from 'lucide-react';
@@ -128,17 +129,34 @@ export default function TargetsView() {
     loadAllWeeklyRows()
       .then(rows => {
         if (!isMounted) return;
-        const map = new Map<string, boolean | null>();
+        const columnServedMap = new Map<string, boolean | null>();
+        const countsMap = new Map<string, TxnCounts>();
         (rows || []).forEach((row: any) => {
           const month = String(row?.reportingMonth || row?.reporting_month || '').trim();
           if (month && period && month !== period) return;
           const key = normalizeMsisdn(row?.MSISDN || row?.msisdn);
           if (!key) return;
-          map.set(key, mergeServicedStatus(map.get(key) ?? null, getServicedStatusFromColumn(row)));
+          columnServedMap.set(key, mergeServicedStatus(columnServedMap.get(key) ?? null, getServicedStatusFromColumn(row)));
+          const rowCounts = extractTxnCounts(row);
+          const existing = countsMap.get(key);
+          countsMap.set(key, existing
+            ? {
+                cashIn: existing.cashIn + rowCounts.cashIn,
+                cashOut: existing.cashOut + rowCounts.cashOut,
+                total: existing.total + rowCounts.total,
+                amount: (existing.amount || 0) + (rowCounts.amount || 0),
+              }
+            : rowCounts);
         });
+        // Served/unserved is the uploaded servicing_status column merged with
+        // the computed amount/transaction rule — a "served" reading from
+        // either source wins.
+        const rules = getActivityRules();
         const resolved = new Map<string, boolean>();
-        map.forEach((v, k) => {
-          if (v !== null) resolved.set(k, v);
+        countsMap.forEach((counts, key) => {
+          const isActive = isActiveByRule(counts, rules);
+          const merged = mergeServicedStatus(columnServedMap.get(key) ?? null, isServedByRule(counts, isActive, rules));
+          if (merged !== null) resolved.set(key, merged);
         });
         setWeeklyServedMap(resolved);
       })

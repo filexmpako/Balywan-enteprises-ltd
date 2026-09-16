@@ -14,14 +14,14 @@
 export const ACTIVITY_RULES_KEY = 'activityRules';
 
 export interface ActivityRules {
-  /** Minimum transaction count for a wakala to be Active in the window. */
+  /** Minimum CI+CO transaction count for a wakala to be Active in the window. Count only — amount plays no part in Active/Inactive. */
   threshold: number;
-  /** Minimum servicing amount for a wakala to be Active in the window. */
+  /** Minimum servicing amount for a wakala to be Served, regardless of Active/Inactive status. */
   amountThreshold: number;
+  /** Minimum transaction count for an Inactive wakala to be Served (Active wakalas are judged on amount only). */
+  servedTxnThreshold: number;
   /** combined = CI + CO counted together; separate = each must reach it. */
   mode: 'combined' | 'separate';
-  /** both = transactions AND amount required; either = one is enough. */
-  requirement: 'both' | 'either';
   /** Evaluation window. Weekly is the specification default. */
   window: 'weekly';
   /** Telco penalty rate applied to bank-served volume at month end. */
@@ -31,8 +31,8 @@ export interface ActivityRules {
 export const DEFAULT_ACTIVITY_RULES: ActivityRules = {
   threshold: 25,
   amountThreshold: 600000,
+  servedTxnThreshold: 6,
   mode: 'combined',
-  requirement: 'both',
   window: 'weekly',
   penaltyRate: 0.05,
 };
@@ -40,6 +40,7 @@ export const DEFAULT_ACTIVITY_RULES: ActivityRules = {
 export function normalizeActivityRules(raw: any): ActivityRules {
   const threshold = Number(raw?.threshold);
   const amountThreshold = Number(raw?.amountThreshold);
+  const servedTxnThreshold = Number(raw?.servedTxnThreshold);
   const penaltyRate = Number(raw?.penaltyRate);
   return {
     threshold: Number.isFinite(threshold) && threshold >= 0 ? threshold : DEFAULT_ACTIVITY_RULES.threshold,
@@ -47,8 +48,11 @@ export function normalizeActivityRules(raw: any): ActivityRules {
       Number.isFinite(amountThreshold) && amountThreshold >= 0
         ? amountThreshold
         : DEFAULT_ACTIVITY_RULES.amountThreshold,
+    servedTxnThreshold:
+      Number.isFinite(servedTxnThreshold) && servedTxnThreshold >= 0
+        ? servedTxnThreshold
+        : DEFAULT_ACTIVITY_RULES.servedTxnThreshold,
     mode: raw?.mode === 'separate' ? 'separate' : 'combined',
-    requirement: raw?.requirement === 'either' ? 'either' : 'both',
     window: 'weekly',
     penaltyRate:
       Number.isFinite(penaltyRate) && penaltyRate >= 0 ? penaltyRate : DEFAULT_ACTIVITY_RULES.penaltyRate,
@@ -136,14 +140,30 @@ export function extractTxnCounts(row: any): TxnCounts {
   return { cashIn: 0, cashOut: 0, total, amount };
 }
 
-/** The single Active/Inactive decision used everywhere. */
+/** The single Active/Inactive decision used everywhere. Transaction count only — no amount component. */
 export function isActiveByRule(counts: TxnCounts, rules: ActivityRules = getActivityRules()): boolean {
-  const meetsAmount = (Number(counts.amount) || 0) >= rules.amountThreshold;
-  const meetsTxns =
-    rules.mode === 'separate'
-      ? counts.cashIn >= rules.threshold && counts.cashOut >= rules.threshold
-      : (counts.cashIn + counts.cashOut > 0 ? counts.cashIn + counts.cashOut : counts.total) >= rules.threshold;
-  return rules.requirement === 'either' ? meetsTxns || meetsAmount : meetsTxns && meetsAmount;
+  return rules.mode === 'separate'
+    ? counts.cashIn >= rules.threshold && counts.cashOut >= rules.threshold
+    : (counts.cashIn + counts.cashOut > 0 ? counts.cashIn + counts.cashOut : counts.total) >= rules.threshold;
+}
+
+/**
+ * The single Served/Unserved decision used everywhere a computed rule
+ * applies (merged with any uploaded servicing_status column via
+ * mergeServicedStatus — a "served" reading from either source wins).
+ * Active wakala: served once servicing value reaches the amount threshold.
+ * Inactive wakala: served once transaction count OR servicing value reaches
+ * its threshold.
+ */
+export function isServedByRule(
+  counts: TxnCounts,
+  isActive: boolean,
+  rules: ActivityRules = getActivityRules()
+): boolean {
+  const amount = Number(counts.amount) || 0;
+  const total = counts.cashIn + counts.cashOut > 0 ? counts.cashIn + counts.cashOut : counts.total;
+  if (isActive) return amount >= rules.amountThreshold;
+  return total >= rules.servedTxnThreshold || amount >= rules.amountThreshold;
 }
 
 /** Month-end telco penalty on the volume the bank served to wakalas. */

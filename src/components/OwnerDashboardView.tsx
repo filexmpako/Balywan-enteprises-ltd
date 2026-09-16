@@ -22,8 +22,8 @@ import { normalizeMsisdn } from '../utils/msisdn';
 import { getOwnerPortfolio } from '../utils/ownerPortfolio';
 import { CLOUD_HYDRATED_EVENT } from '../lib/cloudSyncEvents';
 import { listStoredWeeks, loadWeeklyRows } from '../utils/weeklyStore';
-import { extractTxnCounts, getActivityRules, isActiveByRule } from '../utils/activityRules';
-import { getServicedStatusFromColumn } from '../utils/servicingStatus';
+import { extractTxnCounts, getActivityRules, isActiveByRule, isServedByRule } from '../utils/activityRules';
+import { getServicedStatusFromColumn, mergeServicedStatus } from '../utils/servicingStatus';
 import { ownerWeeklySeries, weekNumberOf, type WeeklyStatsEntry } from '../utils/weeklyKpiEngine';
 import { readWeeklyStatsHistory, refreshWeeklyStatsHistory } from '../utils/weeklyHistory';
 import { getSavedManualOwnerTargets, resolveOwnerTarget } from '../utils/targetResolution';
@@ -160,12 +160,17 @@ export default function OwnerDashboardView() {
       const txns = counts.total || Number(row?.SA_Servicing_Txns) || 0;
       const value = counts.amount || Number(row?.SA_Servicing_Val) || 0;
       const existing = map.get(norm);
-      const served = getServicedStatusFromColumn(row);
+      const rowIsActive = isActiveByRule(counts, rules);
+      // Served/unserved is the uploaded servicing_status column merged with
+      // the computed amount/transaction rule — a "served" reading from
+      // either source wins.
+      const columnServed = getServicedStatusFromColumn(row);
+      const computedServed = isServedByRule(counts, rowIsActive, rules);
       const merged = {
         txns: (existing?.txns || 0) + txns,
         value: (existing?.value || 0) + value,
-        isActive: (existing?.isActive || false) || isActiveByRule(counts, rules),
-        served: existing?.served === true || served === true ? true : (existing?.served ?? served),
+        isActive: (existing?.isActive || false) || rowIsActive,
+        served: mergeServicedStatus(existing?.served ?? null, mergeServicedStatus(columnServed, computedServed)),
       };
       map.set(norm, merged);
     }
@@ -296,7 +301,7 @@ export default function OwnerDashboardView() {
         <MetricCard
           title="KPI 3 · Active Wakalas"
           value={`${activeCount} / ${rows.length}`}
-          subValue={`Rule: ${getActivityRules().threshold} txns & TZS ${formatNumberWithAbbreviation(getActivityRules().amountThreshold)}`}
+          subValue={`Rule: ${getActivityRules().threshold}+ CI+CO txns`}
           icon={Activity}
           variant={rows.length ? (kpi3Tone as any) : 'slate'}
         />
