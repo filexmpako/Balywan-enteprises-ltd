@@ -35,10 +35,33 @@ interface WakalaStatusRow {
  * row can be expanded to show exactly which wakalas were active/inactive
  * and served/unserved that week.
  */
+type DetailFilter = 'all' | 'active' | 'inactive' | 'served' | 'unserved' | 'nostatus';
+
+const FILTER_LABELS: Record<DetailFilter, string> = {
+  all: 'All',
+  active: 'Active',
+  inactive: 'Inactive',
+  served: 'Served',
+  unserved: 'Unserved',
+  nostatus: 'No Status',
+};
+
+function matchesFilter(w: WakalaStatusRow, filter: DetailFilter): boolean {
+  switch (filter) {
+    case 'active': return w.is_active === true;
+    case 'inactive': return w.is_active === false;
+    case 'served': return w.is_served === true;
+    case 'unserved': return w.is_served === false;
+    case 'nostatus': return w.is_served === null || w.is_served === undefined;
+    default: return true;
+  }
+}
+
 export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget, onLatestActivity }: Props) {
   const [history, setHistory] = useState<WeeklyStatsEntry[]>(() => readWeeklyStatsHistory());
   const [expandedWeek, setExpandedWeek] = useState<string | null>(null);
   const [weekDetail, setWeekDetail] = useState<Record<string, WakalaStatusRow[] | 'loading' | 'error'>>({});
+  const [detailFilter, setDetailFilter] = useState<Record<string, DetailFilter>>({});
   const nameMap = useMemo(buildWakalaNameMap, [expandedWeek]);
 
   useEffect(() => {
@@ -83,6 +106,12 @@ export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget, onLates
         console.error('Wakala status detail load failed:', err);
         setWeekDetail(prev => ({ ...prev, [reportingWeek]: 'error' }));
       });
+  };
+
+  const applyFilter = (reportingWeek: string, filter: DetailFilter, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (expandedWeek !== reportingWeek) toggleWeek(reportingWeek);
+    setDetailFilter(prev => ({ ...prev, [reportingWeek]: prev[reportingWeek] === filter ? 'all' : filter }));
   };
 
   if (!ownerId || history.length === 0 || !latest) return null;
@@ -152,10 +181,26 @@ export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget, onLates
                         {row.reportingWeek}
                       </span>
                     </td>
-                    <td className="py-2.5 font-sans text-xs text-brand-text">{row.breakdown?.active ?? 0}</td>
-                    <td className="py-2.5 font-sans text-xs font-bold text-brand-success">{row.breakdown?.served ?? 0}</td>
-                    <td className="py-2.5 font-sans text-xs font-bold text-brand-error">{row.breakdown?.notServed ?? 0}</td>
-                    <td className="py-2.5 font-sans text-xs text-brand-text-variant">{row.breakdown?.noStatus ?? 0}</td>
+                    <td className="py-2.5 font-sans text-xs text-brand-text">
+                      <button type="button" onClick={(e) => applyFilter(row.reportingWeek, 'active', e)} className="cursor-pointer hover:underline" title="Show only Active wakalas">
+                        {row.breakdown?.active ?? 0}
+                      </button>
+                    </td>
+                    <td className="py-2.5 font-sans text-xs font-bold text-brand-success">
+                      <button type="button" onClick={(e) => applyFilter(row.reportingWeek, 'served', e)} className="cursor-pointer hover:underline" title="Show only Served wakalas">
+                        {row.breakdown?.served ?? 0}
+                      </button>
+                    </td>
+                    <td className="py-2.5 font-sans text-xs font-bold text-brand-error">
+                      <button type="button" onClick={(e) => applyFilter(row.reportingWeek, 'unserved', e)} className="cursor-pointer hover:underline" title="Show only Unserved wakalas">
+                        {row.breakdown?.notServed ?? 0}
+                      </button>
+                    </td>
+                    <td className="py-2.5 font-sans text-xs text-brand-text-variant">
+                      <button type="button" onClick={(e) => applyFilter(row.reportingWeek, 'nostatus', e)} className="cursor-pointer hover:underline" title="Show only wakalas with no status">
+                        {row.breakdown?.noStatus ?? 0}
+                      </button>
+                    </td>
                     <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation(row.breakdown?.value ?? 0)}</td>
                     <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation(row.cumulativeValue)}</td>
                     <td className="py-2.5 font-sans text-xs font-bold text-brand-primary">
@@ -182,8 +227,30 @@ export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget, onLates
                               {Array.isArray(detail) && detail.length === 0 && (
                                 <p className="py-3 text-center font-sans text-xs text-brand-text-variant">No wakala-level detail recorded for this week.</p>
                               )}
-                              {Array.isArray(detail) && detail.length > 0 && (
+                              {Array.isArray(detail) && detail.length > 0 && (() => {
+                                const activeFilter = detailFilter[row.reportingWeek] || 'all';
+                                const filteredDetail = detail.filter(w => matchesFilter(w, activeFilter));
+                                return (
                                 <div className="overflow-x-auto">
+                                  <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                                    {(['all', 'active', 'inactive', 'served', 'unserved', 'nostatus'] as DetailFilter[]).map(f => (
+                                      <button
+                                        key={f}
+                                        type="button"
+                                        onClick={(e) => applyFilter(row.reportingWeek, f, e)}
+                                        className={`rounded-full px-2.5 py-1 font-sans text-[10px] font-bold cursor-pointer transition-colors ${
+                                          activeFilter === f
+                                            ? 'bg-brand-primary text-white'
+                                            : 'bg-brand-gray-hover text-brand-text-variant hover:text-brand-text'
+                                        }`}
+                                      >
+                                        {FILTER_LABELS[f]}
+                                      </button>
+                                    ))}
+                                    <span className="font-sans text-[10px] text-brand-text-variant ml-1">
+                                      Showing {filteredDetail.length} of {detail.length}
+                                    </span>
+                                  </div>
                                   <table className="w-full min-w-[620px] text-left">
                                     <thead>
                                       <tr>
@@ -195,7 +262,14 @@ export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget, onLates
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {detail.map(w => {
+                                      {filteredDetail.length === 0 && (
+                                        <tr>
+                                          <td colSpan={7} className="py-3 text-center font-sans text-xs text-brand-text-variant">
+                                            No wakalas match this filter.
+                                          </td>
+                                        </tr>
+                                      )}
+                                      {filteredDetail.map(w => {
                                         const norm = normalizeMsisdn(w.msisdn) || w.msisdn;
                                         const name = nameMap.get(norm) || w.msisdn;
                                         return (
@@ -227,7 +301,8 @@ export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget, onLates
                                     </tbody>
                                   </table>
                                 </div>
-                              )}
+                                );
+                              })()}
                             </div>
                           </motion.div>
                         </td>

@@ -272,7 +272,7 @@ function AppContent() {
               onNavigate={() => {
                 /* owners navigate via the dashboard */
               }}
-              selectedOwnerName={user.name}
+              selectedOwnerName={user.ownerId || user.name}
               isStandaloneAgent={true}
               onLogout={logout}
             />
