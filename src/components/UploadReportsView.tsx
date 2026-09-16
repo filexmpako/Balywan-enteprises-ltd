@@ -510,9 +510,17 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
       }
 
       const currentDate = formatDate(new Date());
+      // Resolve owners the same way Base Wakala List Upload does, so a priority
+      // wakala only inherits an owner that the rest of the app can also resolve
+      // (getOwnerPortfolio / calculateKPI2 match by ownerId or exact ownerName —
+      // a raw, unresolved name from the Base Wakala Index would silently match
+      // nothing and the wakala would never surface on any owner's profile or
+      // the Targets page).
+      const masterOwners = getMasterOwners();
       const parsed: PriorityWakala[] = [];
       const seenKeys = new Set<string>();
       let rejectedCount = 0;
+      let unresolvedOwnerCount = 0;
 
       for (const row of rows) {
         const rawCode = codeColKey ? String(row[codeColKey] ?? '').trim() : '';
@@ -538,11 +546,13 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
           const key = normMsisdn || matchedBase.wakalaCode || rawCode;
           if (key && !seenKeys.has(key)) {
             seenKeys.add(key);
+            const ownerMatch = resolveOwnerMatch(matchedBase.ownerName, masterOwners, 'Priority Wakala List Upload');
+            if (ownerMatch.status !== 'Matched') unresolvedOwnerCount++;
             parsed.push({
               msisdn: normMsisdn,
               wakalaCode: matchedBase.wakalaCode || (matchedBase as any).code || rawCode || undefined,
-              ownerId: matchedBase.ownerId || undefined,
-              ownerName: matchedBase.ownerName || undefined,
+              ownerId: ownerMatch.matchedOwner?.id || matchedBase.ownerId || undefined,
+              ownerName: ownerMatch.matchedOwner?.name || matchedBase.ownerName || undefined,
               period: priorityWakalaPeriod,
               importedAt: currentDate
             });
@@ -561,7 +571,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
         return;
       }
 
-      alert(`Parsed ${parsed.length} Priority Wakalas successfully.${rejectedCount > 0 ? ` ${rejectedCount} rows were rejected because they could not be matched to an existing Base Wakala record.` : ''}`);
+      alert(`Parsed ${parsed.length} Priority Wakalas successfully.${rejectedCount > 0 ? ` ${rejectedCount} rows were rejected because they could not be matched to an existing Base Wakala record.` : ''}${unresolvedOwnerCount > 0 ? ` ${unresolvedOwnerCount} matched a Wakala but its owner name could not be resolved to a registered Owner — those will save but won't appear under any owner's profile or the Targets page until the owner name is fixed in the Base Wakala Index (see the "Resolved Owner" column below).` : ''}`);
       setStagedPriorityWakalas(parsed);
     } catch (err) {
       console.error("Error parsing Priority Wakala file:", err);
@@ -2633,7 +2643,15 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
                                 <td className="px-4 py-2 font-mono text-slate-400">{idx + 1}</td>
                                 <td className="px-4 py-2 font-mono text-slate-700 font-bold">{p.wakalaCode || '—'}</td>
                                 <td className="px-4 py-2 font-mono font-bold text-brand-text">{p.msisdn}</td>
-                                <td className="px-4 py-2 font-medium text-slate-800">{p.ownerName ? `${p.ownerName}${p.ownerId ? ` (${p.ownerId})` : ''}` : '—'}</td>
+                                <td className="px-4 py-2 font-medium text-slate-800">
+                                  {p.ownerId ? (
+                                    <span>{p.ownerName} <span className="text-slate-400 font-mono text-[10px]">({p.ownerId})</span></span>
+                                  ) : p.ownerName ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200" title="This owner name could not be matched to a registered Owner — this row will save but won't appear on any owner's profile or the Targets page.">
+                                      {p.ownerName} — Unmatched
+                                    </span>
+                                  ) : '—'}
+                                </td>
                                 <td className="px-4 py-2 font-mono text-slate-600">{p.period}</td>
                                 <td className="px-4 py-2 text-slate-500 font-mono text-[11px]">{p.importedAt}</td>
                               </tr>
