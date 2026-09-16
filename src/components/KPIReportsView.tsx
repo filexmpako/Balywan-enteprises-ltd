@@ -18,6 +18,7 @@ import {
 import { motion } from 'motion/react';
 import PageHeaderBanner from './PageHeaderBanner';
 import { getServicingRows } from '../utils/indexedDB';
+import { formatShortDate } from '../utils/dateFormat';
 import { refreshWeeklyStatsHistory } from '../utils/weeklyHistory';
 import { getServicedStatusFromColumn, mergeServicedStatus } from '../utils/servicingStatus';
 import type { WeeklyStatsEntry } from '../utils/weeklyKpiEngine';
@@ -1139,7 +1140,7 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
                             <div className="mt-3 text-[10px] text-brand-text-variant border-t border-slate-100 pt-2 flex justify-between items-center">
                               <span>Uploaded:</span>
                               <span className="font-bold text-brand-text">
-                                {new Date(point.uploadDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                {formatShortDate(point.uploadDate)}
                               </span>
                             </div>
                           )}

@@ -17,6 +17,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { Owner, WakalaEntry } from '../types';
+import { formatDateTime, formatShortDate } from '../utils/dateFormat';
 import { savePhoto, getPhotosByOwner, deletePhoto, WorkPhoto } from '../utils/db';
 
 interface WorkLocationSectionProps {
@@ -718,13 +719,7 @@ export default function WorkLocationSection({
               {localOwner.workLocation?.capturedAt && (
                 <div className="font-sans text-[10px] text-brand-text-variant bg-slate-50 border border-slate-100 p-2.5 rounded-lg">
                   <span className="font-bold block uppercase text-[8px] text-brand-text-variant/80">Last Updated</span>
-                  {new Date(localOwner.workLocation.capturedAt).toLocaleString('en-GB', {
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
+                  {formatDateTime(localOwner.workLocation.capturedAt)}
                 </div>
               )}
             </div>
@@ -1027,10 +1022,7 @@ export default function WorkLocationSection({
 
                 <div className="absolute bottom-0 inset-x-0 bg-black/40 p-1.5 text-center">
                   <span className="font-mono text-[8px] text-white/90">
-                    {new Date(photo.uploadedAt).toLocaleDateString('en-GB', {
-                      day: 'numeric',
-                      month: 'short'
-                    })}
+                    {formatShortDate(photo.uploadedAt)}
                   </span>
                 </div>
               </div>

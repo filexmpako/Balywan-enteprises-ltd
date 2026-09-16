@@ -3,6 +3,7 @@ import { getClassifiedRowsCached } from './classificationCache';
 import { getDailyServicingRows, saveDailyServicingData, getServicingRows } from './indexedDB';
 import { normalizeMsisdn } from './msisdn';
 import { resolveOwnerMatch } from './ownerMatch';
+import { formatDateTime } from './dateFormat';
 
 export interface Till {
   id: string;
@@ -1045,7 +1046,7 @@ export async function recalculateAllPerformances(providedRows?: any[]): Promise<
       avgValue,
       penalty,
       iopVolume,
-      lastSyncDate: new Date().toLocaleDateString('en-US') + ", " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      lastSyncDate: formatDateTime(new Date()),
       status: 'Active'
     };
   });

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FloatRequest, FloatReturnEntry, Personnel, LoanRecord } from '../types';
+import { formatDate } from '../utils/dateFormat';
 import {
   getFloatRequestsForOwner, createFloatRequest, confirmFloatRequest,
   submitFloatReturn, completeFloatRequest, rejectFloatReturn, getPendingDays,
@@ -361,7 +362,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                 <div className="flex items-start gap-2 text-xs font-bold text-amber-800 bg-amber-50 p-3 rounded-xl border border-amber-200">
                   <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
                   <div>
-                    Previous return was rejected on {new Date(confirmedRequest.rejectedAt).toLocaleDateString()}{confirmedRequest.rejectedByManagerName ? ` by ${confirmedRequest.rejectedByManagerName}` : ''} — please resubmit correct amount.
+                    Previous return was rejected on {formatDate(confirmedRequest.rejectedAt)}{confirmedRequest.rejectedByManagerName ? ` by ${confirmedRequest.rejectedByManagerName}` : ''} — please resubmit correct amount.
                   </div>
                 </div>
               )}
@@ -469,10 +470,10 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                       </div>
 
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-600">
-                        <span>Requested: <strong className="text-slate-700">{new Date(r.requestedAt).toLocaleDateString()}</strong></span>
+                        <span>Requested: <strong className="text-slate-700">{formatDate(r.requestedAt)}</strong></span>
                         <span>•</span>
                         {r.returnedAt ? (
-                          <span>Returned: <strong className="text-slate-700">{new Date(r.returnedAt).toLocaleDateString()}</strong></span>
+                          <span>Returned: <strong className="text-slate-700">{formatDate(r.returnedAt)}</strong></span>
                         ) : (
                           <span className="text-amber-600 font-medium">Returned: Not yet returned</span>
                         )}
@@ -534,7 +535,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                       {r.rejectedAt && (
                         <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200">
                           <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600" />
-                          <span>Previous return was rejected on {new Date(r.rejectedAt).toLocaleDateString()}{r.rejectedByManagerName ? ` by ${r.rejectedByManagerName}` : ''} — please resubmit</span>
+                          <span>Previous return was rejected on {formatDate(r.rejectedAt)}{r.rejectedByManagerName ? ` by ${r.rejectedByManagerName}` : ''} — please resubmit</span>
                         </div>
                       )}
 
@@ -759,7 +760,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                           </div>
 
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-600">
-                            <span>Created: <strong className="text-slate-700">{new Date(loan.createdAt).toLocaleDateString()}</strong></span>
+                            <span>Created: <strong className="text-slate-700">{formatDate(loan.createdAt)}</strong></span>
                             <span>•</span>
                             <span>Approved by: <strong className="text-slate-700">{loan.approvedByManagerName || 'System Admin'}</strong></span>
                           </div>
@@ -784,7 +785,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                                 </p>
                               )}
                               <p className="text-[10px] text-amber-700 font-medium">
-                                Submitted {loan.repaymentSubmittedAt ? new Date(loan.repaymentSubmittedAt).toLocaleDateString() : ''} — awaiting Float Manager to confirm and mark paid.
+                                Submitted {loan.repaymentSubmittedAt ? formatDate(loan.repaymentSubmittedAt) : ''} — awaiting Float Manager to confirm and mark paid.
                               </p>
                             </div>
                           )}

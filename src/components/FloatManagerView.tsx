@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { useCompany } from './CompanyContext';
 import { FloatRequest, Owner, Personnel, LoanRecord } from '../types';
+import { formatDate } from '../utils/dateFormat';
 import { 
   getFloatRequests, 
   confirmFloatRequest, 
@@ -646,10 +647,10 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
 
                             {/* 3. Two dates on one line: Requested & Returned (+ pending age / resolution duration) */}
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-brand-text-variant">
-                              <span>Requested: <strong className="text-brand-text">{new Date(r.requestedAt).toLocaleDateString()}</strong></span>
+                              <span>Requested: <strong className="text-brand-text">{formatDate(r.requestedAt)}</strong></span>
                               <span>•</span>
                               {r.returnedAt ? (
-                                <span>Returned: <strong className="text-brand-text">{new Date(r.returnedAt).toLocaleDateString()}</strong></span>
+                                <span>Returned: <strong className="text-brand-text">{formatDate(r.returnedAt)}</strong></span>
                               ) : (
                                 <span className="text-amber-600 font-medium">Returned: Not yet returned</span>
                               )}
@@ -778,7 +779,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                         {r.rejectedAt && (
                           <div className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-800 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">
                             <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600" />
-                            Previous return rejected on {new Date(r.rejectedAt).toLocaleDateString()}{r.rejectedByManagerName ? ` by ${r.rejectedByManagerName}` : ''}
+                            Previous return rejected on {formatDate(r.rejectedAt)}{r.rejectedByManagerName ? ` by ${r.rejectedByManagerName}` : ''}
                           </div>
                         )}
 
@@ -907,7 +908,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                         return (
                           <tr key={loan.id} className="hover:bg-slate-50/50 transition-colors">
                             <td className="px-6 py-4 whitespace-nowrap text-slate-600">
-                              {new Date(loan.createdAt).toLocaleDateString()}
+                              {formatDate(loan.createdAt)}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <p className="font-bold text-brand-text">{getOwnerName(loan.ownerId)}</p>
@@ -983,7 +984,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                               )}
                               {status === 'Paid' && (
                                 <span className="text-[11px] text-slate-400 font-medium">
-                                  Settled {loan.paidAt ? new Date(loan.paidAt).toLocaleDateString() : ''}
+                                  Settled {loan.paidAt ? formatDate(loan.paidAt) : ''}
                                 </span>
                               )}
                             </td>

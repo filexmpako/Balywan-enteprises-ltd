@@ -6,6 +6,7 @@ import {
   BaseWakalaReconciliationStage 
 } from '../types/baseWakala';
 import { Owner } from '../types';
+import { formatDate, formatDateTime } from '../utils/dateFormat';
 import { normalizeMsisdn, isValidTanzanianMsisdn } from '../utils/msisdn';
 import { resolveOwnerMatch, addNameAlias } from '../utils/ownerMatch';
 import { useCompany } from './CompanyContext';
@@ -190,9 +191,7 @@ export default function BaseWakalaIndexView() {
 
   // Persist entities back to localStorage whenever updated
   const saveEntities = (updatedList: BaseWakalaEntity[]) => {
-    const nowStr = new Date().toLocaleDateString('en-US', { 
-      month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' 
-    });
+    const nowStr = formatDateTime(new Date());
     localStorage.setItem('baseWakalaIndex', JSON.stringify(updatedList));
     localStorage.setItem('baseWakalaIndex_lastUpdated', nowStr);
     setEntities(updatedList);
@@ -889,13 +888,13 @@ export default function BaseWakalaIndexView() {
                               <div>
                                 <span className="font-bold text-slate-500 block text-[10px] uppercase">Created At</span>
                                 <span className="text-slate-800 font-medium">
-                                  {entity.createdAt ? new Date(entity.createdAt).toLocaleDateString() : '—'}
+                                  {entity.createdAt ? formatDate(entity.createdAt) : '—'}
                                 </span>
                               </div>
                               <div>
                                 <span className="font-bold text-slate-500 block text-[10px] uppercase">Last Updated</span>
                                 <span className="text-slate-800 font-medium">
-                                  {entity.updatedAt ? new Date(entity.updatedAt).toLocaleDateString() : '—'}
+                                  {entity.updatedAt ? formatDate(entity.updatedAt) : '—'}
                                 </span>
                               </div>
                             </div>

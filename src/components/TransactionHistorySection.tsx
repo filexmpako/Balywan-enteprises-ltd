@@ -11,6 +11,7 @@ import {
 import { Owner } from '../types';
 
 import { getDailyServicingRows } from '../utils/indexedDB';
+import { formatDate as formatDateUtil, formatDateTime as formatDateTimeUtil } from '../utils/dateFormat';
 import { resolveOwnerMatch } from '../utils/ownerMatch';
 
 interface TransactionHistorySectionProps {
@@ -141,13 +142,8 @@ export default function TransactionHistorySection({ localOwner, tillsList, owner
     const oldest = sortedTransactions[sortedTransactions.length - 1];
 
     const formatDate = (dateStr: string) => {
-      try {
-        const d = new Date(dateStr);
-        if (isNaN(d.getTime())) return '';
-        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-      } catch (e) {
-        return '';
-      }
+      const formatted = formatDateUtil(dateStr);
+      return formatted === '—' ? '' : formatted;
     };
 
     const newestDate = newest['Servicing Date'] || newest['date'] || '';
@@ -223,20 +219,9 @@ export default function TransactionHistorySection({ localOwner, tillsList, owner
   }, [filteredTxns]);
 
   const formatDateTime = (tsStr: string, dateStr: string) => {
-    try {
-      const d = tsStr ? new Date(tsStr) : (dateStr ? new Date(dateStr) : null);
-      if (!d || isNaN(d.getTime())) return tsStr || dateStr || '—';
-      return d.toLocaleString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      });
-    } catch (e) {
-      return tsStr || dateStr || '—';
-    }
+    const d = tsStr ? new Date(tsStr) : (dateStr ? new Date(dateStr) : null);
+    if (!d || isNaN(d.getTime())) return tsStr || dateStr || '—';
+    return formatDateTimeUtil(d);
   };
 
   return (

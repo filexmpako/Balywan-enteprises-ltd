@@ -19,6 +19,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useReportingPeriod } from './ReportingPeriodContext';
 import PeriodSelector from './PeriodSelector';
 import { formatPeriodDisplay } from '../utils/periodUtils';
+import { formatShortDate } from '../utils/dateFormat';
 import { getPhoto, savePhoto, deletePhoto } from '../utils/db';
 import { useAuth } from './AuthContext';
 
@@ -45,7 +46,7 @@ function getRelativeTime(dateInput: string | Date): string {
   const diffDays = Math.floor(diffHours / 24);
   if (diffDays === 1) return 'Yesterday';
   if (diffDays < 7) return `${diffDays}d ago`;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return formatShortDate(d);
 }
 
 interface HeaderProps {

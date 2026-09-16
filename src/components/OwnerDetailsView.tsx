@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { ViewType, Owner, WakalaEntry, BaseWakala, PriorityWakala } from '../types';
 import { normalizeMsisdn } from '../utils/msisdn';
+import { formatDate } from '../utils/dateFormat';
 import { buildOwnerWakalaMap } from '../utils/wakalaMapping';
 import { getOwnerPortfolio } from '../utils/ownerPortfolio';
 import { ownersList } from '../data';
@@ -1516,7 +1517,7 @@ function WakalaManagementSection({
       // Excel dates are days since Dec 30, 1899
       const date = new Date((Number(val) - 25569) * 86400 * 1000);
       if (!isNaN(date.getTime())) {
-        return date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+        return formatDate(date);
       }
     }
     return val;
@@ -1553,7 +1554,7 @@ function WakalaManagementSection({
       siteId: baseSiteId.trim(),
       code: baseCode.trim(),
       alternateNumber: baseAltNumber.trim(),
-      dateAdded: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+      dateAdded: formatDate(new Date()),
       location: locationObj
     };
 
@@ -1595,7 +1596,7 @@ function WakalaManagementSection({
       name: iopName.trim(),
       msisdn: cleanNum,
       region: iopRegion.trim(),
-      dateAdded: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+      dateAdded: formatDate(new Date()),
       location: (iopLocation as WakalaEntry['location']) || undefined
     };
 

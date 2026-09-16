@@ -2,6 +2,7 @@ import React, { useState, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { ViewType, AuditReport, Owner, KPIMetric, SATill, BaseWakala, PriorityWakala } from '../types';
 import { normalizeMsisdn } from '../utils/msisdn';
+import { formatDate, formatDateTime, formatMonthYear } from '../utils/dateFormat';
 import { resolveOwnerMatch, normalizeOwnerName, addNameAlias } from '../utils/ownerMatch';
 import { resolveOwnerFromTillMsisdn } from '../utils/tillOwnerResolution';
 import UnresolvedNamesReview, { UnresolvedNameItem } from './UnresolvedNamesReview';
@@ -257,7 +258,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
       const parsed: { tillMsisdn: string; ownerName?: string; registeredAt: string; isUpdate?: boolean }[] = [];
       const seenMsisdnInFile = new Set<string>();
 
-      const currentDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const currentDate = formatDate(new Date());
 
       for (const row of rows) {
         let rawMsisdn = '';
@@ -333,7 +334,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
     }
 
     const updatedArray = Array.from(registryMap.values());
-    const nowStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const nowStr = formatDateTime(new Date());
 
     localStorage.setItem('saTillRegistry', JSON.stringify(updatedArray));
     localStorage.setItem('saTillRegistry_lastUpdated', nowStr);
@@ -360,7 +361,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
   const handleDeleteSaTill = (msisdnToDelete: string) => {
     const normDelete = normalizeMsisdn(msisdnToDelete);
     const filtered = saTills.filter(t => normalizeMsisdn(t.tillMsisdn) !== normDelete);
-    const nowStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const nowStr = formatDateTime(new Date());
 
     localStorage.setItem('saTillRegistry', JSON.stringify(filtered));
     localStorage.setItem('saTillRegistry_lastUpdated', nowStr);
@@ -557,7 +558,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
     }
 
     const updatedArray = Array.from(wakalaMap.values());
-    const nowStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const nowStr = formatDateTime(new Date());
 
     localStorage.setItem('baseWakalaIndex', JSON.stringify(updatedArray));
     localStorage.setItem('baseWakalaIndex_lastUpdated', nowStr);
@@ -664,7 +665,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
         }
       }
 
-      const currentDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const currentDate = formatDate(new Date());
       const parsed: PriorityWakala[] = [];
       const seenKeys = new Set<string>();
       let rejectedCount = 0;
@@ -733,7 +734,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
     const otherPeriods = priorityWakalas.filter(p => p.period !== priorityWakalaPeriod);
     const updatedArray = [...otherPeriods, ...stagedPriorityWakalas];
 
-    const nowStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const nowStr = formatDateTime(new Date());
 
     localStorage.setItem('priorityWakalaList', JSON.stringify(updatedArray));
     localStorage.setItem('priorityWakalaList_lastUpdated', nowStr);
@@ -1866,7 +1867,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
             fileName: selectedFile?.name || "Daily_MGT_Report.csv",
             type: "Daily MGT",
             uploadedBy: lastUploadedBy,
-            date: new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }) + " " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+            date: formatDateTime(new Date()),
             size: `${((selectedFile?.size || 45210) / 1024).toFixed(1)} KB`,
             status: 'Success',
             uploadId: ingestResult.uploadId ?? null
@@ -1908,7 +1909,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
           name: rec.name,
           masterAgentId: rec.masterAgentId,
           region: rec.region,
-          memberSince: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+          memberSince: formatMonthYear(new Date()),
           avatar: getAvatarUrl(rec.name),
           wakalas: 1, // default starting terminal
           portfolioSize: 'TZS 0.0M',
@@ -1990,7 +1991,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
           fileName: selectedFile?.name || "Daily_MGT_Report.csv",
           type: "Owners List",
           uploadedBy: lastUploadedBy,
-          date: new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }) + " " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+          date: formatDateTime(new Date()),
           size: `${((selectedFile?.size || 45210) / 1024).toFixed(1)} KB`,
           status: 'Success'
         };
@@ -2083,7 +2084,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
             const archivePayload: any = {
               reportingWeek: uploadWeek,
               reportingMonth: uploadMonth, // associated target month
-              uploadDate: new Date().toLocaleDateString('en-US') + ", " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+              uploadDate: formatDateTime(new Date()),
               uploadedBy: lastUploadedBy,
               fileName: selectedFile?.name || "Weekly_KPI_Workbook.xlsx",
               status: "Success",
@@ -2109,7 +2110,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
             fileName: selectedFile?.name || "Weekly_KPI_Workbook.xlsx",
             type: "Weekly KPI",
             uploadedBy: lastUploadedBy,
-            date: new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }) + " " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+            date: formatDateTime(new Date()),
             size: selectedFile?.size !== undefined ? `${(selectedFile.size / 1024).toFixed(1)} KB` : "Unknown",
             status: 'Success',
             reportingWeek: uploadWeek,
@@ -2144,7 +2145,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
             const duplicateIdx = savedHistory.findIndex((h: any) => h.reportingMonth === activeMonth);
             const archivePayload: any = {
               reportingMonth: activeMonth,
-              uploadDate: new Date().toLocaleDateString('en-US') + ", " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+              uploadDate: formatDateTime(new Date()),
               uploadedBy: lastUploadedBy,
               fileName: selectedFile?.name || "KPI_Workbook_Upload.xlsx",
               status: "Success",
@@ -2170,7 +2171,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
             fileName: selectedFile?.name || "KPI_Workbook_Upload.xlsx",
             type: "KPI Report",
             uploadedBy: lastUploadedBy,
-            date: new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }) + " " + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }),
+            date: formatDateTime(new Date()),
             size: selectedFile?.size !== undefined ? `${(selectedFile.size / 1024).toFixed(1)} KB` : "Unknown",
             status: 'Success',
             reportingMonth: activeMonth

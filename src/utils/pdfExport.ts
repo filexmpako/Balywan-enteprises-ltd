@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import { KPIMetric } from '../types';
 import { abbreviateNumberString } from './numberFormat';
 import { getCompanyName } from './company';
+import { formatDateTime } from './dateFormat';
 
 /**
  * Helper to identify if a KPI name is monetary
@@ -202,14 +203,7 @@ export function exportKPIReportToPDF({
   doc.setFontSize(8);
   doc.setTextColor(100, 116, 139); // slate-500
   const rightAlignX = pageWidth - margin;
-  const dateStr = `Generated: ${new Date().toLocaleString('en-US', { 
-    month: 'short', 
-    day: 'numeric', 
-    year: 'numeric', 
-    hour: '2-digit', 
-    minute: '2-digit', 
-    hour12: true 
-  })}`;
+  const dateStr = `Generated: ${formatDateTime(new Date())}`;
   doc.text(dateStr, rightAlignX - 62, 18);
   doc.text('Scope: Enterprise Intelligence', rightAlignX - 44, 23);
   doc.text('Status: Verified Executive Audit', rightAlignX - 47, 28);
@@ -616,14 +610,7 @@ export function exportKPIAnalysisToPDF({
   doc.setFontSize(8);
   doc.setTextColor(100, 116, 139); // slate-500
   const rightAlignX = pageWidth - margin;
-  const dateStr = `Exported: ${new Date().toLocaleString('en-US', { 
-    month: 'short', 
-    day: 'numeric', 
-    year: 'numeric', 
-    hour: '2-digit', 
-    minute: '2-digit', 
-    hour12: true 
-  })}`;
+  const dateStr = `Exported: ${formatDateTime(new Date())}`;
   doc.text(dateStr, rightAlignX - 62, 18);
   doc.text(`Active Month: ${activeMonth}`, rightAlignX - 44, 23);
   doc.text('Notice: Proprietary Thresholds (Company Rule)', rightAlignX - 68, 28);
