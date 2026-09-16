@@ -158,7 +158,7 @@ export async function appendAuditLog(
 ) {
   const { error } = await supabase.from('audit_logs').insert({
     user_id: entry.userId ?? null,
-    actor_name: entry.actorName ?? null,
+    actor_name: entry.actorName ?? 'System',
     action_taken: entry.action,
     impacted_entity: entry.entity ?? null,
     meta_details: entry.details ?? null,
