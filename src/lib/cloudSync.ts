@@ -9,6 +9,8 @@ import { COLLECTION_KEYS, DOCUMENT_KEYS } from './hasidadi/collections';
 import { fetchWorkspace, saveCollection, saveDocument } from './hasidadi.functions';
 
 const QUEUE_KEY = 'hasidadi_sync_queue';
+/** Fired on window once the offline cache has been refreshed from Postgres. */
+export const CLOUD_HYDRATED_EVENT = 'hasidadi:cloud-hydrated';
 const SYNCED = new Set<string>([...COLLECTION_KEYS, ...(DOCUMENT_KEYS as readonly string[])]);
 
 let installed = false;
@@ -124,6 +126,8 @@ export async function hydrateFromCloud(): Promise<boolean> {
       if (value !== null && value !== undefined) localStorage.setItem(key, JSON.stringify(value));
     }
     localStorage.setItem('hasidadi_last_sync', new Date().toISOString());
+    // Views that read the cache at mount need to re-read once server data lands.
+    window.dispatchEvent(new Event(CLOUD_HYDRATED_EVENT));
     return true;
   } catch (err) {
     console.warn('[cloudSync] hydration failed, continuing from offline cache', err);
