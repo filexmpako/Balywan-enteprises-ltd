@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { ViewType, Owner, WakalaEntry, BaseWakala, PriorityWakala } from '../types';
 import { normalizeMsisdn } from '../utils/msisdn';
 import { buildOwnerWakalaMap } from '../utils/wakalaMapping';
+import { getOwnerPortfolio } from '../utils/ownerPortfolio';
 import { ownersList } from '../data';
 import WorkLocationSection from './WorkLocationSection';
 import TransactionHistorySection from './TransactionHistorySection';
@@ -563,52 +564,19 @@ export default function OwnerDetailsView({
     };
   }, [ownerRows, localOwner]);
 
+  // Same resolver the owner dashboard and Targets page use, so the Priority /
+  // Normal split matches everywhere.
   const { priorityWakalaCount, normalWakalaCount, hasPriorityData } = useMemo(() => {
     if (!localOwner) {
       return { priorityWakalaCount: 0, normalWakalaCount: 0, hasPriorityData: false };
     }
-
-    const rawPriority = localStorage.getItem('priorityWakalaList');
-    if (!rawPriority) {
-      return { priorityWakalaCount: 0, normalWakalaCount: 0, hasPriorityData: false };
-    }
-
-    try {
-      const list: PriorityWakala[] = JSON.parse(rawPriority);
-      if (!Array.isArray(list) || list.length === 0) {
-        return { priorityWakalaCount: 0, normalWakalaCount: 0, hasPriorityData: false };
-      }
-
-      const priorityMsisdnSet = new Set<string>();
-      list.forEach(p => {
-        const norm = normalizeMsisdn(p.msisdn);
-        if (norm) priorityMsisdnSet.add(norm);
-      });
-
-      if (priorityMsisdnSet.size === 0) {
-        return { priorityWakalaCount: 0, normalWakalaCount: 0, hasPriorityData: false };
-      }
-
-      const ownerWakalas = [...(localOwner.baseWakalas || []), ...(localOwner.iopWakalas || [])];
-      let pCount = 0;
-
-      ownerWakalas.forEach(w => {
-        const norm1 = normalizeMsisdn(w.msisdn);
-        const norm2 = normalizeMsisdn((w as any).altMsisdn || (w as any).alternateNumber);
-        if ((norm1 && priorityMsisdnSet.has(norm1)) || (norm2 && priorityMsisdnSet.has(norm2))) {
-          pCount++;
-        }
-      });
-
-      return {
-        priorityWakalaCount: pCount,
-        normalWakalaCount: Math.max(0, ownerWakalas.length - pCount),
-        hasPriorityData: true
-      };
-    } catch (e) {
-      return { priorityWakalaCount: 0, normalWakalaCount: 0, hasPriorityData: false };
-    }
-  }, [localOwner]);
+    const portfolio = getOwnerPortfolio(localOwner.id, currentPeriod, localOwner.name);
+    return {
+      priorityWakalaCount: portfolio.priorityCount,
+      normalWakalaCount: portfolio.normalCount,
+      hasPriorityData: portfolio.hasPriorityData,
+    };
+  }, [localOwner, currentPeriod]);
 
   const [manualTargetsList] = useState<ManualOwnerTarget[]>(() => getSavedManualOwnerTargets());
 

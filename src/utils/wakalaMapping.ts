@@ -39,7 +39,10 @@ export function buildOwnerWakalaMap(baseWakalas: BaseWakala[], owners: Owner[]):
   for (const record of baseWakalas) {
     // An owner ID carried by the wakala file wins — it survives name spelling
     // differences and works when the owner roster is uploaded later.
-    const directOwner = record.ownerId ? ownersById.get(String(record.ownerId).trim().toLowerCase()) : undefined;
+    // `sourceOwnerId` is kept when a Base Wakala file arrived before its owner
+    // roster, so the link resolves once the owner exists.
+    const carriedOwnerId = record.ownerId || (record as any).sourceOwnerId;
+    const directOwner = carriedOwnerId ? ownersById.get(String(carriedOwnerId).trim().toLowerCase()) : undefined;
     const result = directOwner
       ? { status: 'Matched' as const, matchedOwner: directOwner }
       : resolveOwnerMatch(record.ownerName, owners);

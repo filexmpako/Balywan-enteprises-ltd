@@ -18,9 +18,9 @@ import OwnerWeeklyCheckpoints from './OwnerWeeklyCheckpoints';
 import WakalaIssuesPanel from './WakalaIssuesPanel';
 import { useAuth } from './AuthContext';
 import { useReportingPeriod } from './ReportingPeriodContext';
-import { kvJson } from '../lib/hasidadi/kv';
 import { normalizeMsisdn } from '../utils/msisdn';
-import { buildOwnerWakalaMap } from '../utils/wakalaMapping';
+import { getOwnerPortfolio } from '../utils/ownerPortfolio';
+import { CLOUD_HYDRATED_EVENT } from '../lib/cloudSync';
 import { listStoredWeeks, loadWeeklyRows } from '../utils/weeklyStore';
 import { extractTxnCounts, getActivityRules, isActiveByRule } from '../utils/activityRules';
 import { getServicedStatusFromColumn } from '../utils/servicingStatus';
@@ -29,7 +29,7 @@ import { readWeeklyStatsHistory, refreshWeeklyStatsHistory } from '../utils/week
 import { getSavedManualOwnerTargets, resolveOwnerTarget } from '../utils/targetResolution';
 import { formatNumberWithAbbreviation } from '../utils/numberFormat';
 import { listWakalaIssues, type WakalaIssue } from '../lib/issues.functions';
-import type { BaseWakala, Owner, WakalaEntry } from '../types';
+
 
 type Tab = 'overview' | 'wakalas' | 'reports';
 
@@ -44,6 +44,7 @@ interface WakalaRow {
   isActive: boolean;
   served: boolean | null;
   hasWeeklyData: boolean;
+  isPriority: boolean;
 }
 
 /**
@@ -69,35 +70,19 @@ export default function OwnerDashboardView() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'served' | 'unserved'>('all');
 
-  // --- Owner portfolio (Base Wakala Index + manually assigned tills) ---
-  const wakalas = useMemo<Array<WakalaEntry & { kind: 'Base' | 'IOP' }>>(() => {
-    if (!ownerId) return [];
-    const owners = kvJson<Owner[]>('ownersList', []);
-    const base = kvJson<BaseWakala[]>('baseWakalaIndex', []);
-    const mapping = buildOwnerWakalaMap(base, owners);
-    const mine: Array<WakalaEntry & { kind: 'Base' | 'IOP' }> = (mapping.byOwnerId.get(ownerId) || []).map(w => ({
-      ...w,
-      kind: 'Base' as 'Base' | 'IOP',
-    }));
+  // --- Owner portfolio (shared resolver: Base Wakala Index + tills + priority list) ---
+  const [portfolioVersion, setPortfolioVersion] = useState(0);
+  useEffect(() => {
+    const bump = () => setPortfolioVersion(v => v + 1);
+    window.addEventListener(CLOUD_HYDRATED_EVENT, bump);
+    return () => window.removeEventListener(CLOUD_HYDRATED_EVENT, bump);
+  }, []);
 
-    const seen = new Set(mine.map(w => normalizeMsisdn(w.msisdn)));
-    const tills = kvJson<any[]>('tillsList', []).filter(t => String(t?.ownerId || '') === ownerId);
-    for (const till of tills) {
-      const msisdn = String(till.transactionTill || till.msisdn || '').trim();
-      const norm = normalizeMsisdn(msisdn);
-      if (!msisdn || seen.has(norm)) continue;
-      seen.add(norm);
-      mine.push({
-        id: `till-${msisdn}`,
-        name: till.tillName || till.name || msisdn,
-        msisdn,
-        region: till.location || till.region || 'Unknown',
-        dateAdded: till.dateAdded || '',
-        kind: String(till.kind || '').toLowerCase() === 'iop' ? 'IOP' : 'Base',
-      });
-    }
-    return mine;
-  }, [ownerId]);
+  const portfolio = useMemo(
+    () => (ownerId ? getOwnerPortfolio(ownerId, currentPeriod, ownerName) : null),
+    [ownerId, currentPeriod, ownerName, portfolioVersion],
+  );
+  const wakalas = portfolio?.wakalas ?? [];
 
   // --- Weekly data for the selected week ---
   useEffect(() => {
@@ -202,6 +187,7 @@ export default function OwnerDashboardView() {
           isActive: weekly?.isActive ?? false,
           served: weekly?.served ?? null,
           hasWeeklyData: Boolean(weekly),
+          isPriority: w.isPriority,
         };
       }),
     [wakalas, weeklyByMsisdn],
@@ -371,7 +357,7 @@ export default function OwnerDashboardView() {
             <MetricCard
               title="My Wakalas"
               value={rows.length}
-              subValue={`${rows.filter(r => r.kind === 'IOP').length} IOP · ${rows.filter(r => r.kind === 'Base').length} Base`}
+              subValue={`${portfolio?.priorityCount ?? 0} Priority · ${portfolio?.normalCount ?? 0} Normal`}
               icon={Users}
               variant="purple"
               onClick={() => setTab('wakalas')}
@@ -464,7 +450,14 @@ export default function OwnerDashboardView() {
                     <tr key={r.msisdn} className="border-b border-brand-gray-border/50">
                       <td className="py-2.5 font-sans text-xs font-bold text-brand-text">{r.name}</td>
                       <td className="py-2.5 font-mono text-xs text-brand-text-variant">{r.msisdn}</td>
-                      <td className="py-2.5 font-sans text-xs text-brand-text-variant">{r.kind}</td>
+                      <td className="py-2.5 font-sans text-xs text-brand-text-variant">
+                        {r.kind}
+                        {r.isPriority && (
+                          <span className="ml-1.5 rounded-full bg-amber-50 px-2 py-0.5 font-sans text-[9px] font-bold text-amber-700">
+                            PRIORITY
+                          </span>
+                        )}
+                      </td>
                       <td className="py-2.5 font-sans text-xs text-brand-text-variant">{r.region}</td>
                       <td className="py-2.5">
                         <span
