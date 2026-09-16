@@ -43,6 +43,10 @@ export async function purgeUpload(supabase: DB, input: PurgeInput): Promise<Purg
     auditRecords: 0,
     weeklyRows: 0,
     monthlyRowsDeleted: 0,
+    monthlyServicingRows: 0,
+    statusHistoryRows: 0,
+    documentsPruned: [],
+    targetDates: [],
     transactionRefs: [],
   };
 
@@ -60,6 +64,19 @@ export async function purgeUpload(supabase: DB, input: PurgeInput): Promise<Purg
   }
 
   result.uploadIds = Array.from(uploadIds);
+
+  // Capture the archive metadata before the rows are deleted: the derived
+  // caches (daily summaries, KPI histories) are keyed by these periods.
+  for (const batch of chunk(result.uploadIds, 50)) {
+    const { data, error } = await supabase
+      .from('file_upload_archives')
+      .select('target_date, reporting_period')
+      .in('upload_id', batch);
+    if (error) throw new Error(`file_upload_archives metadata: ${error.message}`);
+    for (const row of data ?? []) {
+      if (row.target_date) result.targetDates.push(String(row.target_date));
+    }
+  }
 
   // 2. Remove derived transaction + classification rows for those uploads.
   for (const batch of chunk(result.uploadIds, 50)) {
