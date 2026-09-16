@@ -875,7 +875,7 @@ export default function OwnerDetailsView({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <MetricCard
               title="Wakala"
-              value={allWakalas.length}
+              value={priorityWakalaCount + normalWakalaCount}
               subValue={
                 hasPriorityData
                   ? `${priorityWakalaCount} Priority · ${normalWakalaCount} Normal`
