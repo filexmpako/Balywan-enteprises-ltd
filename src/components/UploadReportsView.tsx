@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
-import { ViewType, AuditReport, Owner, KPIMetric, SATill, BaseWakala, PriorityWakala } from '../types';
+import { ViewType, AuditReport, Owner, KPIMetric, BaseWakala, PriorityWakala } from '../types';
 import { normalizeMsisdn } from '../utils/msisdn';
 import { formatDate, formatDateTime, formatMonthYear } from '../utils/dateFormat';
 import { resolveOwnerMatch, normalizeOwnerName, addNameAlias } from '../utils/ownerMatch';
@@ -20,7 +20,6 @@ import {
   RefreshCw,
   Clock,
   ArrowRight,
-  Search,
   Database,
   Target,
   FileSpreadsheet,
@@ -50,7 +49,6 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   BarChart3,
-  Building2,
   MapPin,
   Users,
   Flag
@@ -74,7 +72,7 @@ import KPIHistoryArchive from './kpi-engine/KPIHistoryArchive';
 import KPIComparisonStudio from './kpi-engine/KPIComparisonStudio';
 
 export interface ReportTypeConfig {
-  id: 'till_sync' | 'mgt' | 'kpi' | 'weekly_kpi' | 'sa_till_registry' | 'base_wakala_list' | 'priority_wakala';
+  id: 'till_sync' | 'mgt' | 'kpi' | 'weekly_kpi' | 'base_wakala_list' | 'priority_wakala';
   title: string;
   description: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -104,12 +102,6 @@ export const REPORT_TYPES: ReportTypeConfig[] = [
     title: 'Weekly KPI Checkpoint',
     description: 'Upload weekly performance files to track progress toward Monthly Targets. Stored separately to preserve monthly data integrity.',
     icon: BarChart3,
-  },
-  {
-    id: 'sa_till_registry',
-    title: 'SA Till Registry',
-    description: 'Upload Master Super Agent (SA) Till MSISDN registry to identify parent account transfers and prevent misclassification.',
-    icon: Building2,
   },
   {
     id: 'base_wakala_list',
@@ -164,7 +156,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
   }, []);
 
   // Report selection state
-  const [reportType, setReportType] = useState<'kpi' | 'weekly_kpi' | 'mgt' | 'till_sync' | 'sa_till_registry' | 'base_wakala_list' | 'priority_wakala' | null>(null);
+  const [reportType, setReportType] = useState<'kpi' | 'weekly_kpi' | 'mgt' | 'till_sync' | 'base_wakala_list' | 'priority_wakala' | null>(null);
   const [uploadMonth, setUploadMonth] = useState('July 2026');
   const [uploadWeek, setUploadWeek] = useState('Week 2 (July 8 - July 14, 2026)');
 
@@ -182,23 +174,6 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
-
-  // SA Till Registry persistence
-  const [saTills, setSaTills] = useState<SATill[]>(() => {
-    try {
-      const stored = localStorage.getItem('saTillRegistry');
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  const [saTillLastUpdated, setSaTillLastUpdated] = useState<string | null>(() => {
-    return localStorage.getItem('saTillRegistry_lastUpdated') || null;
-  });
-
-  const [stagedSaTills, setStagedSaTills] = useState<{ tillMsisdn: string; ownerName?: string; registeredAt: string; isUpdate?: boolean }[] | null>(null);
-  const [saTillSearchQuery, setSaTillSearchQuery] = useState('');
 
   // Base Wakala Index persistence & state
   const [baseWakalas, setBaseWakalas] = useState<BaseWakala[]>(() => {
@@ -237,137 +212,6 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
       return null;
     }
   });
-
-  const parseSaTillFile = (data: any) => {
-    try {
-      const workbook = XLSX.read(data, { type: 'array' });
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-      const rows: any[] = XLSX.utils.sheet_to_json(worksheet);
-
-      if (!rows || rows.length === 0) {
-        alert("No data rows found in the uploaded file.");
-        return;
-      }
-
-      const msisdnKeys = ['sa till', 'satill', 'till msisdn', 'tillmsisdn', 'msisdn', 'sa_till_msisdn', 'till', 'phone', 'mobile', 'sa_till', 'branch_msisdn', 'sa msisdn'];
-      const ownerKeys = ['owner', 'owner name', 'ownername', 'name', 'account name', 'registered owner', 'sa owner', 'sa_owner'];
-
-      const existingMsisdnSet = new Set(saTills.map(t => normalizeMsisdn(t.tillMsisdn)));
-
-      const parsed: { tillMsisdn: string; ownerName?: string; registeredAt: string; isUpdate?: boolean }[] = [];
-      const seenMsisdnInFile = new Set<string>();
-
-      const currentDate = formatDate(new Date());
-
-      for (const row of rows) {
-        let rawMsisdn = '';
-        let rawOwner = '';
-
-        for (const k of Object.keys(row)) {
-          const cleanK = k.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-          if (!rawMsisdn) {
-            for (const target of msisdnKeys) {
-              if (cleanK === target.replace(/[^a-z0-9]/g, '') || cleanK.includes('msisdn') || cleanK.includes('satill')) {
-                rawMsisdn = String(row[k] || '').trim();
-                break;
-              }
-            }
-          }
-          if (!rawOwner) {
-            for (const target of ownerKeys) {
-              if (cleanK === target.replace(/[^a-z0-9]/g, '')) {
-                rawOwner = String(row[k] || '').trim();
-                break;
-              }
-            }
-          }
-        }
-
-        if (!rawMsisdn) {
-          for (const k of Object.keys(row)) {
-            if (/till|msisdn|phone|mobile|account/i.test(k)) {
-              rawMsisdn = String(row[k] || '').trim();
-              break;
-            }
-          }
-        }
-
-        const normalized = normalizeMsisdn(rawMsisdn);
-        if (normalized && !seenMsisdnInFile.has(normalized)) {
-          seenMsisdnInFile.add(normalized);
-          parsed.push({
-            tillMsisdn: normalized,
-            ownerName: rawOwner || 'SA Owner',
-            registeredAt: currentDate,
-            isUpdate: existingMsisdnSet.has(normalized)
-          });
-        }
-      }
-
-      if (parsed.length === 0) {
-        alert("No valid SA Till MSISDN numbers could be extracted from the file. Please check column headers (e.g. 'SA Till', 'Till MSISDN', 'Owner Name').");
-        return;
-      }
-
-      setStagedSaTills(parsed);
-    } catch (err) {
-      console.error("Error parsing SA Till Registry file:", err);
-      alert("Could not parse file. Please provide a valid CSV or Excel file.");
-    }
-  };
-
-  const handleConfirmSaTillCommit = () => {
-    if (!stagedSaTills) return;
-
-    const registryMap = new Map<string, SATill>();
-    for (const item of saTills) {
-      registryMap.set(normalizeMsisdn(item.tillMsisdn), item);
-    }
-
-    for (const item of stagedSaTills) {
-      registryMap.set(normalizeMsisdn(item.tillMsisdn), {
-        tillMsisdn: item.tillMsisdn,
-        ownerName: item.ownerName,
-        registeredAt: item.registeredAt
-      });
-    }
-
-    const updatedArray = Array.from(registryMap.values());
-    const nowStr = formatDateTime(new Date());
-
-    localStorage.setItem('saTillRegistry', JSON.stringify(updatedArray));
-    localStorage.setItem('saTillRegistry_lastUpdated', nowStr);
-    invalidateClassificationCache();
-
-    setSaTills(updatedArray);
-    setSaTillLastUpdated(nowStr);
-    setStagedSaTills(null);
-    setSelectedFile(null);
-
-    if (onAddAuditReport) {
-      onAddAuditReport({
-        id: `sa_till_${Date.now()}`,
-        fileName: 'SA_Till_Registry.xlsx',
-        type: 'SA Till Registry',
-        uploadedBy: 'System Admin',
-        date: nowStr,
-        size: `${stagedSaTills.length} records`,
-        status: 'Success',
-      });
-    }
-  };
-
-  const handleDeleteSaTill = (msisdnToDelete: string) => {
-    const normDelete = normalizeMsisdn(msisdnToDelete);
-    const filtered = saTills.filter(t => normalizeMsisdn(t.tillMsisdn) !== normDelete);
-    const nowStr = formatDateTime(new Date());
-
-    localStorage.setItem('saTillRegistry', JSON.stringify(filtered));
-    localStorage.setItem('saTillRegistry_lastUpdated', nowStr);
-    setSaTills(filtered);
-    setSaTillLastUpdated(nowStr);
-  };
 
   // Base Wakala File Parsing Engine
   const parseBaseWakalaFile = (data: any) => {
@@ -1661,22 +1505,6 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
         }, 100);
       };
       reader.readAsArrayBuffer(file);
-    } else if (reportType === 'sa_till_registry') {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const data = e.target?.result;
-        let progress = 0;
-        const interval = setInterval(() => {
-          progress += 25;
-          setUploadProgress(progress);
-          if (progress >= 100) {
-            clearInterval(interval);
-            setIsUploading(false);
-            parseSaTillFile(data);
-          }
-        }, 80);
-      };
-      reader.readAsArrayBuffer(file);
     } else if (reportType === 'base_wakala_list') {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -2533,17 +2361,15 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
                     ) : (
                       <>
                         <h4 className="text-base font-black text-brand-text font-sans">
-                          {reportType === 'mgt' 
-                            ? 'Drag and drop your Daily MGT report file here' 
+                          {reportType === 'mgt'
+                            ? 'Drag and drop your Daily MGT report file here'
                             : reportType === 'weekly_kpi'
                               ? 'Drag and drop your Weekly KPI Checkpoint report file here'
-                              : reportType === 'sa_till_registry'
-                                ? 'Drag and drop your SA Till Registry file here'
-                                : reportType === 'base_wakala_list'
-                                  ? 'Drag and drop your Base Wakala List file here'
-                                  : reportType === 'priority_wakala'
-                                    ? 'Drag and drop your Priority Wakala List file here'
-                                    : 'Drag and drop your Monthly KPI report file here'}
+                              : reportType === 'base_wakala_list'
+                                ? 'Drag and drop your Base Wakala List file here'
+                                : reportType === 'priority_wakala'
+                                  ? 'Drag and drop your Priority Wakala List file here'
+                                  : 'Drag and drop your Monthly KPI report file here'}
                         </h4>
                         <p className="text-xs text-brand-text-variant mt-1.5 font-sans">
                           Supported formats: .CSV, .XLSX, .XLS, .XLX (Maximum file size: 50 MB)
@@ -2581,90 +2407,6 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
                         </div>
                       </div>
                     </div>
-                  )}
-
-                  {/* SA TILL REGISTRY STAGING PREVIEW CARD */}
-                  {stagedSaTills && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="bg-brand-card p-6 rounded-2xl border border-brand-primary/30 shadow-md space-y-4"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-brand-gray-border pb-4">
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                            <Building2 className="h-5 w-5" />
-                          </div>
-                          <div>
-                            <h3 className="text-base font-black text-brand-text">SA Till Registry Staging Preview</h3>
-                            <p className="text-xs text-brand-text-variant">
-                              Verify parsed Master SA Tills before committing to local database.
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
-                            Total: {stagedSaTills.length}
-                          </span>
-                          <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-                            New: {stagedSaTills.filter(t => !t.isUpdate).length}
-                          </span>
-                          <span className="text-xs font-bold text-blue-700 bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
-                            Updates: {stagedSaTills.filter(t => t.isUpdate).length}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Table preview */}
-                      <div className="max-h-60 overflow-y-auto rounded-xl border border-slate-200">
-                        <table className="w-full text-left text-xs font-sans">
-                          <thead className="bg-slate-50 text-slate-700 font-extrabold sticky top-0 border-b border-slate-200">
-                            <tr>
-                              <th className="px-4 py-2.5">Till MSISDN</th>
-                              <th className="px-4 py-2.5">Owner / Account Name</th>
-                              <th className="px-4 py-2.5">Ingestion Status</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 bg-white">
-                            {stagedSaTills.map((till, idx) => (
-                              <tr key={idx} className="hover:bg-slate-50">
-                                <td className="px-4 py-2 font-mono font-bold text-brand-text">{till.tillMsisdn}</td>
-                                <td className="px-4 py-2 font-semibold text-slate-700">{till.ownerName || '—'}</td>
-                                <td className="px-4 py-2">
-                                  {till.isUpdate ? (
-                                    <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
-                                      Existing Update
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                                      New Registration
-                                    </span>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      <div className="flex justify-end gap-3 pt-2">
-                        <button
-                          type="button"
-                          onClick={() => { setStagedSaTills(null); setSelectedFile(null); }}
-                          className="rounded-xl border border-slate-300 bg-white hover:bg-slate-50 px-4 py-2.5 text-xs font-bold text-slate-700 transition-all cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleConfirmSaTillCommit}
-                          className="inline-flex items-center gap-2 rounded-xl bg-brand-primary hover:bg-brand-primary-light text-white px-5 py-2.5 text-xs font-bold shadow-md transition-all cursor-pointer"
-                        >
-                          <CheckCircle className="h-4 w-4" />
-                          Confirm & Commit to SA Till Registry
-                        </button>
-                      </div>
-                    </motion.div>
                   )}
 
                   {/* BASE WAKALA LIST STAGING PREVIEW CARD */}
@@ -2947,95 +2689,6 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
             )}
           </motion.div>
         )}
-
-        {/* REGISTERED SA TILLS MANAGEMENT SECTION — standalone home, outside the upload flow */}
-        <motion.div
-          key="sa-till-registry-section"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-brand-card p-6 rounded-2xl border border-brand-gray-border shadow-xs space-y-4"
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-brand-gray-border pb-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <Building2 className="h-5 w-5 text-brand-primary" />
-                <h3 className="text-base font-black text-brand-text">Registered SA Tills</h3>
-                <span className="bg-brand-primary/10 text-brand-primary text-xs font-bold px-2.5 py-0.5 rounded-full">
-                  {saTills.length} Accounts
-                </span>
-              </div>
-              {saTillLastUpdated ? (
-                <p className="text-xs text-brand-text-variant flex items-center gap-1.5">
-                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-                  <span>SA Till Registry last updated: <strong className="text-brand-text">{saTillLastUpdated}</strong></span>
-                </p>
-              ) : (
-                <p className="text-xs text-brand-text-variant">
-                  No SA Till Registry records uploaded yet. Upload a registry spreadsheet above to populate parent account mappings.
-                </p>
-              )}
-            </div>
-
-            {saTills.length > 0 && (
-              <div className="relative w-full sm:w-64">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                <input
-                  type="text"
-                  value={saTillSearchQuery}
-                  onChange={(e) => setSaTillSearchQuery(e.target.value)}
-                  placeholder="Search SA MSISDN or Owner..."
-                  className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-brand-primary"
-                />
-              </div>
-            )}
-          </div>
-
-          {saTills.length > 0 ? (
-            <div className="overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full text-left text-xs font-sans">
-                <thead className="bg-slate-50 text-slate-700 font-extrabold border-b border-slate-200">
-                  <tr>
-                    <th className="px-4 py-3">Till MSISDN</th>
-                    <th className="px-4 py-3">Owner / Organization</th>
-                    <th className="px-4 py-3">Registered At</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 bg-white">
-                  {saTills
-                    .filter(t => {
-                      if (!saTillSearchQuery.trim()) return true;
-                      const q = saTillSearchQuery.toLowerCase();
-                      return t.tillMsisdn.includes(q) || (t.ownerName && t.ownerName.toLowerCase().includes(q));
-                    })
-                    .map((till) => (
-                      <tr key={till.tillMsisdn} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-4 py-2.5 font-mono font-bold text-slate-900">{till.tillMsisdn}</td>
-                        <td className="px-4 py-2.5 font-semibold text-slate-700">{till.ownerName || 'SA Owner'}</td>
-                        <td className="px-4 py-2.5 text-slate-500 font-mono text-[11px]">{till.registeredAt}</td>
-                        <td className="px-4 py-2.5 text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteSaTill(till.tillMsisdn)}
-                            title="Remove SA Till Entry"
-                            className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="text-center py-8 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
-              <Building2 className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-              <p className="text-xs font-bold text-slate-500">Registry is currently empty</p>
-              <p className="text-[11px] text-slate-400 mt-0.5">Select "SA Till Registry" from the dropdown above to upload your MSISDN sheet.</p>
-            </div>
-          )}
-        </motion.div>
 
         {/* 2. RECONCILIATION PREVIEW SCREEN (THE GOLD STANDARD OF SPRINT 2) */}
         {importState === 'reconciliation' && (
