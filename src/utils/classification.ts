@@ -59,6 +59,17 @@ export function classifyServicingRows(
     if (altKey) baseWakalaByMsisdn.set(altKey, w);
   });
 
+  // Transaction Till -> assigned owner lookup map, built once (mirrors
+  // saTillByMsisdn/baseWakalaByMsisdn above) instead of a per-row
+  // Array.find() scan, which was O(rows x tillsList.length) and could
+  // block the main thread once Daily MGT history and the till list both
+  // grow over months of uploads.
+  const tillOwnerByMsisdn = new Map<string, string>();
+  tillsList.forEach(t => {
+    const key = normalizeMsisdn(t.transactionTill);
+    if (key) tillOwnerByMsisdn.set(key, t.assignedOwner);
+  });
+
   const auditRecords: ClassificationAuditRecord[] = [];
 
   const classified = rows.map((row, idx): ClassifiedRow => {
@@ -74,9 +85,7 @@ export function classifyServicingRows(
     const amount = Math.abs(Number(row['Amount'] ?? row['Volume (TZS)'] ?? row['volume'] ?? row['servicedVolume'] ?? 0));
 
     // Resolve servicing till owner
-    const servicingTillOwnerName = tillsList.find(
-      t => normalizeMsisdn(t.transactionTill) === branchMsisdn
-    )?.assignedOwner || row['Owner Name'] || row['ownerName'] || null;
+    const servicingTillOwnerName = (branchMsisdn ? tillOwnerByMsisdn.get(branchMsisdn) : undefined) || row['Owner Name'] || row['ownerName'] || null;
 
     const servicingOwnerMatch = servicingTillOwnerName
       ? resolveOwnerMatch(servicingTillOwnerName, owners as any, 'Classification Engine')
