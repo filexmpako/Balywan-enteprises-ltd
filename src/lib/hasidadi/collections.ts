@@ -83,7 +83,9 @@ export const COLLECTIONS: CollectionMapper[] = [
       if (blank(row.msisdn)) row.msisdn = String(t.transactionTill ?? row.wakala_id ?? '').trim();
       if (blank(row.name)) row.name = t.tillName || t.name || row.msisdn || 'Unassigned Till';
       if (blank(row.region)) row.region = t.location || t.region || 'Unknown';
-      if (blank(row.kind)) row.kind = t.kind || 'till';
+      // The wakalas table only accepts 'base' or 'iop'.
+      const kind = String(row.kind ?? t.kind ?? '').trim().toLowerCase();
+      row.kind = kind === 'iop' ? 'iop' : 'base';
     },
   }),
   define({
