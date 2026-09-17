@@ -79,7 +79,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
 
   const pendingRequest = requests.find(r => r.status === 'Pending');
   const confirmedRequest = requests.find(r => r.status === 'Confirmed');
-  const hasActiveRequest = requests.some(r => r.status !== 'Completed');
+  const hasActiveRequest = requests.some(r => r.status !== 'Completed' && r.status !== 'Rejected');
   const unpaidLoans = loans.filter(l => l.status !== 'Paid');
 
   const handleSubmitRequest = () => {
@@ -162,13 +162,14 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
   };
 
   const handleFinalizeConfirm = (asReturn: boolean) => {
-    if (!activeConfirmRequestId || !confirmManagerId) return;
+    if (!activeConfirmRequestId) return;
     const manager = managers.find(m => m.id === confirmManagerId);
-    if (!manager) return;
+    const mId = manager ? manager.id : (currentUser?.username || 'admin');
+    const mName = manager ? manager.name : (currentUser?.name || 'System Admin');
     if (asReturn) {
-      completeFloatRequest(activeConfirmRequestId, manager.id, manager.name);
+      completeFloatRequest(activeConfirmRequestId, mId, mName);
     } else {
-      confirmFloatRequest(activeConfirmRequestId, manager.id, manager.name);
+      confirmFloatRequest(activeConfirmRequestId, mId, mName);
     }
     setActiveConfirmRequestId(null);
     setConfirmManagerId('');
@@ -214,6 +215,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
 
   const statusBadge = (r: FloatRequest) => {
     if (r.loanId) return <span className="text-[10px] font-extrabold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full border border-indigo-200">Loan Created</span>;
+    if (r.status === 'Rejected') return <span className="text-[10px] font-extrabold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">Rejected</span>;
     if (r.status === 'Completed') return <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">Completed</span>;
     if (r.status === 'Returned') {
       const mismatch = getTotalReturned(r) !== r.requestedAmount;
@@ -541,6 +543,18 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                         </div>
                       )}
 
+                      {r.status === 'Rejected' && r.requestRejectedAt && (
+                        <div className="space-y-1 text-[11px] font-bold text-rose-800 bg-rose-50 p-2 rounded-lg border border-rose-200">
+                          <div className="flex items-center gap-1.5">
+                            <XCircle className="h-3.5 w-3.5 shrink-0 text-rose-600" />
+                            <span>Request denied on {formatDate(r.requestRejectedAt)}{r.requestRejectedByManagerName ? ` by ${r.requestRejectedByManagerName}` : ''}</span>
+                          </div>
+                          {r.requestRejectionReason && (
+                            <p className="italic font-normal text-rose-700">"{r.requestRejectionReason}"</p>
+                          )}
+                        </div>
+                      )}
+
                       {r.confirmedByManagerName && (
                         <p className="text-[11px] text-slate-500 font-medium">Confirmed by Manager: <strong className="text-slate-700">{r.confirmedByManagerName}</strong></p>
                       )}
@@ -553,12 +567,11 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                               onChange={e => setConfirmManagerId(e.target.value)}
                               className="text-[11px] rounded-lg border border-slate-300 px-2 py-1 flex-1 font-bold"
                             >
-                              <option value="">Select Manager...</option>
+                              <option value="">{currentUser?.name || 'Me (Admin)'}</option>
                               {managers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                             </select>
                             <button
                               onClick={() => handleFinalizeConfirm(false)}
-                              disabled={!confirmManagerId}
                               className="text-[11px] font-bold text-white bg-brand-primary disabled:opacity-40 px-3 py-1 rounded-lg cursor-pointer transition-all"
                             >
                               Confirm
@@ -588,12 +601,11 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                               onChange={e => setConfirmManagerId(e.target.value)}
                               className="text-[11px] rounded-lg border border-slate-300 px-2 py-1 flex-1 font-bold"
                             >
-                              <option value="">Select Manager...</option>
+                              <option value="">{currentUser?.name || 'Me (Admin)'}</option>
                               {managers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                             </select>
                             <button
                               onClick={() => handleFinalizeConfirm(true)}
-                              disabled={!confirmManagerId}
                               className="text-[11px] font-bold text-white bg-emerald-600 disabled:opacity-40 px-3 py-1 rounded-lg cursor-pointer transition-all"
                             >
                               Complete
@@ -623,19 +635,20 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                               onChange={e => setConfirmManagerId(e.target.value)}
                               className="text-[11px] rounded-lg border border-slate-300 px-2 py-1 flex-1 font-bold min-w-[140px]"
                             >
-                              <option value="">Select Manager...</option>
+                              <option value="">{currentUser?.name || 'Me (Admin)'}</option>
                               {managers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                             </select>
                             {getTotalReturned(r) < r.requestedAmount && r.shortfallReason && (
                               <button
                                 onClick={() => {
-                                  if (!confirmManagerId) return;
-                                  approveLoanForShortfall(r.id, confirmManagerId, managers.find(m => m.id === confirmManagerId)?.name || 'Manager');
+                                  const manager = managers.find(m => m.id === confirmManagerId);
+                                  const mId = manager ? manager.id : (currentUser?.username || 'admin');
+                                  const mName = manager ? manager.name : (currentUser?.name || 'System Admin');
+                                  approveLoanForShortfall(r.id, mId, mName);
                                   setActiveConfirmRequestId(null);
                                   setConfirmManagerId('');
                                   refresh();
                                 }}
-                                disabled={!confirmManagerId}
                                 className="text-[11px] font-bold text-white bg-indigo-600 disabled:opacity-40 px-3 py-1 rounded-lg cursor-pointer transition-all"
                               >
                                 Agree — Create Loan
@@ -643,13 +656,11 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                             )}
                             <button
                               onClick={() => {
-                                if (!confirmManagerId) return;
                                 const manager = managers.find(m => m.id === confirmManagerId);
-                                if (manager) {
-                                  setConfirmRejectTarget({ request: r, managerId: manager.id, managerName: manager.name });
-                                }
+                                const mId = manager ? manager.id : (currentUser?.username || 'admin');
+                                const mName = manager ? manager.name : (currentUser?.name || 'System Admin');
+                                setConfirmRejectTarget({ request: r, managerId: mId, managerName: mName });
                               }}
-                              disabled={!confirmManagerId}
                               className="text-[11px] font-bold text-white bg-rose-600 disabled:opacity-40 px-3 py-1 rounded-lg cursor-pointer transition-all"
                             >
                               Reject Return
@@ -789,6 +800,16 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                               <p className="text-[10px] text-amber-700 font-medium">
                                 Submitted {loan.repaymentSubmittedAt ? formatDate(loan.repaymentSubmittedAt) : ''} — awaiting Float Manager to confirm and mark paid.
                               </p>
+                            </div>
+                          )}
+
+                          {!isSubmitted && loan.repaymentRejectedAt && (
+                            <div className="flex items-center gap-1.5 text-[11px] font-bold text-rose-800 bg-rose-50 p-2 rounded-lg border border-rose-200">
+                              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-600" />
+                              <span>
+                                Previous repayment was rejected on {formatDate(loan.repaymentRejectedAt)}
+                                {loan.repaymentRejectedByManagerName ? ` by ${loan.repaymentRejectedByManagerName}` : ''} — please resubmit
+                              </span>
                             </div>
                           )}
                         </div>

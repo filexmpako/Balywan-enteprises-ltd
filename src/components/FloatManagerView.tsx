@@ -3,14 +3,16 @@ import { useAuth } from './AuthContext';
 import { useCompany } from './CompanyContext';
 import { FloatRequest, Owner, Personnel, LoanRecord } from '../types';
 import { formatDate } from '../utils/dateFormat';
-import { 
-  getFloatRequests, 
-  confirmFloatRequest, 
-  completeFloatRequest, 
+import {
+  getFloatRequests,
+  confirmFloatRequest,
+  completeFloatRequest,
   rejectFloatReturn,
+  rejectFloatRequest,
   approveLoanForShortfall,
   getLoanRecords,
   markLoanPaid,
+  rejectLoanRepayment,
   getPendingDays,
   getResolutionDays,
   getStatusBadgeInfo,
@@ -58,7 +60,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
   const [selectedManagerId, setSelectedManagerId] = useState<string>('');
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'All' | 'Pending' | 'Confirmed' | 'Returned' | 'Completed'>('All');
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Pending' | 'Confirmed' | 'Returned' | 'Completed' | 'Rejected'>('All');
   
   // Date filter state (YYYY-MM-DD)
   const [startDate, setStartDate] = useState<string>('');
@@ -67,8 +69,12 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
   // Image modal state
   const [previewPhoto, setPreviewPhoto] = useState<string | null>(null);
 
-  // Reject confirmation modal state
+  // Reject confirmation modal state (rejecting a submitted return)
   const [confirmRejectTarget, setConfirmRejectTarget] = useState<FloatRequest | null>(null);
+
+  // Reject confirmation modal state (denying a still-Pending request outright)
+  const [confirmDenyTarget, setConfirmDenyTarget] = useState<FloatRequest | null>(null);
+  const [denyReasonInput, setDenyReasonInput] = useState('');
 
   // Load data
   const loadData = () => {
@@ -193,14 +199,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
     const ownerName = getOwnerName(r.ownerId).toLowerCase();
     const matchesSearch = ownerName.includes(searchTerm.toLowerCase()) || r.ownerId.toLowerCase().includes(searchTerm.toLowerCase());
 
-    let matchesStatus: boolean;
-    if (statusFilter === 'All') {
-      matchesStatus = true;
-    } else if (statusFilter === 'Returned') {
-      matchesStatus = !!(r.returnEntries && r.returnEntries.length > 0);
-    } else {
-      matchesStatus = r.status === statusFilter;
-    }
+    const matchesStatus = statusFilter === 'All' || r.status === statusFilter;
 
     return matchesSearch && matchesStatus;
   });
@@ -237,6 +236,32 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
 
   const handleReject = (r: FloatRequest) => {
     setConfirmRejectTarget(r);
+  };
+
+  const handleDenyRequest = (r: FloatRequest) => {
+    setDenyReasonInput('');
+    setConfirmDenyTarget(r);
+  };
+
+  const handleConfirmDenyRequest = () => {
+    if (!confirmDenyTarget) return;
+    const manager = personnelList.find(p => p.id === selectedManagerId);
+    const mId = manager ? manager.id : (user?.email || 'float_manager');
+    const mName = manager ? manager.name : (user?.name || 'Float Manager');
+
+    rejectFloatRequest(confirmDenyTarget.id, mId, mName, denyReasonInput);
+    setConfirmDenyTarget(null);
+    setDenyReasonInput('');
+    loadData();
+  };
+
+  const handleRejectRepayment = (loan: LoanRecord) => {
+    const manager = personnelList.find(p => p.id === selectedManagerId);
+    const mId = manager ? manager.id : (user?.email || 'float_manager');
+    const mName = manager ? manager.name : (user?.name || 'Float Manager');
+
+    rejectLoanRepayment(loan.id, mId, mName);
+    loadData();
   };
 
   const handleApproveLoan = (r: FloatRequest) => {
@@ -469,7 +494,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
 
                   {/* Status Filter */}
                   <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-                    {(['All', 'Pending', 'Confirmed', 'Returned', 'Completed'] as const).map((st) => (
+                    {(['All', 'Pending', 'Confirmed', 'Returned', 'Completed', 'Rejected'] as const).map((st) => (
                       <button
                         key={st}
                         onClick={() => setStatusFilter(st)}
@@ -708,13 +733,23 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                             {/* Action Buttons & Loan Created tag */}
                             <div className="flex flex-wrap items-center justify-start md:justify-end gap-2 mt-0.5">
                               {!readOnly && r.status === 'Pending' && (
-                                <button
-                                  onClick={() => handleConfirm(r)}
-                                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-colors cursor-pointer"
-                                >
-                                  <Check className="h-4 w-4" />
-                                  Confirm Request
-                                </button>
+                                <>
+                                  <button
+                                    onClick={() => handleConfirm(r)}
+                                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-colors cursor-pointer"
+                                  >
+                                    <Check className="h-4 w-4" />
+                                    Confirm Request
+                                  </button>
+                                  <button
+                                    onClick={() => handleDenyRequest(r)}
+                                    title="Deny this float request outright"
+                                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300 transition-colors cursor-pointer shadow-xs"
+                                  >
+                                    <XCircle className="h-4 w-4 text-rose-600" />
+                                    Reject Request
+                                  </button>
+                                </>
                               )}
 
                               {r.status === 'Returned' && !r.loanId && (
@@ -765,6 +800,18 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                           <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 text-xs">
                             <p className="font-bold text-indigo-900 mb-0.5">Owner's Reason for Shortfall:</p>
                             <p className="text-indigo-800 italic">"{r.shortfallReason}"</p>
+                          </div>
+                        )}
+
+                        {/* Secondary Alert Rows: Request Denied Banner */}
+                        {r.status === 'Rejected' && r.requestRejectedAt && (
+                          <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-xs">
+                            <p className="font-bold text-rose-900 mb-0.5">
+                              Request denied on {formatDate(r.requestRejectedAt)}{r.requestRejectedByManagerName ? ` by ${r.requestRejectedByManagerName}` : ''}
+                            </p>
+                            {r.requestRejectionReason && (
+                              <p className="text-rose-800 italic">"{r.requestRejectionReason}"</p>
+                            )}
                           </div>
                         )}
 
@@ -968,18 +1015,35 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-right">
                               {!readOnly && status === 'Repayment Submitted' && (
-                                <button
-                                  onClick={() => handleMarkLoanPaid(loan)}
-                                  title="Confirm submitted repayment and mark loan as settled"
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
-                                >
-                                  <Check className="h-3.5 w-3.5" />
-                                  Confirm Repayment & Mark Paid
-                                </button>
+                                <div className="flex flex-col items-end gap-1">
+                                  {loan.repaidAmount !== undefined && loan.repaidAmount < loan.amount && (
+                                    <span className="text-[10px] font-bold text-amber-700">
+                                      Reported amount is less than the outstanding balance
+                                    </span>
+                                  )}
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      onClick={() => handleRejectRepayment(loan)}
+                                      title="Reject this repayment and ask the owner to resubmit"
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs transition-colors cursor-pointer"
+                                    >
+                                      <XCircle className="h-3.5 w-3.5" />
+                                      Reject
+                                    </button>
+                                    <button
+                                      onClick={() => handleMarkLoanPaid(loan)}
+                                      title="Confirm submitted repayment and mark loan as settled"
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                                    >
+                                      <Check className="h-3.5 w-3.5" />
+                                      Confirm Repayment & Mark Paid
+                                    </button>
+                                  </div>
+                                </div>
                               )}
                               {!readOnly && status === 'Outstanding' && (
                                 <span className="text-[11px] text-slate-400 font-medium">
-                                  Awaiting owner repayment
+                                  {loan.repaymentRejectedAt ? 'Repayment rejected — awaiting resubmission' : 'Awaiting owner repayment'}
                                 </span>
                               )}
                               {status === 'Paid' && (
@@ -1072,6 +1136,49 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                   className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 font-bold text-xs text-white cursor-pointer"
                 >
                   Confirm Rejection
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Deny Request Modal */}
+        {confirmDenyTarget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl"
+            >
+              <h3 className="font-bold text-base text-brand-text">Deny This Float Request?</h3>
+              <p className="text-sm text-brand-text-variant">
+                This will deny {getOwnerName(confirmDenyTarget.ownerId)}'s request for {formatCurrency(confirmDenyTarget.requestedAmount)} without disbursing it. This cannot be undone, though the owner can submit a new request afterward.
+              </p>
+              <div>
+                <label className="block text-xs font-bold text-brand-text mb-1">
+                  Reason <span className="text-slate-400 font-normal">(optional, shown to the owner)</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={denyReasonInput}
+                  onChange={(e) => setDenyReasonInput(e.target.value)}
+                  placeholder="e.g. Outstanding loan balance, insufficient justification..."
+                  className="w-full text-xs rounded-xl border border-slate-300 bg-white p-2.5 focus:outline-none focus:border-brand-primary"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={() => setConfirmDenyTarget(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-xs text-slate-700 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmDenyRequest}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 font-bold text-xs text-white cursor-pointer"
+                >
+                  Confirm Denial
                 </button>
               </div>
             </motion.div>

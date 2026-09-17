@@ -49,6 +49,23 @@ export function createFloatRequest(ownerId: string, requestedAmount: number): Fl
   return newRequest;
 }
 
+export function rejectFloatRequest(requestId: string, managerId: string, managerName: string, reason?: string): void {
+  const all = getFloatRequests();
+  const updated = all.map(r =>
+    r.id === requestId && r.status === 'Pending'
+      ? {
+          ...r,
+          status: 'Rejected' as const,
+          requestRejectedAt: new Date().toISOString(),
+          requestRejectedByManagerId: managerId,
+          requestRejectedByManagerName: managerName,
+          requestRejectionReason: reason?.trim() || undefined,
+        }
+      : r
+  );
+  saveAll(updated);
+}
+
 export function confirmFloatRequest(requestId: string, managerId: string, managerName: string): void {
   const all = getFloatRequests();
   const updated = all.map(r => r.id === requestId
@@ -109,7 +126,7 @@ export function rejectFloatReturn(requestId: string, managerId: string, managerN
 }
 
 export function getPendingDays(request: FloatRequest): number {
-  if (request.status === 'Completed') return 0;
+  if (request.status === 'Completed' || request.status === 'Rejected') return 0;
   const start = new Date(request.requestedAt).getTime();
   const now = Date.now();
   return Math.max(0, Math.floor((now - start) / 86400000));
@@ -130,6 +147,12 @@ export function getStatusBadgeInfo(r: FloatRequest): {
     return {
       label: 'Loan Created',
       badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+    };
+  }
+  if (r.status === 'Rejected') {
+    return {
+      label: 'Rejected',
+      badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
     };
   }
   if (r.status === 'Completed') {
@@ -178,12 +201,6 @@ export function getLoanRecordsForOwner(ownerId: string): LoanRecord[] {
   return getLoanRecords()
     .filter(l => l.ownerId === ownerId)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-}
-
-export function getTotalOutstandingLoan(ownerId: string): number {
-  return getLoanRecordsForOwner(ownerId)
-    .filter(l => l.status !== 'Paid')
-    .reduce((sum, l) => sum + l.amount, 0);
 }
 
 export function approveLoanForShortfall(requestId: string, managerId: string, managerName: string): void {
@@ -248,6 +265,26 @@ export function markLoanPaid(loanId: string, managerId: string, managerName: str
     paidAt: new Date().toISOString(),
     markedPaidByManagerId: managerId,
     markedPaidByManagerName: managerName,
+  } : l);
+  localStorage.setItem(LOAN_STORAGE_KEY, JSON.stringify(updated));
+  return true;
+}
+
+/** Sends a submitted repayment back to Outstanding for the owner to correct/resubmit. */
+export function rejectLoanRepayment(loanId: string, managerId: string, managerName: string): boolean {
+  const loans = getLoanRecords();
+  const target = loans.find(l => l.id === loanId);
+  if (!target || target.status !== 'Repayment Submitted') return false;
+
+  const updated = loans.map(l => l.id === loanId ? {
+    ...l,
+    status: 'Outstanding' as const,
+    repaidAmount: undefined,
+    repaymentDescription: undefined,
+    repaymentSubmittedAt: undefined,
+    repaymentRejectedAt: new Date().toISOString(),
+    repaymentRejectedByManagerId: managerId,
+    repaymentRejectedByManagerName: managerName,
   } : l);
   localStorage.setItem(LOAN_STORAGE_KEY, JSON.stringify(updated));
   return true;
