@@ -144,7 +144,7 @@ export interface FloatRequest {
   ownerId: string;
   requestedAmount: number;
   requestedAt: string;
-  status: 'Pending' | 'Confirmed' | 'Returned' | 'Completed';
+  status: 'Pending' | 'Confirmed' | 'Returned' | 'Completed' | 'Rejected';
   confirmedByManagerId?: string;
   confirmedByManagerName?: string;
   returnEntries?: FloatReturnEntry[];
@@ -155,6 +155,10 @@ export interface FloatRequest {
   shortfallReason?: string;   // owner-provided reason, required when returned < requested
   loanId?: string;            // set once a Float Manager approves a loan for this shortfall
   confirmedAt?: string;       // authoritative ISO timestamp when status changed to Confirmed
+  requestRejectedAt?: string;            // set when a still-Pending request is denied outright
+  requestRejectedByManagerId?: string;
+  requestRejectedByManagerName?: string;
+  requestRejectionReason?: string;
 }
 
 export interface LoanRecord {
@@ -173,6 +177,9 @@ export interface LoanRecord {
   paidAt?: string;
   markedPaidByManagerId?: string;
   markedPaidByManagerName?: string;
+  repaymentRejectedAt?: string;
+  repaymentRejectedByManagerId?: string;
+  repaymentRejectedByManagerName?: string;
 }
 
 export interface Owner {

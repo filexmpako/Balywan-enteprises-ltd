@@ -679,7 +679,7 @@ export default function OwnerDetailsView({
   }, [localOwner, servicingRows, tillsList, manualTargetsList, currentPeriod]);
 
   const { user } = useAuth();
-  const isAdmin = !user || user.role === 'Admin';
+  const isAdmin = user?.role === 'Admin';
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteToastMessage, setDeleteToastMessage] = useState<string | null>(null);
