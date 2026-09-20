@@ -265,6 +265,24 @@ export function mapTransactions(
     }).filter(Boolean)
   );
 
+  // Lookup maps built once, instead of a linear .find() per row — the row
+  // loop below runs once per uploaded transaction, so a per-row .find()
+  // against tillsList/currentOwners/currentPersonnel was O(rows x list size)
+  // and got slower every time the till registry grew.
+  const tillByMsisdn = new Map<string, Till>();
+  tillsList.forEach((t) => {
+    const key = t.transactionTill?.trim();
+    if (key) tillByMsisdn.set(key, t);
+  });
+  const ownerByLowerName = new Map<string, Owner>();
+  currentOwners.forEach((o) => {
+    if (o && o.name) ownerByLowerName.set(o.name.toLowerCase(), o);
+  });
+  const personnelByLowerName = new Map<string, Personnel>();
+  currentPersonnel.forEach((p) => {
+    if (p && p.name) personnelByLowerName.set(p.name.toLowerCase(), p);
+  });
+
   return rawTransactions.map((tx, idx) => {
     const branchMsisdn = (tx.branchMsisdn || tx.branch_msisdn || tx.msisdn || tx.Branch_msisdn || '').trim();
     const destMsisdn = (tx.destMsisdn || tx.dest_msisdn || tx.Dest_MSISDN || tx.dest_MSISDN || '').trim();
@@ -285,9 +303,7 @@ export function mapTransactions(
     const date = formatToISODate(finalTimestamp);
 
     // Find registered Till using Branch MSISDN
-    const matchedTill = tillsList.find(
-      (t) => t.transactionTill?.trim() === branchMsisdn
-    );
+    const matchedTill = branchMsisdn ? tillByMsisdn.get(branchMsisdn) : undefined;
 
     let assignedPersonName = 'N/A';
     let assignedPersonId = 'MA-UNKNOWN';
@@ -303,12 +319,8 @@ export function mapTransactions(
       isMapped = true;
 
       // Classify whether the assigned person is an Owner or a Personnel
-      const matchedOwner = currentOwners.find(
-        (o) => o && o.name && o.name.toLowerCase() === assignedPersonName.toLowerCase()
-      );
-      const matchedPersonnel = currentPersonnel.find(
-        (p) => p && p.name && p.name.toLowerCase() === assignedPersonName.toLowerCase()
-      );
+      const matchedOwner = ownerByLowerName.get(assignedPersonName.toLowerCase());
+      const matchedPersonnel = personnelByLowerName.get(assignedPersonName.toLowerCase());
 
       if (matchedOwner) {
         personType = 'Owner';
@@ -428,15 +440,29 @@ export function generateOwnerSummaries(
   tillsList: Till[],
   totalVolume: number
 ): PersonDailyPerformance[] {
+  // Built once instead of scanning tillsList/mappedTransactions per owner —
+  // that was O(owners x tills) and O(owners x transactions).
+  const tillsByOwnerLower = new Map<string, string[]>();
+  tillsList.forEach((t) => {
+    const key = t.assignedOwner.toLowerCase();
+    const list = tillsByOwnerLower.get(key);
+    if (list) list.push(t.transactionTill);
+    else tillsByOwnerLower.set(key, [t.transactionTill]);
+  });
+  const txnsByOwnerLower = new Map<string, MappedTransaction[]>();
+  mappedTransactions.forEach((t) => {
+    if (!t.isMapped) return;
+    const key = t.ownerName.toLowerCase();
+    const list = txnsByOwnerLower.get(key);
+    if (list) list.push(t);
+    else txnsByOwnerLower.set(key, [t]);
+  });
+
   return currentOwners
     .map((owner) => {
-      const assignedTills = tillsList
-        .filter((t) => t.assignedOwner.toLowerCase() === owner.name.toLowerCase())
-        .map((t) => t.transactionTill);
-
-      const ownerTxns = mappedTransactions.filter(
-        (t) => t.isMapped && t.ownerName.toLowerCase() === owner.name.toLowerCase()
-      );
+      const ownerLower = owner.name.toLowerCase();
+      const assignedTills = tillsByOwnerLower.get(ownerLower) || [];
+      const ownerTxns = txnsByOwnerLower.get(ownerLower) || [];
 
       // Group by till to compute opening/remaining floats
       const tillGroups: { [msisdn: string]: MappedTransaction[] } = {};
@@ -520,15 +546,29 @@ export function generatePersonnelSummaries(
   tillsList: Till[],
   totalVolume: number
 ): PersonDailyPerformance[] {
+  // Built once instead of scanning tillsList/mappedTransactions per person —
+  // that was O(personnel x tills) and O(personnel x transactions).
+  const tillsByPersonLower = new Map<string, string[]>();
+  tillsList.forEach((t) => {
+    const key = t.assignedOwner.toLowerCase();
+    const list = tillsByPersonLower.get(key);
+    if (list) list.push(t.transactionTill);
+    else tillsByPersonLower.set(key, [t.transactionTill]);
+  });
+  const txnsByPersonLower = new Map<string, MappedTransaction[]>();
+  mappedTransactions.forEach((t) => {
+    if (!t.isMapped) return;
+    const key = t.ownerName.toLowerCase();
+    const list = txnsByPersonLower.get(key);
+    if (list) list.push(t);
+    else txnsByPersonLower.set(key, [t]);
+  });
+
   return currentPersonnel
     .map((person) => {
-      const assignedTills = tillsList
-        .filter((t) => t.assignedOwner.toLowerCase() === person.name.toLowerCase())
-        .map((t) => t.transactionTill);
-
-      const personTxns = mappedTransactions.filter(
-        (t) => t.isMapped && t.ownerName.toLowerCase() === person.name.toLowerCase()
-      );
+      const personLower = person.name.toLowerCase();
+      const assignedTills = tillsByPersonLower.get(personLower) || [];
+      const personTxns = txnsByPersonLower.get(personLower) || [];
 
       // Group by till to compute opening/remaining floats
       const tillGroups: { [msisdn: string]: MappedTransaction[] } = {};

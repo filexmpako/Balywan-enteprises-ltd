@@ -6,8 +6,9 @@
  * and write through on every mutation, queuing writes while offline.
  */
 import { COLLECTION_KEYS, DOCUMENT_KEYS } from './hasidadi/collections';
-import { fetchWorkspace, saveCollection, saveDocument } from './hasidadi.functions';
+import { fetchWorkspace, saveCollection, saveDocument, fetchTransactions } from './hasidadi.functions';
 import { CLOUD_HYDRATED_EVENT } from './cloudSyncEvents';
+import { saveDailyServicingData } from '../utils/indexedDB';
 
 const QUEUE_KEY = 'hasidadi_sync_queue';
 const SYNCED = new Set<string>([...COLLECTION_KEYS, ...(DOCUMENT_KEYS as readonly string[])]);
@@ -125,6 +126,24 @@ export async function hydrateFromCloud(): Promise<boolean> {
       if (value !== null && value !== undefined) localStorage.setItem(key, JSON.stringify(value));
     }
     localStorage.setItem('hasidadi_last_sync', new Date().toISOString());
+
+    // Daily MGT transaction rows live in IndexedDB, not localStorage, so the
+    // Storage.prototype.setItem patch above never sees them — they only ever
+    // reached Postgres one-way (upload -> server) with nothing pulling them
+    // back down. Warm the current period into IndexedDB here so a device
+    // that never did the upload still sees today's data. saveDailyServicingData
+    // fires its own 'servicing-rows-updated' event once written, which the
+    // dashboard and other Daily MGT views already listen for.
+    try {
+      const currentPeriod = new Date().toISOString().slice(0, 7);
+      const transactions = await fetchTransactions({ data: { period: currentPeriod } });
+      if (Array.isArray(transactions) && transactions.length > 0) {
+        await saveDailyServicingData(transactions);
+      }
+    } catch (err) {
+      console.warn('[cloudSync] Daily MGT transaction hydration failed, continuing from offline cache', err);
+    }
+
     // Views that read the cache at mount need to re-read once server data lands.
     window.dispatchEvent(new Event(CLOUD_HYDRATED_EVENT));
     return true;
