@@ -47,6 +47,27 @@ async function hasSession(): Promise<boolean> {
   }
 }
 
+/**
+ * Pulls one period's Daily MGT transactions from Postgres into IndexedDB.
+ * saveDailyServicingData fires 'servicing-rows-updated' once written, which
+ * every Daily MGT consumer (dashboard, KPI Reports, Targets, ...) already
+ * listens for, so no caller here needs to know who's watching.
+ */
+async function refreshDailyTransactions(period: string): Promise<void> {
+  try {
+    const transactions = await fetchTransactions({ data: { period } });
+    if (Array.isArray(transactions) && transactions.length > 0) {
+      await saveDailyServicingData(transactions);
+    }
+  } catch (err) {
+    console.warn('[cloudSync] Daily MGT transaction refresh failed', err);
+  }
+}
+
+function currentPeriod(): string {
+  return new Date().toISOString().slice(0, 7);
+}
+
 async function push(entry: QueueEntry) {
   // No signed-in session => the protected server fn would 401. Keep the write
   // in the offline queue instead and let flushQueue retry after sign-in.
@@ -131,18 +152,8 @@ export async function hydrateFromCloud(): Promise<boolean> {
     // Storage.prototype.setItem patch above never sees them — they only ever
     // reached Postgres one-way (upload -> server) with nothing pulling them
     // back down. Warm the current period into IndexedDB here so a device
-    // that never did the upload still sees today's data. saveDailyServicingData
-    // fires its own 'servicing-rows-updated' event once written, which the
-    // dashboard and other Daily MGT views already listen for.
-    try {
-      const currentPeriod = new Date().toISOString().slice(0, 7);
-      const transactions = await fetchTransactions({ data: { period: currentPeriod } });
-      if (Array.isArray(transactions) && transactions.length > 0) {
-        await saveDailyServicingData(transactions);
-      }
-    } catch (err) {
-      console.warn('[cloudSync] Daily MGT transaction hydration failed, continuing from offline cache', err);
-    }
+    // that never did the upload still sees today's data.
+    await refreshDailyTransactions(currentPeriod());
 
     // Views that read the cache at mount need to re-read once server data lands.
     window.dispatchEvent(new Event(CLOUD_HYDRATED_EVENT));
@@ -153,5 +164,52 @@ export async function hydrateFromCloud(): Promise<boolean> {
   } finally {
     suspended = false;
     void flushQueue();
+  }
+}
+
+let realtimeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Keeps an already-open session live: hydrateFromCloud() only runs at
+ * sign-in, so a dashboard left open on one device would otherwise never see
+ * a Daily MGT upload made from another device until the next sign-in or
+ * reload. Subscribes to Postgres changes on daily_transaction_records and
+ * re-pulls the current period, debounced so one multi-row upload (persisted
+ * as chunked upserts) triggers a single refresh instead of many.
+ *
+ * Requires daily_transaction_records to be added to the supabase_realtime
+ * publication (see the matching migration) — without that, this
+ * subscription is inert and refreshDailyTransactions() still runs at every
+ * sign-in via hydrateFromCloud().
+ */
+export async function subscribeToDailyTransactions(): Promise<() => void> {
+  if (typeof window === 'undefined') return () => {};
+  try {
+    const { supabase } = await import('@/integrations/supabase/client');
+    const channel = supabase
+      .channel('daily-transaction-records-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'daily_transaction_records' },
+        () => {
+          if (realtimeDebounceTimer) clearTimeout(realtimeDebounceTimer);
+          realtimeDebounceTimer = setTimeout(() => {
+            realtimeDebounceTimer = null;
+            void refreshDailyTransactions(currentPeriod());
+          }, 1000);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      if (realtimeDebounceTimer) {
+        clearTimeout(realtimeDebounceTimer);
+        realtimeDebounceTimer = null;
+      }
+      void supabase.removeChannel(channel);
+    };
+  } catch (err) {
+    console.warn('[cloudSync] Could not subscribe to Daily MGT realtime updates', err);
+    return () => {};
   }
 }

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { bootstrapSeedAccounts } from '@/lib/bootstrap.functions';
-import { hydrateFromCloud, installCloudSync } from '@/lib/cloudSync';
+import { hydrateFromCloud, installCloudSync, subscribeToDailyTransactions } from '@/lib/cloudSync';
 
 export type UserRole = 'Admin' | 'Owner' | 'FloatManager';
 
@@ -118,6 +118,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sub.subscription.unsubscribe();
     };
   }, []);
+
+  // Keeps an already-open dashboard live: hydrateFromCloud() above only runs
+  // at sign-in, so without this, a Daily MGT upload from another device
+  // wouldn't show up here until the next sign-in or reload.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    let unsubscribe: (() => void) | null = null;
+    subscribeToDailyTransactions().then((unsub) => {
+      if (cancelled) unsub();
+      else unsubscribe = unsub;
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [user?.username]);
 
   const setPortalType = (type: 'admin' | 'owner' | 'float-manager' | null) => {
     setPortalState(type);
