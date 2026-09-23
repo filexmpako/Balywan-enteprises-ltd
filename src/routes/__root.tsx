@@ -77,10 +77,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Hasidadi Wakala Servicing & Float Governance ERP" },
+      { title: "Balwyn Wakala Servicing & Float Governance ERP" },
       { name: "description", content: "Mobile money super-agent operations, float governance and servicing analytics platform for Tanzania." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Hasidadi Wakala Servicing & Float Governance ERP" },
+      { property: "og:title", content: "Balwyn Wakala Servicing & Float Governance ERP" },
       { property: "og:description", content: "Mobile money super-agent operations, float governance and servicing analytics platform for Tanzania." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

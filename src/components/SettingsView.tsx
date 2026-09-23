@@ -241,7 +241,7 @@ export default function SettingsView({
                     required
                     value={companyNameInput}
                     onChange={(e) => setCompanyNameInput(e.target.value)}
-                    placeholder="e.g. Hasidadi Enterprises"
+                    placeholder="e.g. Balwyn Enterprises"
                     className="w-full rounded-xl bg-brand-bg border-2 border-transparent px-4 py-2.5 text-sm text-brand-text outline-none focus:border-brand-primary focus:bg-white transition-all font-semibold"
                   />
                 </div>

@@ -6,7 +6,7 @@ const HasidadiApp = lazy(() => import("../App"));
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Hasidadi | Wakala Servicing & Float Governance ERP" },
+      { title: "Balwyn | Wakala Servicing & Float Governance ERP" },
       {
         name: "description",
         content:
@@ -14,7 +14,7 @@ export const Route = createFileRoute("/")({
       },
       {
         property: "og:title",
-        content: "Hasidadi | Wakala Servicing & Float Governance ERP",
+        content: "Balwyn | Wakala Servicing & Float Governance ERP",
       },
       {
         property: "og:description",
