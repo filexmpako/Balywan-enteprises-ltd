@@ -1953,8 +1953,8 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
         });
 
         if (isWeekly) {
-          // Postgres is the system of record for weekly data; IndexedDB keeps
-          // an offline mirror. Replaces the week so re-uploads stay idempotent.
+          // Postgres is the only store for weekly data. Replaces the week so
+          // re-uploads stay idempotent.
           clearWeeklyServicingData(uploadWeek)
             .catch(() => undefined)
             .then(() => persistWeeklyServicing(uploadWeek, uploadMonth, parsedServicing, servicingColumns))
@@ -2015,8 +2015,8 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
 
           const activeMonth = uploadMonth;
 
-          // Replace this month's per-wakala rows in Postgres (authoritative) and
-          // in the offline mirror — same shape as the Weekly path.
+          // Replace this month's per-wakala rows in Postgres — same shape as
+          // the Weekly path.
           persistMonthlyServicing(activeMonth, parsedServicing, servicingColumns)
             .then((res) => {
               invalidateClassificationCache();

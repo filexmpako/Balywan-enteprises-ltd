@@ -280,3 +280,14 @@ export async function loadTransactions(supabase: DB, period?: string) {
   );
   return rows.map((r: any) => r.raw);
 }
+
+/** Classification audit trail read — mirrors loadTransactions but returns the audit record shape (details), not the raw row. */
+export async function loadClassificationAuditRecords(supabase: DB, period?: string) {
+  const rows = await selectAll(
+    supabase,
+    'classification_audit_records',
+    'details, reporting_period',
+    (q) => (period ? q.eq('reporting_period', period) : q),
+  );
+  return rows.map((r: any) => r.details);
+}

@@ -1,14 +1,14 @@
 /**
  * Cloud sync layer.
  *
- * Postgres is the system of record. localStorage / IndexedDB remain purely an
- * offline cache for field use: we hydrate the cache from the server on sign-in
- * and write through on every mutation, queuing writes while offline.
+ * Postgres is the system of record. localStorage remains a write-through
+ * cache for collections/documents (queuing writes while offline); Daily MGT
+ * transactions have no local cache at all and are always read live from the
+ * server.
  */
 import { COLLECTION_KEYS, DOCUMENT_KEYS } from './hasidadi/collections';
-import { fetchWorkspace, saveCollection, saveDocument, fetchTransactions } from './hasidadi.functions';
+import { fetchWorkspace, saveCollection, saveDocument } from './hasidadi.functions';
 import { CLOUD_HYDRATED_EVENT } from './cloudSyncEvents';
-import { saveDailyServicingData } from '../utils/indexedDB';
 
 const QUEUE_KEY = 'hasidadi_sync_queue';
 const SYNCED = new Set<string>([...COLLECTION_KEYS, ...(DOCUMENT_KEYS as readonly string[])]);
@@ -48,24 +48,13 @@ async function hasSession(): Promise<boolean> {
 }
 
 /**
- * Pulls one period's Daily MGT transactions from Postgres into IndexedDB.
- * saveDailyServicingData fires 'servicing-rows-updated' once written, which
- * every Daily MGT consumer (dashboard, KPI Reports, Targets, ...) already
- * listens for, so no caller here needs to know who's watching.
+ * Daily MGT transactions have no local cache to warm — every consumer
+ * (dashboard, KPI Reports, Targets, ...) reads straight from Postgres. This
+ * just tells mounted views to re-fetch, via the same 'servicing-rows-updated'
+ * signal they already listen for.
  */
-async function refreshDailyTransactions(period: string): Promise<void> {
-  try {
-    const transactions = await fetchTransactions({ data: { period } });
-    if (Array.isArray(transactions) && transactions.length > 0) {
-      await saveDailyServicingData(transactions);
-    }
-  } catch (err) {
-    console.warn('[cloudSync] Daily MGT transaction refresh failed', err);
-  }
-}
-
-function currentPeriod(): string {
-  return new Date().toISOString().slice(0, 7);
+function notifyDailyTransactionsChanged(): void {
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('servicing-rows-updated'));
 }
 
 async function push(entry: QueueEntry) {
@@ -148,12 +137,7 @@ export async function hydrateFromCloud(): Promise<boolean> {
     }
     localStorage.setItem('hasidadi_last_sync', new Date().toISOString());
 
-    // Daily MGT transaction rows live in IndexedDB, not localStorage, so the
-    // Storage.prototype.setItem patch above never sees them — they only ever
-    // reached Postgres one-way (upload -> server) with nothing pulling them
-    // back down. Warm the current period into IndexedDB here so a device
-    // that never did the upload still sees today's data.
-    await refreshDailyTransactions(currentPeriod());
+    notifyDailyTransactionsChanged();
 
     // Views that read the cache at mount need to re-read once server data lands.
     window.dispatchEvent(new Event(CLOUD_HYDRATED_EVENT));
@@ -174,13 +158,13 @@ let realtimeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
  * sign-in, so a dashboard left open on one device would otherwise never see
  * a Daily MGT upload made from another device until the next sign-in or
  * reload. Subscribes to Postgres changes on daily_transaction_records and
- * re-pulls the current period, debounced so one multi-row upload (persisted
- * as chunked upserts) triggers a single refresh instead of many.
+ * tells mounted views to re-fetch, debounced so one multi-row upload
+ * (persisted as chunked upserts) triggers a single refresh instead of many.
  *
  * Requires daily_transaction_records to be added to the supabase_realtime
  * publication (see the matching migration) — without that, this
- * subscription is inert and refreshDailyTransactions() still runs at every
- * sign-in via hydrateFromCloud().
+ * subscription is inert and notifyDailyTransactionsChanged() still runs at
+ * every sign-in via hydrateFromCloud().
  */
 export async function subscribeToDailyTransactions(): Promise<() => void> {
   if (typeof window === 'undefined') return () => {};
@@ -195,7 +179,7 @@ export async function subscribeToDailyTransactions(): Promise<() => void> {
           if (realtimeDebounceTimer) clearTimeout(realtimeDebounceTimer);
           realtimeDebounceTimer = setTimeout(() => {
             realtimeDebounceTimer = null;
-            void refreshDailyTransactions(currentPeriod());
+            notifyDailyTransactionsChanged();
           }, 1000);
         },
       )

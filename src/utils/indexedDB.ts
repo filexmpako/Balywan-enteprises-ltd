@@ -339,326 +339,79 @@ export function initDB(): Promise<IDBDatabase> {
   });
 }
 
+// Monthly servicing data: Postgres is the only store (see monthlyStore.ts /
+// monthly.functions.ts). These are thin server-backed shims kept under their
+// original names so every existing caller works unchanged with no local
+// cache involved anywhere.
 export async function saveMonthlyServicingData(
-  reportingMonth: string,
-  rows: any[],
-  columns: string[]
+  _reportingMonth: string,
+  _rows: any[],
+  _columns: string[]
 ): Promise<void> {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([ROW_STORE, COL_STORE], 'readwrite');
-    const rowStore = transaction.objectStore(ROW_STORE);
-    const colStore = transaction.objectStore(COL_STORE);
-
-    transaction.onerror = () => {
-      reject(transaction.error);
-    };
-
-    transaction.oncomplete = () => {
-      resolve();
-    };
-
-    // Save columns
-    colStore.put({
-      reportingMonth,
-      columns
-    });
-
-    // Save rows using stable compositeKey
-    rows.forEach((row) => {
-      const stableId = row.MSISDN || row.msisdn || row.phone || row._id || row.id;
-      if (!stableId) {
-        console.warn('Skipping monthly row missing MSISDN or ID:', row);
-        return;
-      }
-      const compositeKey = `${reportingMonth}_${stableId}`;
-      const enrichedRow = {
-        ...row,
-        reportingMonth,
-        compositeKey,
-        // Ensure indexed fields are explicitly on the top-level row structure
-        siteid: row.siteid || row.site_id || row.SiteID || row.SITEID || '',
-        Sales_region: row.Sales_region || row.sales_region || row.Region || row.sales_zone || '',
-        Owner_Name: row.Owner_Name || row.owner_name || row['Wakala Name'] || row.owner || '',
-        MSISDN: row.MSISDN || row.msisdn || row.phone || '',
-        servicing_status: row.servicing_status || row.status || row.Status || ''
-      };
-      rowStore.put(enrichedRow);
-    });
-  });
+  // No-op: persistence happens via monthlyStore.persistMonthlyServicing ->
+  // saveMonthlyServicingRows (Postgres). Nothing to cache locally.
 }
 
 export async function getServicingRows(reportingMonth?: string): Promise<any[]> {
-  await cleanupDuplicateServicingData();
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([ROW_STORE], 'readonly');
-    const store = transaction.objectStore(ROW_STORE);
-    const request = reportingMonth 
-      ? store.index('reportingMonth').getAll(IDBKeyRange.only(reportingMonth))
-      : store.getAll();
-
-    request.onsuccess = () => {
-      resolve(request.result || []);
-    };
-
-    request.onerror = () => {
-      reject(request.error);
-    };
-  });
+  const { fetchMonthlyServicingRows } = await import('../lib/monthly.functions');
+  const res = await fetchMonthlyServicingRows({ data: { reportingMonth } });
+  return res?.rows ?? [];
 }
 
 export async function getServicingColumns(reportingMonth: string): Promise<string[]> {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([COL_STORE], 'readonly');
-    const store = transaction.objectStore(COL_STORE);
-    const request = store.get(reportingMonth);
-
-    request.onsuccess = () => {
-      resolve(request.result ? request.result.columns : []);
-    };
-
-    request.onerror = () => {
-      reject(request.error);
-    };
-  });
+  const rows = await getServicingRows(reportingMonth);
+  return rows.length > 0 ? Object.keys(rows[0]) : [];
 }
 
 export async function clearMonthlyServicingData(reportingMonth: string): Promise<void> {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([ROW_STORE, COL_STORE], 'readwrite');
-    const rowStore = transaction.objectStore(ROW_STORE);
-    const colStore = transaction.objectStore(COL_STORE);
-
-    colStore.delete(reportingMonth);
-
-    const index = rowStore.index('reportingMonth');
-    const range = IDBKeyRange.only(reportingMonth);
-    const cursorRequest = index.openCursor(range);
-
-    cursorRequest.onsuccess = (event) => {
-      const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>).result;
-      if (cursor) {
-        cursor.delete();
-        cursor.continue();
-      }
-    };
-
-    transaction.oncomplete = () => {
-      resolve();
-    };
-
-    transaction.onerror = () => {
-      reject(transaction.error);
-    };
-  });
+  const { deleteMonthlyServicingRows } = await import('../lib/monthly.functions');
+  await deleteMonthlyServicingRows({ data: { reportingMonth } });
 }
 
+// Weekly servicing data: Postgres is the only store (see weeklyStore.ts /
+// weekly.functions.ts). Same server-backed-shim treatment as Monthly above.
 export async function saveWeeklyServicingData(
-  reportingWeek: string,
-  reportingMonth: string,
-  rows: any[],
-  columns: string[]
+  _reportingWeek: string,
+  _reportingMonth: string,
+  _rows: any[],
+  _columns: string[]
 ): Promise<void> {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([WEEKLY_ROW_STORE, WEEKLY_COL_STORE], 'readwrite');
-    const rowStore = transaction.objectStore(WEEKLY_ROW_STORE);
-    const colStore = transaction.objectStore(WEEKLY_COL_STORE);
-
-    transaction.onerror = () => {
-      reject(transaction.error);
-    };
-
-    transaction.oncomplete = () => {
-      resolve();
-    };
-
-    // Save columns
-    colStore.put({
-      reportingWeek,
-      columns
-    });
-
-    // Save rows using stable compositeKey
-    rows.forEach((row) => {
-      const stableId = row.MSISDN || row.msisdn || row.phone || row._id || row.id;
-      if (!stableId) {
-        console.warn('Skipping weekly row missing MSISDN or ID:', row);
-        return;
-      }
-      const compositeKey = `${reportingWeek}_${stableId}`;
-      const enrichedRow = {
-        ...row,
-        reportingWeek,
-        reportingMonth,
-        compositeKey,
-        // Ensure indexed fields are explicitly on the top-level row structure
-        siteid: row.siteid || row.site_id || row.SiteID || row.SITEID || '',
-        Sales_region: row.Sales_region || row.sales_region || row.Region || row.sales_zone || '',
-        Owner_Name: row.Owner_Name || row.owner_name || row['Wakala Name'] || row.owner || '',
-        MSISDN: row.MSISDN || row.msisdn || row.phone || '',
-        servicing_status: row.servicing_status || row.status || row.Status || ''
-      };
-      rowStore.put(enrichedRow);
-    });
-  });
+  // No-op: persistence happens via weeklyStore.persistWeeklyServicing ->
+  // saveWeeklyServicingRows (Postgres). Nothing to cache locally.
 }
 
 export async function getWeeklyServicingRows(reportingWeek: string): Promise<any[]> {
-  await cleanupDuplicateServicingData();
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([WEEKLY_ROW_STORE], 'readonly');
-    const store = transaction.objectStore(WEEKLY_ROW_STORE);
-    const index = store.index('reportingWeek');
-    const request = index.getAll(IDBKeyRange.only(reportingWeek));
-
-    request.onsuccess = () => {
-      resolve(request.result || []);
-    };
-
-    request.onerror = () => {
-      reject(request.error);
-    };
-  });
+  const { fetchWeeklyServicingRows } = await import('../lib/weekly.functions');
+  const res = await fetchWeeklyServicingRows({ data: { reportingWeek } });
+  return res?.rows ?? [];
 }
 
 export async function getWeeklyServicingColumns(reportingWeek: string): Promise<string[]> {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([WEEKLY_COL_STORE], 'readonly');
-    const store = transaction.objectStore(WEEKLY_COL_STORE);
-    const request = store.get(reportingWeek);
-
-    request.onsuccess = () => {
-      resolve(request.result ? request.result.columns : []);
-    };
-
-    request.onerror = () => {
-      reject(request.error);
-    };
-  });
+  const rows = await getWeeklyServicingRows(reportingWeek);
+  return rows.length > 0 ? Object.keys(rows[0]) : [];
 }
 
 export async function clearWeeklyServicingData(reportingWeek: string): Promise<void> {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([WEEKLY_ROW_STORE, WEEKLY_COL_STORE], 'readwrite');
-    const rowStore = transaction.objectStore(WEEKLY_ROW_STORE);
-    const colStore = transaction.objectStore(WEEKLY_COL_STORE);
-
-    colStore.delete(reportingWeek);
-
-    const index = rowStore.index('reportingWeek');
-    const range = IDBKeyRange.only(reportingWeek);
-    const cursorRequest = index.openCursor(range);
-
-    cursorRequest.onsuccess = (event) => {
-      const cursor = (event.target as IDBRequest<IDBCursorWithValue | null>).result;
-      if (cursor) {
-        cursor.delete();
-        cursor.continue();
-      }
-    };
-
-    transaction.oncomplete = () => {
-      resolve();
-    };
-
-    transaction.onerror = () => {
-      reject(transaction.error);
-    };
-  });
+  const { deleteWeeklyServicingRows } = await import('../lib/weekly.functions');
+  await deleteWeeklyServicingRows({ data: { reportingWeek } });
 }
 
-function getDedupeKey(r: any): string {
-  const id = r['Transaction ID'] || r['transactionId'] || r._id || '';
-  const msisdn = (r['Branch_msisdn'] || r['branch_msisdn'] || '').trim();
-  if (id && msisdn) {
-    return `${String(id).toLowerCase()}_${msisdn}`;
-  }
-  return r._id || `row_${Math.random()}`;
-}
-
-let migrationPromise: Promise<void> | null = null;
-
-export async function migrateLocalStorageToIndexedDB(): Promise<void> {
-  if (migrationPromise) return migrationPromise;
-  migrationPromise = (async () => {
-    try {
-      const saved = localStorage.getItem('servicingDataRows');
-      if (saved) {
-        let rows: any[] = [];
-        try {
-          rows = JSON.parse(saved);
-        } catch (e) {
-          console.error('Failed to parse servicingDataRows from localStorage during migration:', e);
-        }
-        if (Array.isArray(rows) && rows.length > 0) {
-          await saveDailyServicingData(rows);
-        }
-        localStorage.removeItem('servicingDataRows');
-        console.log(`Migrated ${rows.length} rows from localStorage servicingDataRows into WakalaServicingDB IndexedDB.`);
-      }
-    } catch (err) {
-      console.error('Failed migrating servicingDataRows to IndexedDB:', err);
-    }
-  })();
-  return migrationPromise;
-}
-
+// Daily MGT transaction rows: Postgres is the only store now. Upload
+// persistence already happens server-side via ingestServicingRows during
+// ingest (see DailyMgtMappingEngine.tsx / UploadReportsView.tsx); these are
+// thin server-backed shims kept under their original names so every
+// existing caller works unchanged with no local cache involved anywhere.
 export async function getDailyServicingRows(): Promise<any[]> {
-  await migrateLocalStorageToIndexedDB();
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([DAILY_ROW_STORE], 'readonly');
-    const store = transaction.objectStore(DAILY_ROW_STORE);
-    const request = store.getAll();
-
-    request.onsuccess = () => {
-      resolve(request.result || []);
-    };
-
-    request.onerror = () => {
-      reject(request.error);
-    };
-  });
+  const { fetchTransactions } = await import('../lib/hasidadi.functions');
+  const rows = await fetchTransactions({ data: {} });
+  return Array.isArray(rows) ? rows : [];
 }
 
 export async function saveDailyServicingData(newRows: any[]): Promise<void> {
+  // No-op: the rows were already persisted server-side by the caller's own
+  // ingestServicingRows call. This just tells mounted views to re-fetch.
   if (!Array.isArray(newRows) || newRows.length === 0) return;
-  const db = await initDB();
-
-  // Deduplicate within the incoming batch (keeping last occurrence) and assign stable _id
-  const batchMap = new Map<string, any>();
-  newRows.forEach((row, index) => {
-    const key = getDedupeKey(row);
-    const stableId = row._id || key || `mgt-row-${index}`;
-    batchMap.set(stableId, {
-      ...row,
-      _id: stableId,
-      servicingDate: row.servicingDate || row['Servicing Date'] || row.Servicing_Date || row.date || '',
-      Branch_msisdn: row.Branch_msisdn || row['Branch_msisdn'] || row.branch_msisdn || row.msisdn || ''
-    });
-  });
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([DAILY_ROW_STORE], 'readwrite');
-    const store = transaction.objectStore(DAILY_ROW_STORE);
-
-    transaction.onerror = () => reject(transaction.error);
-    transaction.oncomplete = () => {
-      window.dispatchEvent(new CustomEvent('servicing-rows-updated'));
-      resolve();
-    };
-
-    batchMap.forEach((enrichedRow) => {
-      store.put(enrichedRow);
-    });
-  });
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('servicing-rows-updated'));
 }
 
 export async function appendDailyServicingData(newRows: any[]): Promise<void> {
@@ -666,92 +419,35 @@ export async function appendDailyServicingData(newRows: any[]): Promise<void> {
 }
 
 export async function clearDailyServicingData(): Promise<void> {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([DAILY_ROW_STORE], 'readwrite');
-    const store = transaction.objectStore(DAILY_ROW_STORE);
-    const request = store.clear();
-
-    request.onsuccess = () => {
-      localStorage.removeItem('servicingDataRows');
-      window.dispatchEvent(new CustomEvent('servicing-rows-updated'));
-      resolve();
-    };
-
-    request.onerror = () => reject(request.error);
-  });
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('servicing-rows-updated'));
 }
 
-export async function saveClassificationAuditRecords(records: any[]): Promise<void> {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([AUDIT_LOG_STORE], 'readwrite');
-    const store = transaction.objectStore(AUDIT_LOG_STORE);
-    transaction.onerror = () => reject(transaction.error);
-    transaction.oncomplete = () => resolve();
-    records.forEach((record) => {
-      if (record?.transactionId) {
-        store.put(record); // put() = insert or overwrite by transactionId, this is the dedup
-      }
-    });
-  });
+// Classification audit trail: Postgres is the only store now (see
+// hasidadi.functions.ts's fetchClassificationAuditRecords). Server-side
+// ingest already persists the authoritative trail via persistClassifiedRows;
+// classifyServicingRows() only calls saveClassificationAuditRecords as a
+// client-side fallback, which is now a no-op since there's nowhere local
+// left to put it.
+export async function saveClassificationAuditRecords(_records: any[]): Promise<void> {
+  // No-op.
 }
 
 export async function getClassificationAuditLogs(): Promise<any[]> {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([AUDIT_LOG_STORE], 'readonly');
-    const store = transaction.objectStore(AUDIT_LOG_STORE);
-    const request = store.getAll();
-    request.onsuccess = () => resolve(request.result || []);
-    request.onerror = () => reject(request.error);
-  });
+  const { fetchClassificationAuditRecords } = await import('../lib/hasidadi.functions');
+  const records = await fetchClassificationAuditRecords({ data: {} });
+  return Array.isArray(records) ? records : [];
 }
 
 export async function clearClassificationAuditLogs(): Promise<void> {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([AUDIT_LOG_STORE], 'readwrite');
-    const store = transaction.objectStore(AUDIT_LOG_STORE);
-    const request = store.clear();
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
+  // No-op: nothing cached locally to clear.
 }
 
-
 /**
- * Removes specific daily MGT rows from the offline mirror after their upload
- * has been purged server-side, so local dashboards stop counting them.
+ * No-op: rows were already purged server-side by the caller (see
+ * deleteUploadedReport). Kept under its original name/signature since
+ * App.tsx still calls it after that server delete.
  */
 export async function deleteDailyServicingRowsByRefs(refs: string[]): Promise<number> {
-  const wanted = new Set((refs || []).map(r => String(r).trim()).filter(Boolean));
-  if (!wanted.size) return 0;
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction([DAILY_ROW_STORE], 'readwrite');
-    const store = transaction.objectStore(DAILY_ROW_STORE);
-    let removed = 0;
-    const request = store.openCursor();
-
-    request.onsuccess = () => {
-      const cursor = request.result;
-      if (!cursor) return;
-      const row: any = cursor.value || {};
-      const ref = String(
-        row['Transaction ID'] ?? row.transactionId ?? row.transaction_ref ?? ''
-      ).trim();
-      if (ref && wanted.has(ref)) {
-        cursor.delete();
-        removed += 1;
-      }
-      cursor.continue();
-    };
-
-    transaction.onerror = () => reject(transaction.error);
-    transaction.oncomplete = () => {
-      window.dispatchEvent(new CustomEvent('servicing-rows-updated'));
-      resolve(removed);
-    };
-  });
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('servicing-rows-updated'));
+  return (refs || []).length;
 }

@@ -132,11 +132,20 @@ export const ingestServicingRows = createServerFn({ method: 'POST' })
     return { uploadId, summary, ...counts, classified };
   });
 
-/** Server-side transaction read used to warm the offline cache. */
+/** Daily MGT transaction read — Postgres is the only store, no local cache. */
 export const fetchTransactions = createServerFn({ method: 'GET' })
   .middleware([requireSupabaseAuth])
   .inputValidator((input?: { period?: string }) => input ?? {})
   .handler(async ({ data, context }) => {
     const { loadTransactions } = await import('./hasidadi/repo.server');
     return loadTransactions(context.supabase as any, data?.period);
+  });
+
+/** Classification audit trail read — Postgres is the only store, no local cache. */
+export const fetchClassificationAuditRecords = createServerFn({ method: 'GET' })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input?: { period?: string }) => input ?? {})
+  .handler(async ({ data, context }) => {
+    const { loadClassificationAuditRecords } = await import('./hasidadi/repo.server');
+    return loadClassificationAuditRecords(context.supabase as any, data?.period);
   });
