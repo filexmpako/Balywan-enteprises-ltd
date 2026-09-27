@@ -669,7 +669,73 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
   const selectedReportConfig = useMemo(() => {
     return REPORT_TYPES.find((r) => r.id === reportType);
   }, [reportType]);
-  
+
+  /**
+   * Builds and downloads a starter workbook for the selected report type,
+   * with the exact headers each parser accepts (mapTransactions,
+   * parseKPIExcelFileShared, parseBaseWakalaFile, parsePriorityWakalaFile,
+   * OwnerSyncDashboard's column matcher) plus example rows, so a user knows
+   * the required format before uploading.
+   */
+  const downloadReportTemplate = () => {
+    if (!reportType) return;
+
+    const wb = XLSX.utils.book_new();
+    const fileNames: Record<string, string> = {
+      kpi: 'Monthly_KPI_Template.xlsx',
+      weekly_kpi: 'Weekly_KPI_Template.xlsx',
+      mgt: 'Daily_MGT_Template.xlsx',
+      base_wakala_list: 'Base_Wakala_List_Template.xlsx',
+      priority_wakala: 'Priority_Wakala_List_Template.xlsx',
+      till_sync: 'Till_Name_Sync_Template.xlsx',
+    };
+
+    if (reportType === 'kpi' || reportType === 'weekly_kpi') {
+      const isWeekly = reportType === 'weekly_kpi';
+      const summarySheet = XLSX.utils.aoa_to_sheet([
+        ['KPI', isWeekly ? 'Target' : 'Monthly Target', isWeekly ? 'Achieved' : 'MTD Achieved', 'Performance (%)', 'Status'],
+        ['KPI 1 - Volume', 500000000, 420000000, '84%', 'GOOD'],
+        ['KPI 2 - Wakala Penetration', 1200, 980, '82%', 'GOOD'],
+      ]);
+      const servicingSheet = XLSX.utils.aoa_to_sheet([
+        ['MSISDN', 'Owner_Name', 'SA_Servicing_Txns', 'SA_Servicing_Val', 'Wakala_Status'],
+        ['255700111222', 'Juma Athumani', 45, 3200000, 1],
+        ['255700333444', 'Fatma Hassan', 12, 850000, 0],
+      ]);
+      XLSX.utils.book_append_sheet(wb, summarySheet, isWeekly ? 'Weekly KPI Summary' : 'Executive KPI Summary');
+      XLSX.utils.book_append_sheet(wb, servicingSheet, 'Servicing Data');
+    } else if (reportType === 'mgt') {
+      const sheet = XLSX.utils.aoa_to_sheet([
+        ['Transaction_ID', 'Branch_msisdn', 'Dest_MSISDN', 'Amount', 'Status', 'Transfer_Date'],
+        ['TXN-0001001', '255700111222', '255700333444', 25000, 'Completed', '2026-09-01'],
+        ['TXN-0001002', '255700555666', '255700777888', 18000, 'Completed', '2026-09-01'],
+      ]);
+      XLSX.utils.book_append_sheet(wb, sheet, 'Daily MGT');
+    } else if (reportType === 'base_wakala_list') {
+      const sheet = XLSX.utils.aoa_to_sheet([
+        ['MSISDN', 'Code', 'Full_Name', 'SiteID', 'SiteWard', 'District', 'Altern_No', 'Owner', 'Creation_Date'],
+        ['255700111222', 'WK-001', 'Juma Athumani Shop', 'ST-2201', 'Kariakoo', 'Ilala', '255700999888', 'Juma Athumani', '2026-01-15'],
+      ]);
+      XLSX.utils.book_append_sheet(wb, sheet, 'Base Wakala List');
+    } else if (reportType === 'priority_wakala') {
+      const sheet = XLSX.utils.aoa_to_sheet([
+        ['Wakala Code', 'MSISDN'],
+        ['WK-001', '255700111222'],
+      ]);
+      XLSX.utils.book_append_sheet(wb, sheet, 'Priority Wakala List');
+    } else if (reportType === 'till_sync') {
+      const sheet = XLSX.utils.aoa_to_sheet([
+        ['Transaction Till', 'MGT Till Name', 'Owner', 'Title', 'Location', 'Status'],
+        ['255711223344', 'Kariakoo Retail', 'Abubakar Khalid', 'MFS', 'Dar es Salaam', 'Active'],
+      ]);
+      XLSX.utils.book_append_sheet(wb, sheet, 'Till Name Sync');
+    } else {
+      return;
+    }
+
+    XLSX.writeFile(wb, fileNames[reportType] || 'Report_Template.xlsx');
+  };
+
   // Drag-and-drop & File state
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<{ name: string; size: number } | null>(null);
@@ -2311,6 +2377,14 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
                       <p className="text-xs text-brand-text-variant mt-1 leading-relaxed">
                         {selectedReportConfig.description}
                       </p>
+                      <button
+                        type="button"
+                        onClick={downloadReportTemplate}
+                        className="inline-flex items-center gap-1.5 mt-3 rounded-lg border border-brand-primary/30 bg-white px-3.5 py-2 text-[11px] font-bold text-brand-primary hover:bg-brand-primary/10 transition-colors cursor-pointer"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        Download {selectedReportConfig.title} Template
+                      </button>
                     </div>
                   </motion.div>
                 )}
