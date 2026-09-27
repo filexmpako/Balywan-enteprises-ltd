@@ -1003,44 +1003,53 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
     }
 
     const sheetNames = workbook.SheetNames;
-    
-    // Find Sheet 1 (Executive KPI Summary)
-    let sheet1Name = sheetNames[0];
-    const kpiSheetIdx = sheetNames.findIndex(name => 
-      name.toLowerCase().replace(/\s+/g, '').includes('kpisummary') || 
-      name.toLowerCase().includes('kpi')
-    );
-    if (kpiSheetIdx !== -1) {
-      sheet1Name = sheetNames[kpiSheetIdx];
-      sheet1Exists = true;
-    } else if (sheetNames.length >= 1) {
-      sheet1Name = sheetNames[0];
-      sheet1Exists = true;
-    }
 
-    // Find Sheet 2 (Servicing Data)
-    let sheet2Name = sheetNames[1];
-    const servicingSheetIdx = sheetNames.findIndex((name, idx) => 
-      idx !== kpiSheetIdx && (
-        name.toLowerCase().replace(/\s+/g, '').includes('servicingdata') || 
-        name.toLowerCase().includes('servicing') || 
-        name.toLowerCase().includes('data')
-      )
-    );
-    if (servicingSheetIdx !== -1) {
-      sheet2Name = sheetNames[servicingSheetIdx];
+    // Find Sheet 1 (Executive KPI Summary) and Sheet 2 (Servicing Data).
+    // The KPI Summary sheet is optional: the real-world weekly/monthly export
+    // is often a single sheet of raw per-wakala rows with no separate targets
+    // sheet at all, and that's fine — only the Servicing Data rows are ever
+    // written to the database (see persistWeeklyServicing/persistMonthlyServicing
+    // below); the Executive KPI Summary tab is a cosmetic, localStorage-only
+    // preview. So a lone sheet is treated as the Servicing Data sheet rather
+    // than rejected for lacking KPI columns.
+    let sheet1Name: string | undefined;
+    let sheet2Name: string | undefined;
+
+    if (sheetNames.length === 1) {
+      sheet2Name = sheetNames[0];
       sheet2Exists = true;
-    } else if (sheetNames.length >= 2) {
-      const availableIndices = Array.from({ length: sheetNames.length }, (_, i) => i).filter(i => i !== kpiSheetIdx);
-      if (availableIndices.length >= 1) {
-        sheet2Name = sheetNames[availableIndices[0]];
+    } else {
+      const kpiSheetIdx = sheetNames.findIndex(name =>
+        name.toLowerCase().replace(/\s+/g, '').includes('kpisummary') ||
+        name.toLowerCase().includes('kpi')
+      );
+      if (kpiSheetIdx !== -1) {
+        sheet1Name = sheetNames[kpiSheetIdx];
+        sheet1Exists = true;
+      } else {
+        sheet1Name = sheetNames[0];
+        sheet1Exists = true;
+      }
+
+      const servicingSheetIdx = sheetNames.findIndex((name, idx) =>
+        idx !== kpiSheetIdx && (
+          name.toLowerCase().replace(/\s+/g, '').includes('servicingdata') ||
+          name.toLowerCase().includes('servicing') ||
+          name.toLowerCase().includes('data')
+        )
+      );
+      if (servicingSheetIdx !== -1) {
+        sheet2Name = sheetNames[servicingSheetIdx];
         sheet2Exists = true;
+      } else {
+        const availableIndices = Array.from({ length: sheetNames.length }, (_, i) => i).filter(i => i !== kpiSheetIdx);
+        if (availableIndices.length >= 1) {
+          sheet2Name = sheetNames[availableIndices[0]];
+          sheet2Exists = true;
+        }
       }
     }
 
-    if (!sheet1Exists) {
-      errorsList.push(periodType === 'weekly' ? "Weekly KPI Summary worksheet not found." : "Executive KPI Summary worksheet not found.");
-    }
     if (!sheet2Exists) {
       errorsList.push("Servicing Data worksheet not found.");
     }
@@ -1074,13 +1083,12 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
         return false;
       };
 
+      // Not pushed to errorsList: the KPI Summary sheet is optional (see the
+      // sheet-detection comment above), so a missing/mismatched columns
+      // layout here only affects the checklist status, not ingestion.
       const hasSheet1Headers = findSheet1HeaderRow();
       if (hasSheet1Headers && sheet1HeaderIdx !== -1) {
         sheet1ColumnsValid = true;
-      } else {
-        errorsList.push(periodType === 'weekly'
-          ? "KPI Summary sheet does not contain the required columns: KPI, Target, Achieved, Performance (%), Status"
-          : "KPI Summary sheet does not contain the required columns: KPI, Monthly Target, MTD Achieved, Performance (%), Status");
       }
     }
 
@@ -1202,15 +1210,27 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
     // Parse Sheet 2 Servicing Data
     const finalServicingRows: any[] = [];
     let uniqueSheet2Headers: string[] = [];
+    // These location columns aren't tracked by the ownership/KPI model —
+    // dropped from ingestion rather than left to pass through unused.
+    const EXCLUDED_SERVICING_COLUMNS = new Set(['siteward', 'district']);
+    const isExcludedServicingColumn = (header: string) =>
+      EXCLUDED_SERVICING_COLUMNS.has(header.trim().toLowerCase().replace(/[\s_-]+/g, ''));
+    // Original sheet column index for each retained header in uniqueSheet2Headers,
+    // since excluded columns leave gaps in that mapping.
+    let includedColumnIndices: number[] = [];
     if (sheet2Exists && sheet2HeaderValid) {
       // Repeated header labels used to overwrite each other, losing a column's
       // values entirely — suffix duplicates instead.
       const seenHeaders = new Map<string, number>();
-      uniqueSheet2Headers = sheet2Headers.map((header, idx) => {
+      uniqueSheet2Headers = [];
+      includedColumnIndices = [];
+      sheet2Headers.forEach((header, idx) => {
+        if (isExcludedServicingColumn(header)) return;
         const base = header.trim() !== '' ? header.trim() : `Column_${idx + 1}`;
         const seen = seenHeaders.get(base) || 0;
         seenHeaders.set(base, seen + 1);
-        return seen === 0 ? base : `${base}_${seen + 1}`;
+        uniqueSheet2Headers.push(seen === 0 ? base : `${base}_${seen + 1}`);
+        includedColumnIndices.push(idx);
       });
       setServicingColumns(uniqueSheet2Headers);
 
@@ -1221,7 +1241,8 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
 
         const rowObj: Record<string, any> = {};
 
-        uniqueSheet2Headers.forEach((header, idx) => {
+        uniqueSheet2Headers.forEach((header, i) => {
+          const idx = includedColumnIndices[i];
           const value = row[idx];
           rowObj[header] = value !== undefined && value !== null ? String(value).trim() : '';
         });
