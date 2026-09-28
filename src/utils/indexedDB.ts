@@ -401,10 +401,28 @@ export async function clearWeeklyServicingData(reportingWeek: string): Promise<v
 // ingest (see DailyMgtMappingEngine.tsx / UploadReportsView.tsx); these are
 // thin server-backed shims kept under their original names so every
 // existing caller works unchanged with no local cache involved anywhere.
+// One shared download per signed-in user: every page used to fetch the full
+// Daily MGT set separately. Invalidated whenever data changes (upload,
+// realtime from another device, re-hydration). RLS on the server still scopes
+// owners to their own transactions.
+let dailyCache: { userId: string; promise: Promise<any[]> } | null = null;
+if (typeof window !== 'undefined') {
+  window.addEventListener('servicing-rows-updated', () => { dailyCache = null; }, { capture: true } as any);
+}
+
 export async function getDailyServicingRows(): Promise<any[]> {
-  const { fetchTransactions } = await import('../lib/hasidadi.functions');
-  const rows = await fetchTransactions({ data: {} });
-  return Array.isArray(rows) ? rows : [];
+  const { supabase } = await import('../integrations/supabase/client');
+  const { data: s } = await supabase.auth.getSession();
+  const userId = s.session?.user?.id ?? '';
+  if (dailyCache && dailyCache.userId === userId) return dailyCache.promise;
+  const promise = (async () => {
+    const { fetchTransactions } = await import('../lib/hasidadi.functions');
+    const rows = await fetchTransactions({ data: {} });
+    return Array.isArray(rows) ? rows : [];
+  })();
+  dailyCache = { userId, promise };
+  promise.catch(() => { if (dailyCache?.promise === promise) dailyCache = null; });
+  return promise;
 }
 
 export async function saveDailyServicingData(newRows: any[]): Promise<void> {
