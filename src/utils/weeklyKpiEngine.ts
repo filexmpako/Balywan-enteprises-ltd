@@ -52,6 +52,8 @@ export interface WeeklyWakalaStats {
   iopValue: number;
   cashInTxns: number;
   cashOutTxns: number;
+  /** CP_Servicing_Val summed for the week — the penalty basis, before the rate is applied. */
+  cpValue: number;
   /** CP_Servicing_Val summed for the week, times the configured penalty rate. */
   penalty: number;
 }
@@ -395,6 +397,7 @@ export function computeWeeklyStats(
     iopValue,
     cashInTxns,
     cashOutTxns,
+    cpValue: totalCpValue,
     penalty: calculatePenalty(totalCpValue, rules),
     byOwner: Array.from(ownerAgg.values()).sort((a, b) => b.value - a.value),
     evaluations,
@@ -494,8 +497,10 @@ export interface WeeklyIopOwnerComparison {
   ownerName: string;
   reportedIop: number;
   dailyMgtIop: number;
-  /** dailyMgtIop - reportedIop. Positive: Daily MGT saw more externally-serviced volume than the report captured for this owner's wakalas this week. */
+  /** dailyMgtIop - reportedIop. Never a good sign in either direction — IOP always represents externally-serviced (leaked) volume. */
   iopRemaining: number;
+  /** This owner's CP_Servicing_Val for the week — the penalty basis. */
+  cpValue: number;
 }
 
 export interface WeeklyIopComparison {
@@ -504,8 +509,10 @@ export interface WeeklyIopComparison {
   reportedIop: number;
   /** Daily MGT's own IOP-bucket total (classification.ts) for this week's date range. */
   dailyMgtIop: number;
-  /** dailyMgtIop - reportedIop. Positive: Daily MGT is detecting more externally-serviced volume than the weekly report captured for the same week. */
+  /** dailyMgtIop - reportedIop. Never a good sign in either direction — IOP always represents externally-serviced (leaked) volume. */
   iopRemaining: number;
+  /** This week's CP_Servicing_Val total — the penalty basis. */
+  cpValue: number;
   byOwner: WeeklyIopOwnerComparison[];
 }
 
@@ -520,7 +527,8 @@ export function computeWeeklyIopComparison(
   reportingWeek: string,
   classifiedDailyRows: Array<{ row: any; bucket: string; attributedOwnerId: string | null; attributedOwnerName: string | null }>,
   reportedIopTotal: number,
-  reportedIopByOwner: WeeklyOwnerBreakdown[]
+  reportedIopByOwner: WeeklyOwnerBreakdown[],
+  reportedCpValueTotal: number = 0
 ): WeeklyIopComparison | null {
   const range = parseWeekDateRange(reportingWeek);
   if (!range) return null;
@@ -556,12 +564,13 @@ export function computeWeeklyIopComparison(
       reportedIop: o.iopValue || 0,
       dailyMgtIop: 0,
       iopRemaining: 0,
+      cpValue: o.cpValue || 0,
     });
   });
   dailyMgtIopByOwner.forEach((v, ownerId) => {
     const existing = byOwnerMap.get(ownerId);
     if (existing) existing.dailyMgtIop = v.value;
-    else byOwnerMap.set(ownerId, { ownerId, ownerName: v.ownerName, reportedIop: 0, dailyMgtIop: v.value, iopRemaining: 0 });
+    else byOwnerMap.set(ownerId, { ownerId, ownerName: v.ownerName, reportedIop: 0, dailyMgtIop: v.value, iopRemaining: 0, cpValue: 0 });
   });
 
   const byOwner = Array.from(byOwnerMap.values())
@@ -574,6 +583,7 @@ export function computeWeeklyIopComparison(
     reportedIop: reportedIopTotal,
     dailyMgtIop,
     iopRemaining: dailyMgtIop - reportedIopTotal,
+    cpValue: reportedCpValueTotal,
     byOwner,
   };
 }
