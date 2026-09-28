@@ -221,6 +221,7 @@ export function computeWeeklyStats(
       countTotal: number;
       hasStatusCol: boolean;
       servedStatus: boolean | null;
+      statusActive: boolean;
     }
   >();
 
@@ -232,6 +233,7 @@ export function computeWeeklyStats(
     const counts = extractTxnCounts(row);
     const rowHasStatus = hasRowStatusKey(row);
     const rowServed = getServicedStatusFromColumn(row);
+    const rowStatusActive = isRowStatusActive(row);
 
     const existing = wakalaMap.get(msisdn);
     if (existing) {
@@ -242,6 +244,7 @@ export function computeWeeklyStats(
       existing.countTotal += counts.total;
       if (rowHasStatus) existing.hasStatusCol = true;
       existing.servedStatus = mergeServicedStatus(existing.servedStatus, rowServed);
+      if (rowStatusActive) existing.statusActive = true;
     } else {
       wakalaMap.set(msisdn, {
         txns,
@@ -251,6 +254,7 @@ export function computeWeeklyStats(
         countTotal: counts.total,
         hasStatusCol: rowHasStatus,
         servedStatus: rowServed,
+        statusActive: rowStatusActive,
       });
     }
   });
@@ -270,14 +274,16 @@ export function computeWeeklyStats(
   const evaluations: WeeklyWakalaEvaluation[] = [];
 
   wakalaMap.forEach((entry, msisdn) => {
-    const { txns, val, cashIn, cashOut, countTotal, servedStatus } = entry;
-    // Active / inactive follows the configurable system rule (cash-in +
-    // cash-out transaction count against the threshold), never the raw
-    // status column. Served / unserved is the uploaded servicing_status
-    // column merged with the computed amount/transaction rule — a "served"
-    // reading from either source wins.
+    const { txns, val, cashIn, cashOut, countTotal, servedStatus, statusActive } = entry;
+    // Active / inactive is the uploaded wakala_status column merged with the
+    // configurable system rule (cash-in + cash-out transaction count against
+    // the threshold) — an "active" reading from either source wins, mirroring
+    // the same merge Monthly data already uses (see KPIReportsView.tsx).
+    // Served / unserved is the uploaded servicing_status column merged with
+    // the computed amount/transaction rule — a "served" reading from either
+    // source wins.
     const counts = { cashIn, cashOut, total: countTotal || txns, amount: val };
-    const isActive = isActiveByRule(counts, rules);
+    const isActive = statusActive || isActiveByRule(counts, rules);
     const finalServed = mergeServicedStatus(servedStatus, isServedByRule(counts, isActive, rules));
     if (isActive) activeCount++;
     if (finalServed === true) servedCount++;
