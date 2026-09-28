@@ -269,16 +269,35 @@ export async function recordUpload(
 
 /** Owner-scoped MTD transaction read used by the KPI engines. */
 export async function loadTransactions(supabase: DB, period?: string) {
-  const rows = await selectAll(
-    supabase,
-    'daily_transaction_records',
-    'raw, bucket, attributed_owner_id, reporting_date, amount',
-    (q) => {
-      const scoped = q.eq('is_active', true);
-      return period ? scoped.eq('reporting_period', period) : scoped;
-    },
+  // RLS scopes owners to their own rows. Pages are fetched in parallel
+  // (instead of ~28 sequential round-trips) and only the raw column is read.
+  const scope = (q: any) => {
+    const s = q.eq('is_active', true);
+    return period ? s.eq('reporting_period', period) : s;
+  };
+  const { count, error } = await scope(
+    supabase.from('daily_transaction_records').select('record_id', { count: 'exact', head: true }),
   );
-  return rows.map((r: any) => r.raw);
+  if (error) throw new Error(`daily_transaction_records: ${error.message}`);
+  const total = count ?? 0;
+  const starts: number[] = [];
+  for (let from = 0; from < total; from += PAGE_SIZE) starts.push(from);
+  const pages: any[][] = new Array(starts.length);
+  const CONCURRENCY = 6;
+  for (let i = 0; i < starts.length; i += CONCURRENCY) {
+    await Promise.all(
+      starts.slice(i, i + CONCURRENCY).map(async (from, j) => {
+        const { data, error: e } = await scope(
+          supabase.from('daily_transaction_records').select('raw'),
+        )
+          .order('record_id', { ascending: true })
+          .range(from, from + PAGE_SIZE - 1);
+        if (e) throw new Error(`daily_transaction_records: ${e.message}`);
+        pages[i + j] = data ?? [];
+      }),
+    );
+  }
+  return pages.flat().map((r: any) => r.raw);
 }
 
 /** Classification audit trail read — mirrors loadTransactions but returns the audit record shape (details), not the raw row. */
