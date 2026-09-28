@@ -403,10 +403,6 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
   const [companyKPIs, setCompanyKPIs] = useState<CompanyKPIsResult>(defaultCompanyKPIs);
   const [topOwnersList, setTopOwnersList] = useState<TopOwner[]>([]);
   const [monthlyGoal, setMonthlyGoal] = useState<{ total: number; hasAny: boolean }>({ total: 0, hasAny: false });
-  // Owners with their penalty/IOP figures (see recalculateAllPerformances),
-  // for the External Servicing ranking below — same source as the Owner
-  // Details page, so the two never disagree.
-  const [ownersWithMetrics, setOwnersWithMetrics] = useState<Owner[]>([]);
 
   // Company-wide Served/Unserved wakala drill-down, opened from the
   // Weekly KPI Progression cards below.
@@ -468,7 +464,6 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
           // Live KPI1 / KPI2 company-wide totals from accumulated daily data
           try {
             const owners: Owner[] = JSON.parse(localStorage.getItem('ownersList') || '[]');
-            setOwnersWithMetrics(owners);
             const saTillRegistry = JSON.parse(localStorage.getItem('saTillRegistry') || '[]');
             const tillsList = JSON.parse(localStorage.getItem('tillsList') || '[]');
             const baseWakalaIndex: BaseWakala[] = JSON.parse(localStorage.getItem('baseWakalaIndex') || '[]');
@@ -882,48 +877,6 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                 </span>
               </div>
             </div>
-
-            {/* Owners whose base wakalas were serviced by an outside network,
-                read from the report's own IOP column — worst first. */}
-            {(() => {
-              const flagged = ownersWithMetrics
-                .filter(o => (o.iopVolume || 0) > 0)
-                .sort((a, b) => (b.iopVolume || 0) - (a.iopVolume || 0));
-              if (flagged.length === 0) return null;
-              return (
-                <div className="rounded-2xl border border-brand-gray-border bg-brand-card p-5 shadow-ambient mt-2">
-                  <span className="block font-sans text-[10px] font-bold text-brand-text-variant uppercase tracking-wider mb-3">
-                    Owners Serviced by Outside Networks
-                  </span>
-                  <div className="overflow-x-auto">
-                    <table className="w-full min-w-[420px] text-left">
-                      <thead>
-                        <tr className="border-b border-brand-gray-border">
-                          {['Owner', 'IOP Volume', 'Penalty'].map(h => (
-                            <th key={h} className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">
-                              {h}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {flagged.map(o => (
-                          <tr key={o.id} className="border-b border-brand-gray-border/50">
-                            <td className="py-2.5 font-sans text-xs font-bold text-brand-text">{o.name}</td>
-                            <td className="py-2.5 font-sans text-xs font-bold text-emerald-700">
-                              TZS {(o.iopVolume || 0).toLocaleString()}
-                            </td>
-                            <td className="py-2.5 font-sans text-xs font-bold text-rose-700">
-                              TZS {(o.penalty || 0).toLocaleString()}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              );
-            })()}
           </div>
         </>
       )}
