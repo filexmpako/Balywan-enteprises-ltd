@@ -19,6 +19,7 @@ import { BaseWakala, Owner } from '../types';
 import { normalizeMsisdn } from './msisdn';
 import { resolveOwnerMatch } from './ownerMatch';
 import { getServicedStatusFromColumn, mergeServicedStatus } from './servicingStatus';
+import { formatToISODate } from './mappingEngine';
 import {
   getActivityRules,
   isActiveByRule,
@@ -462,3 +463,117 @@ export function paceLabel(progressPercent: number, weekNum: number): {
 }
 
 export const UNASSIGNED_OWNER_ID = UNASSIGNED_ID;
+
+const MONTH_NAMES_LOWER = [
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december',
+];
+
+/**
+ * Parses a "Week N (Month D - Month D, YYYY)" reportingWeek label (see
+ * buildUploadWeekOptions in UploadReportsView.tsx) into an inclusive ISO
+ * date range. Returns null if the label doesn't match that shape.
+ */
+export function parseWeekDateRange(reportingWeek: string): { start: string; end: string } | null {
+  const match = String(reportingWeek || '').match(
+    /\(([A-Za-z]+)\s+(\d{1,2})\s*-\s*[A-Za-z]+\s+(\d{1,2}),\s*(\d{4})\)/
+  );
+  if (!match) return null;
+  const [, monthName, startDay, endDay, year] = match;
+  const monthIndex = MONTH_NAMES_LOWER.indexOf(monthName.toLowerCase());
+  if (monthIndex < 0) return null;
+  const pad = (n: string) => n.padStart(2, '0');
+  return {
+    start: `${year}-${pad(String(monthIndex + 1))}-${pad(startDay)}`,
+    end: `${year}-${pad(String(monthIndex + 1))}-${pad(endDay)}`,
+  };
+}
+
+export interface WeeklyIopOwnerComparison {
+  ownerId: string;
+  ownerName: string;
+  reportedIop: number;
+  dailyMgtIop: number;
+  /** dailyMgtIop - reportedIop. Positive: Daily MGT saw more externally-serviced volume than the report captured for this owner's wakalas this week. */
+  iopRemaining: number;
+}
+
+export interface WeeklyIopComparison {
+  reportingWeek: string;
+  /** This week's IOP total from the uploaded report's own IOP column. */
+  reportedIop: number;
+  /** Daily MGT's own IOP-bucket total (classification.ts) for this week's date range. */
+  dailyMgtIop: number;
+  /** dailyMgtIop - reportedIop. Positive: Daily MGT is detecting more externally-serviced volume than the weekly report captured for the same week. */
+  iopRemaining: number;
+  byOwner: WeeklyIopOwnerComparison[];
+}
+
+/**
+ * Compares one week's Daily MGT IOP-bucket total against the same week's
+ * uploaded report's own IOP column — both scoped to the week's date range
+ * (Daily MGT) or already scoped by the caller (the report figures).
+ * classifiedDailyRows is the full, unfiltered classifyServicingRows() output
+ * for Daily MGT transactions; this filters it to the week internally.
+ */
+export function computeWeeklyIopComparison(
+  reportingWeek: string,
+  classifiedDailyRows: Array<{ row: any; bucket: string; attributedOwnerId: string | null; attributedOwnerName: string | null }>,
+  reportedIopTotal: number,
+  reportedIopByOwner: WeeklyOwnerBreakdown[]
+): WeeklyIopComparison | null {
+  const range = parseWeekDateRange(reportingWeek);
+  if (!range) return null;
+
+  const getAmount = (row: any): number =>
+    Math.abs(Number(row['Amount'] ?? row['Volume (TZS)'] ?? row['volume'] ?? row['servicedVolume'] ?? 0)) || 0;
+
+  let dailyMgtIop = 0;
+  const dailyMgtIopByOwner = new Map<string, { ownerName: string; value: number }>();
+
+  classifiedDailyRows.forEach(c => {
+    if (c.bucket !== 'IOP') return;
+    const dateStr = formatToISODate(
+      String(c.row['Servicing Date'] || c.row['date'] || c.row['Date'] || c.row['Timestamp'] || '')
+    );
+    if (dateStr < range.start || dateStr > range.end) return;
+
+    const amount = getAmount(c.row);
+    dailyMgtIop += amount;
+
+    const ownerId = c.attributedOwnerId || UNASSIGNED_ID;
+    const ownerName = c.attributedOwnerName || 'Unassigned';
+    const existing = dailyMgtIopByOwner.get(ownerId);
+    if (existing) existing.value += amount;
+    else dailyMgtIopByOwner.set(ownerId, { ownerName, value: amount });
+  });
+
+  const byOwnerMap = new Map<string, WeeklyIopOwnerComparison>();
+  reportedIopByOwner.forEach(o => {
+    byOwnerMap.set(o.ownerId, {
+      ownerId: o.ownerId,
+      ownerName: o.ownerName,
+      reportedIop: o.iopValue || 0,
+      dailyMgtIop: 0,
+      iopRemaining: 0,
+    });
+  });
+  dailyMgtIopByOwner.forEach((v, ownerId) => {
+    const existing = byOwnerMap.get(ownerId);
+    if (existing) existing.dailyMgtIop = v.value;
+    else byOwnerMap.set(ownerId, { ownerId, ownerName: v.ownerName, reportedIop: 0, dailyMgtIop: v.value, iopRemaining: 0 });
+  });
+
+  const byOwner = Array.from(byOwnerMap.values())
+    .map(o => ({ ...o, iopRemaining: o.dailyMgtIop - o.reportedIop }))
+    .filter(o => o.reportedIop !== 0 || o.dailyMgtIop !== 0)
+    .sort((a, b) => Math.abs(b.iopRemaining) - Math.abs(a.iopRemaining));
+
+  return {
+    reportingWeek,
+    reportedIop: reportedIopTotal,
+    dailyMgtIop,
+    iopRemaining: dailyMgtIop - reportedIopTotal,
+    byOwner,
+  };
+}
