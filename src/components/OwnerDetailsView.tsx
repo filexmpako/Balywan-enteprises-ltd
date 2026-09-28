@@ -871,36 +871,41 @@ export default function OwnerDetailsView({
 
       {activeTab === 'overview' && (
         <>
-          {/* Primary Metrics Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <MetricCard
-              title="Wakala"
-              value={priorityWakalaCount + normalWakalaCount}
-              subValue={
-                hasPriorityData
-                  ? `${priorityWakalaCount} Priority · ${normalWakalaCount} Normal`
-                  : 'Awaiting Ingestion'
-              }
-              icon={Users}
-              variant="blue"
-            />
-            <MetricCard
-              title="Active Wakala"
-              value={latestWeeklyActivity?.active ?? (isSynced ? activeWakalaCount : 'Not yet synced')}
-              subValue={latestWeeklyActivity ? 'LATEST WEEKLY RULE' : (isSynced ? 'DAILY INGESTION' : 'Awaiting Ingestion')}
-              icon={UserCheck}
-              variant="green"
-            />
-            <MetricCard
-              title="Inactive Wakala"
-              value={latestWeeklyActivity?.inactive ?? (isSynced ? inactiveWakalaCount : 'Not yet synced')}
-              subValue={latestWeeklyActivity ? 'LATEST WEEKLY RULE' : (isSynced ? 'DAILY INGESTION' : 'Awaiting Ingestion')}
-              icon={UserX}
-              variant="red"
-            />
+          {/* Portfolio Snapshot */}
+          <div className="space-y-2">
+            <h3 className="font-sans text-xs font-black uppercase text-brand-text-variant tracking-wider font-mono">
+              Portfolio Snapshot
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <MetricCard
+                title="Wakala"
+                value={priorityWakalaCount + normalWakalaCount}
+                subValue={
+                  hasPriorityData
+                    ? `${priorityWakalaCount} Priority · ${normalWakalaCount} Normal`
+                    : 'Awaiting Ingestion'
+                }
+                icon={Users}
+                variant="blue"
+              />
+              <MetricCard
+                title="Active Wakala"
+                value={latestWeeklyActivity?.active ?? (isSynced ? activeWakalaCount : 'Not yet synced')}
+                subValue={latestWeeklyActivity ? 'LATEST WEEKLY RULE' : (isSynced ? 'DAILY INGESTION' : 'Awaiting Ingestion')}
+                icon={UserCheck}
+                variant="green"
+              />
+              <MetricCard
+                title="Inactive Wakala"
+                value={latestWeeklyActivity?.inactive ?? (isSynced ? inactiveWakalaCount : 'Not yet synced')}
+                subValue={latestWeeklyActivity ? 'LATEST WEEKLY RULE' : (isSynced ? 'DAILY INGESTION' : 'Awaiting Ingestion')}
+                icon={UserX}
+                variant="red"
+              />
+            </div>
           </div>
 
-          {/* Daily Performance KPIs Section */}
+          {/* Daily MGT Section — Daily MGT classification data only */}
           <div className="space-y-4">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
               <h3 className="font-sans text-xs font-black uppercase text-brand-primary tracking-wider font-mono">
@@ -989,7 +994,7 @@ export default function OwnerDetailsView({
             </div>
 
             {/* Daily Ingestion Sub-cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <MetricCard
                 title="Transactions Today"
                 value={localOwner.transactionsToday || 0}
@@ -997,6 +1002,15 @@ export default function OwnerDetailsView({
                 icon={Activity}
                 variant="blue"
               />
+            </div>
+          </div>
+
+          {/* Monthly Report Section — settlement figures from the uploaded Monthly report, kept apart from Daily MGT so the source is never ambiguous */}
+          <div className="space-y-2">
+            <h3 className="font-sans text-xs font-black uppercase text-brand-primary tracking-wider font-mono">
+              Monthly Report — Settlement Ledger
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <MetricCard
                 title="CP Penalty"
                 value={`TZS ${(localOwner.penalty || 0).toLocaleString()}`}
