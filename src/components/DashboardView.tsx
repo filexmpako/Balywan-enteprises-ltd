@@ -960,10 +960,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                   {/* Cumulative servicing value: one big bar per week, one TZS axis */}
                   <div className="rounded-xl border border-brand-gray-border/70 bg-brand-bg/40 p-4">
-                    <p className="font-sans text-xs font-bold text-brand-text mb-0.5">Cumulative Servicing Value</p>
-                    <p className="font-sans text-[10px] text-brand-text-variant mb-3">
-                      Running total by week{target > 0 ? ', against the monthly target' : ''}
-                    </p>
+                    <p className="font-sans text-xs font-bold text-brand-text mb-3">Cumulative Value</p>
                     <ResponsiveContainer width="100%" height={320}>
                       <BarChart data={series} margin={{ top: 24, right: 12, left: 0, bottom: 0 }}>
                         <defs>
@@ -1023,11 +1020,8 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
 
                   {/* Wakala coverage composition for the latest uploaded week */}
                   <div className="rounded-xl border border-brand-gray-border/70 bg-brand-bg/40 p-4">
-                    <p className="font-sans text-xs font-bold text-brand-text mb-0.5">
-                      Wakala Coverage — {latest.reportingWeek}
-                    </p>
-                    <p className="font-sans text-[10px] text-brand-text-variant mb-3">
-                      Latest uploaded week's status breakdown
+                    <p className="font-sans text-xs font-bold text-brand-text mb-3">
+                      Coverage · {latest.reportingWeek}
                     </p>
                     <div className="grid grid-cols-2 gap-2">
                       <CoverageDonut
