@@ -25,10 +25,10 @@ import {
   History, 
   ExternalLink, 
   ChevronRight, 
-  AlertCircle, 
+  AlertCircle,
   AlertTriangle,
-  CheckCircle2, 
-  DollarSign, 
+  CheckCircle2,
+  DollarSign,
   Activity,
   Calendar,
   Layers,
@@ -37,7 +37,8 @@ import {
   UserCog,
   Target,
   UserCheck,
-  UserX
+  UserX,
+  ChevronDown
 } from 'lucide-react';
 import MetricCard from './MetricCard';
 import WakalaStatusDetailModal from './WakalaStatusDetailModal';
@@ -211,6 +212,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
   // iopRemaining: Daily MGT is detecting more externally-serviced volume
   // than the weekly report captured.
   const [weeklyIopComparison, setWeeklyIopComparison] = useState<WeeklyIopComparison | null>(null);
+  const [isIopRemainingCollapsed, setIsIopRemainingCollapsed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -231,7 +233,8 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
           latestEntry.reportingWeek,
           classified,
           latestEntry.iopValue || 0,
-          latestEntry.byOwner || []
+          latestEntry.byOwner || [],
+          latestEntry.cpValue || 0
         );
         if (!cancelled) setWeeklyIopComparison(comparison);
       } catch (e) {
@@ -1094,64 +1097,86 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
             )}
 
             {/* IOP Remaining: Daily MGT's own IOP-bucket total for this
-                week's dates vs. the weekly report's own IOP column.
-                Positive means Daily MGT is seeing more externally-serviced
-                volume than the report captured. */}
+                week's dates vs. the weekly report's own IOP column, plus
+                the CP_Servicing_Val penalty basis. IOP is externally-serviced
+                (leaked) volume — it is a danger/loss signal in either
+                direction, never shown as a positive/green outcome. */}
             {weeklyIopComparison && (weeklyIopComparison.reportedIop !== 0 || weeklyIopComparison.dailyMgtIop !== 0) && (
               <div className="mt-6 pt-6 border-t border-brand-gray-border">
-                <h4 className="font-sans text-sm font-bold text-brand-text mb-4">
-                  IOP Remaining — {weeklyIopComparison.reportingWeek}
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <MetricCard
-                    title="Report IOP"
-                    value={`TZS ${weeklyIopComparison.reportedIop.toLocaleString()}`}
-                    subValue="FROM WEEKLY REPORT"
-                    icon={Layers}
-                    variant="purple"
-                  />
-                  <MetricCard
-                    title="Daily MGT IOP"
-                    value={`TZS ${weeklyIopComparison.dailyMgtIop.toLocaleString()}`}
-                    subValue="THIS WEEK'S DATES"
-                    icon={Activity}
-                    variant="blue"
-                  />
-                  <MetricCard
-                    title="IOP Remaining"
-                    value={`${weeklyIopComparison.iopRemaining >= 0 ? '+' : ''}TZS ${weeklyIopComparison.iopRemaining.toLocaleString()}`}
-                    subValue={weeklyIopComparison.iopRemaining >= 0 ? 'MGT > REPORT' : 'REPORT > MGT'}
-                    icon={weeklyIopComparison.iopRemaining >= 0 ? AlertTriangle : ShieldCheck}
-                    variant={weeklyIopComparison.iopRemaining >= 0 ? 'red' : 'green'}
+                <div
+                  onClick={() => setIsIopRemainingCollapsed(!isIopRemainingCollapsed)}
+                  className="flex items-center gap-2 cursor-pointer select-none group mb-4"
+                >
+                  <h4 className="font-sans text-sm font-bold text-brand-text group-hover:text-brand-primary transition-colors">
+                    IOP Remaining — {weeklyIopComparison.reportingWeek}
+                  </h4>
+                  <ChevronDown
+                    className={`h-4 w-4 text-brand-text-variant transition-transform duration-200 ${isIopRemainingCollapsed ? 'rotate-180' : ''}`}
                   />
                 </div>
 
-                {weeklyIopComparison.byOwner.length > 0 && (
-                  <div className="mt-4 overflow-x-auto">
-                    <table className="w-full min-w-[520px] text-left">
-                      <thead>
-                        <tr className="border-b border-brand-gray-border">
-                          {['Owner', 'Report IOP', 'Daily MGT IOP', 'Remaining'].map(h => (
-                            <th key={h} className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">
-                              {h}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {weeklyIopComparison.byOwner.map(o => (
-                          <tr key={o.ownerId} className="border-b border-brand-gray-border/50">
-                            <td className="py-2.5 font-sans text-xs font-bold text-brand-text">{o.ownerName}</td>
-                            <td className="py-2.5 font-sans text-xs text-brand-text">TZS {o.reportedIop.toLocaleString()}</td>
-                            <td className="py-2.5 font-sans text-xs text-brand-text">TZS {o.dailyMgtIop.toLocaleString()}</td>
-                            <td className={`py-2.5 font-sans text-xs font-bold ${o.iopRemaining >= 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
-                              {o.iopRemaining >= 0 ? '+' : ''}TZS {o.iopRemaining.toLocaleString()}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                {!isIopRemainingCollapsed && (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <MetricCard
+                        title="Report IOP"
+                        value={`TZS ${weeklyIopComparison.reportedIop.toLocaleString()}`}
+                        subValue="FROM WEEKLY REPORT"
+                        icon={Layers}
+                        variant="purple"
+                      />
+                      <MetricCard
+                        title="Daily MGT IOP"
+                        value={`TZS ${weeklyIopComparison.dailyMgtIop.toLocaleString()}`}
+                        subValue="THIS WEEK'S DATES"
+                        icon={Activity}
+                        variant="blue"
+                      />
+                      <MetricCard
+                        title="CP Servicing Value"
+                        value={`TZS ${weeklyIopComparison.cpValue.toLocaleString()}`}
+                        subValue="PENALTY BASIS"
+                        icon={AlertCircle}
+                        variant="amber"
+                      />
+                      <MetricCard
+                        title="IOP Remaining"
+                        value={`${weeklyIopComparison.iopRemaining >= 0 ? '+' : ''}TZS ${weeklyIopComparison.iopRemaining.toLocaleString()}`}
+                        subValue={weeklyIopComparison.iopRemaining >= 0 ? 'MGT > REPORT — LOSS' : 'REPORT > MGT — LOSS'}
+                        icon={AlertTriangle}
+                        variant="red"
+                      />
+                    </div>
+
+                    {weeklyIopComparison.byOwner.length > 0 && (
+                      <div className="mt-4 overflow-x-auto">
+                        <table className="w-full min-w-[620px] text-left">
+                          <thead>
+                            <tr className="border-b border-brand-gray-border">
+                              {['Owner', 'Report IOP', 'Daily MGT IOP', 'CP Servicing Value', 'Remaining'].map(h => (
+                                <th key={h} className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">
+                                  {h}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {weeklyIopComparison.byOwner.map(o => (
+                              <tr key={o.ownerId} className="border-b border-brand-gray-border/50">
+                                <td className="py-2.5 font-sans text-xs font-bold text-brand-text">{o.ownerName}</td>
+                                <td className="py-2.5 font-sans text-xs text-brand-text">TZS {o.reportedIop.toLocaleString()}</td>
+                                <td className="py-2.5 font-sans text-xs text-brand-text">TZS {o.dailyMgtIop.toLocaleString()}</td>
+                                <td className="py-2.5 font-sans text-xs text-brand-text">TZS {o.cpValue.toLocaleString()}</td>
+                                <td className="py-2.5 font-sans text-xs font-bold text-rose-700">
+                                  {o.iopRemaining >= 0 ? '+' : ''}TZS {o.iopRemaining.toLocaleString()}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}

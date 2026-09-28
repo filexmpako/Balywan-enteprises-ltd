@@ -58,6 +58,7 @@ function normalizeEntry(e: any): WeeklyStatsEntry {
     iopValue: Number(e?.iopValue) || 0,
     cashInTxns: Number(e?.cashInTxns) || 0,
     cashOutTxns: Number(e?.cashOutTxns) || 0,
+    cpValue: Number(e?.cpValue) || 0,
     penalty: Number(e?.penalty) || 0,
     reportingMonth: e?.reportingMonth || '',
     byOwner: Array.isArray(e?.byOwner) ? e.byOwner : [],
