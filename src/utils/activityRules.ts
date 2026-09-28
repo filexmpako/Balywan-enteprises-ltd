@@ -24,7 +24,7 @@ export interface ActivityRules {
   mode: 'combined' | 'separate';
   /** Evaluation window. Weekly is the specification default. */
   window: 'weekly';
-  /** Telco penalty rate applied to bank-served volume at month end. */
+  /** Penalty rate applied to CP_Servicing_Val (cross-partner-serviced volume). */
   penaltyRate: number;
 }
 
@@ -34,7 +34,7 @@ export const DEFAULT_ACTIVITY_RULES: ActivityRules = {
   servedTxnThreshold: 6,
   mode: 'combined',
   window: 'weekly',
-  penaltyRate: 0.05,
+  penaltyRate: 0.005,
 };
 
 export function normalizeActivityRules(raw: any): ActivityRules {
@@ -166,8 +166,13 @@ export function isServedByRule(
   return total >= rules.servedTxnThreshold || amount >= rules.amountThreshold;
 }
 
-/** Month-end telco penalty on the volume the bank served to wakalas. */
-export function calculatePenalty(servedVolume: number, rules: ActivityRules = getActivityRules()): number {
-  const vol = Number(servedVolume) || 0;
+/**
+ * Penalty on cross-partner-serviced volume: CP_Servicing_Val (the amount a
+ * wakala was serviced by a network outside the company) times the
+ * configured penalty rate. Callers pass the CP_Servicing_Val total, not
+ * overall servicing value.
+ */
+export function calculatePenalty(cpServicingValue: number, rules: ActivityRules = getActivityRules()): number {
+  const vol = Number(cpServicingValue) || 0;
   return (vol * (Number(rules.penaltyRate) || 0)) / 100;
 }

@@ -209,8 +209,8 @@ export interface Owner {
   avgValue?: number;
   highestTx?: number;
   lowestTx?: number;
-  penalty?: number;            // Total penalty for the period
-  iopVolume?: number;          // Current MTD IOP volume
+  penalty?: number;            // CP_Servicing_Val (monthly report) x the configured penalty rate
+  iopVolume?: number;          // MTD volume from the monthly report's own IOP column (serviced by an outside network)
   nameAliases?: string[];
 }
 

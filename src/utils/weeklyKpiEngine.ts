@@ -42,11 +42,16 @@ export interface WeeklyWakalaStats {
   totalTxns: number;
   /** Volume attributed to wakalas that belong to a company owner. */
   baseValue: number;
-  /** Volume from wakalas not registered to any owner (IOP). */
+  /**
+   * IOP volume, read from the uploaded report's own IOP column: value the
+   * report itself says was serviced by a network outside the company, for
+   * wakalas that are still in our own base. Not derived/guessed — taken
+   * as-is from the file.
+   */
   iopValue: number;
   cashInTxns: number;
   cashOutTxns: number;
-  /** Telco penalty accrued on this week's served volume. */
+  /** CP_Servicing_Val summed for the week, times the configured penalty rate. */
   penalty: number;
 }
 
@@ -61,8 +66,12 @@ export interface WeeklyOwnerBreakdown {
   noStatus: number;
   value: number;
   txns: number;
+  /** IOP volume for this owner, read from the report's own IOP column. */
   iopValue: number;
+  /** CP_Servicing_Val summed for this owner, times the configured penalty rate. */
   penalty: number;
+  /** This owner's CP_Servicing_Val total — the penalty basis. */
+  cpValue: number;
 }
 
 /** Per-wakala activity evaluation for one week, kept as history. */
@@ -143,6 +152,13 @@ const VAL_KEYS = [
   'SA Servicing Value', 'sa_servicing_val', 'servicing_val',
   'Servicing Amount', 'Transaction Amount', 'Volume', 'Amount', 'Value',
 ];
+/** The penalty basis: CP_Servicing_Val, the value serviced via a cross-partner network. */
+const CP_VAL_KEYS = [
+  'CP_Servicing_Val', 'CP Servicing Val', 'cp_servicing_val',
+  'CP_Servicing_Value', 'cp_servicing_value',
+];
+/** The report's own IOP column: volume serviced outside the company for a wakala still in our base. */
+const IOP_KEYS = ['IOP', 'iop', 'Iop'];
 
 /**
  * Builds an MSISDN -> ownerId resolver from the Base Wakala index (primary and
@@ -222,6 +238,8 @@ export function computeWeeklyStats(
       hasStatusCol: boolean;
       servedStatus: boolean | null;
       statusActive: boolean;
+      cpValue: number;
+      reportedIop: number;
     }
   >();
 
@@ -234,6 +252,8 @@ export function computeWeeklyStats(
     const rowHasStatus = hasRowStatusKey(row);
     const rowServed = getServicedStatusFromColumn(row);
     const rowStatusActive = isRowStatusActive(row);
+    const rowCpValue = getFieldValue(row, CP_VAL_KEYS);
+    const rowReportedIop = getFieldValue(row, IOP_KEYS);
 
     const existing = wakalaMap.get(msisdn);
     if (existing) {
@@ -245,6 +265,8 @@ export function computeWeeklyStats(
       if (rowHasStatus) existing.hasStatusCol = true;
       existing.servedStatus = mergeServicedStatus(existing.servedStatus, rowServed);
       if (rowStatusActive) existing.statusActive = true;
+      existing.cpValue += rowCpValue;
+      existing.reportedIop += rowReportedIop;
     } else {
       wakalaMap.set(msisdn, {
         txns,
@@ -255,6 +277,8 @@ export function computeWeeklyStats(
         hasStatusCol: rowHasStatus,
         servedStatus: rowServed,
         statusActive: rowStatusActive,
+        cpValue: rowCpValue,
+        reportedIop: rowReportedIop,
       });
     }
   });
@@ -269,12 +293,13 @@ export function computeWeeklyStats(
   let cashOutTxns = 0;
   let baseValue = 0;
   let iopValue = 0;
+  let totalCpValue = 0;
 
   const ownerAgg = new Map<string, WeeklyOwnerBreakdown>();
   const evaluations: WeeklyWakalaEvaluation[] = [];
 
   wakalaMap.forEach((entry, msisdn) => {
-    const { txns, val, cashIn, cashOut, countTotal, servedStatus, statusActive } = entry;
+    const { txns, val, cashIn, cashOut, countTotal, servedStatus, statusActive, cpValue, reportedIop } = entry;
     // Active / inactive is the uploaded wakala_status column merged with the
     // configurable system rule (cash-in + cash-out transaction count against
     // the threshold) — an "active" reading from either source wins, mirroring
@@ -293,13 +318,13 @@ export function computeWeeklyStats(
     totalTxns += txns;
     cashInTxns += cashIn;
     cashOutTxns += cashOut;
+    totalCpValue += cpValue;
+    iopValue += reportedIop;
 
     const match = resolveOwner ? resolveOwner(msisdn) : null;
     const ownerId = match?.ownerId || UNASSIGNED_ID;
     const ownerName = match?.ownerName || 'Unassigned';
-    const isIop = !match;
-    if (isIop) iopValue += val;
-    else baseValue += val;
+    if (match) baseValue += val;
 
     evaluations.push({
       msisdn,
@@ -328,6 +353,7 @@ export function computeWeeklyStats(
         txns: 0,
         iopValue: 0,
         penalty: 0,
+        cpValue: 0,
       };
       ownerAgg.set(ownerId, agg);
     }
@@ -339,11 +365,12 @@ export function computeWeeklyStats(
     else agg.noStatus++;
     agg.value += val;
     agg.txns += txns;
-    if (isIop) agg.iopValue += val;
+    agg.iopValue += reportedIop;
+    agg.cpValue += cpValue;
   });
 
   ownerAgg.forEach(agg => {
-    agg.penalty = calculatePenalty(agg.value, rules);
+    agg.penalty = calculatePenalty(agg.cpValue, rules);
   });
 
   const totalCount = wakalaMap.size;
@@ -367,7 +394,7 @@ export function computeWeeklyStats(
     iopValue,
     cashInTxns,
     cashOutTxns,
-    penalty: calculatePenalty(totalValue, rules),
+    penalty: calculatePenalty(totalCpValue, rules),
     byOwner: Array.from(ownerAgg.values()).sort((a, b) => b.value - a.value),
     evaluations,
   };
