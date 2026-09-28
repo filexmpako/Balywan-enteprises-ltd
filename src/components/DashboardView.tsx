@@ -36,10 +36,12 @@ import MetricCard from './MetricCard';
 import WakalaStatusDetailModal from './WakalaStatusDetailModal';
 import {
   ResponsiveContainer,
-  ComposedChart,
-  LineChart,
+  BarChart,
   Bar,
-  Line,
+  PieChart,
+  Pie,
+  Cell,
+  LabelList,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -58,50 +60,87 @@ interface DashboardViewProps {
   onSelectOwner: (name: string) => void;
 }
 
-/** Hover tooltip for the Servicing Value Growth chart — never color alone. */
-function WeeklyValueTooltipContent({ active, payload, label }: any) {
+/** Hover tooltip for the Cumulative Value bar chart. */
+function CumulativeValueTooltipContent({ active, payload, label }: any) {
   if (!active || !payload || !payload.length) return null;
-  const weekly = payload.find((p: any) => p.dataKey === 'totalValue');
   const cumulative = payload.find((p: any) => p.dataKey === 'cumulativeValue');
+  if (!cumulative) return null;
   return (
     <div className="rounded-xl border border-brand-gray-border bg-brand-card px-3.5 py-2.5 shadow-ambient font-sans">
       <p className="text-[10px] font-bold uppercase tracking-wider text-brand-text-variant mb-1.5">{label}</p>
-      {weekly && (
-        <p className="text-xs font-bold text-brand-text flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: 'var(--color-brand-primary)', opacity: 0.45 }} />
-          Weekly Value: {formatNumberWithAbbreviation(weekly.value as number)}
-        </p>
-      )}
-      {cumulative && (
-        <p className="text-xs font-bold text-brand-primary flex items-center gap-1.5 mt-1">
-          <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: 'var(--color-brand-primary)' }} />
-          Cumulative: {formatNumberWithAbbreviation(cumulative.value as number)}
-        </p>
-      )}
+      <p className="text-sm font-black text-brand-primary flex items-center gap-1.5">
+        <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: 'var(--color-brand-primary)' }} />
+        Cumulative: {formatNumberWithAbbreviation(cumulative.value as number)}
+      </p>
     </div>
   );
 }
 
-/** Hover tooltip for the Wakala Coverage Growth chart — never color alone. */
-function WeeklyCoverageTooltipContent({ active, payload, label }: any) {
+/** Hover tooltip shared by both composition pie charts — never color alone. */
+function PieSliceTooltipContent({ active, payload }: any) {
   if (!active || !payload || !payload.length) return null;
-  const served = payload.find((p: any) => p.dataKey === 'served');
-  const notServed = payload.find((p: any) => p.dataKey === 'notServed');
+  const slice = payload[0];
   return (
     <div className="rounded-xl border border-brand-gray-border bg-brand-card px-3.5 py-2.5 shadow-ambient font-sans">
-      <p className="text-[10px] font-bold uppercase tracking-wider text-brand-text-variant mb-1.5">{label}</p>
-      {served && (
-        <p className="text-xs font-bold flex items-center gap-1.5" style={{ color: 'var(--color-status-success-text)' }}>
-          <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: 'var(--color-status-success-text)' }} />
-          Served: {served.value}
-        </p>
-      )}
-      {notServed && (
-        <p className="text-xs font-bold flex items-center gap-1.5 mt-1" style={{ color: 'var(--color-status-error-text)' }}>
-          <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: 'var(--color-status-error-text)' }} />
-          Unserved: {notServed.value}
-        </p>
-      )}
+      <p className="text-xs font-bold flex items-center gap-1.5" style={{ color: slice.payload.fill }}>
+        <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: slice.payload.fill }} />
+        {slice.name}: {slice.value} ({slice.payload.percent}%)
+      </p>
+    </div>
+  );
+}
+
+/** Donut composition chart (e.g. Active/Inactive) shared by the coverage panel. */
+function CoverageDonut({
+  title,
+  data,
+}: {
+  title: string;
+  data: { name: string; value: number; fill: string }[];
+}) {
+  const total = data.reduce((sum, d) => sum + d.value, 0);
+  const withPercent = data.map(d => ({ ...d, percent: total > 0 ? Math.round((d.value / total) * 100) : 0 }));
+
+  return (
+    <div>
+      <p className="font-sans text-[11px] font-bold text-brand-text-variant uppercase tracking-wider text-center mb-1">
+        {title}
+      </p>
+      <div className="relative">
+        <ResponsiveContainer width="100%" height={180}>
+          <PieChart>
+            <Pie
+              data={withPercent}
+              dataKey="value"
+              nameKey="name"
+              innerRadius={52}
+              outerRadius={78}
+              paddingAngle={total > 0 ? 3 : 0}
+              stroke="var(--color-brand-card)"
+              strokeWidth={2}
+            >
+              {withPercent.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.fill} />
+              ))}
+            </Pie>
+            <Tooltip content={<PieSliceTooltipContent />} />
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          <span className="font-sans text-lg font-black text-brand-text">{total}</span>
+          <span className="font-sans text-[9px] font-bold text-brand-text-variant uppercase tracking-wider">Total</span>
+        </div>
+      </div>
+      <div className="flex items-center justify-center gap-4 mt-1">
+        {withPercent.map((entry) => (
+          <div key={entry.name} className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.fill }} />
+            <span className="font-sans text-[11px] font-bold text-brand-text">
+              {entry.name} <span className="text-brand-text-variant">({entry.percent}%)</span>
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -919,18 +958,24 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
               <div className="mt-6 pt-6 border-t border-brand-gray-border">
                 <h4 className="font-sans text-sm font-bold text-brand-text mb-4">Growth Trend</h4>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                  {/* Servicing Value Growth: weekly bars + cumulative line, one TZS axis */}
+                  {/* Cumulative servicing value: one big bar per week, one TZS axis */}
                   <div className="rounded-xl border border-brand-gray-border/70 bg-brand-bg/40 p-4">
-                    <p className="font-sans text-xs font-bold text-brand-text mb-0.5">Servicing Value Growth</p>
+                    <p className="font-sans text-xs font-bold text-brand-text mb-0.5">Cumulative Servicing Value</p>
                     <p className="font-sans text-[10px] text-brand-text-variant mb-3">
-                      Weekly value vs. cumulative total{target > 0 ? ', against the monthly target' : ''}
+                      Running total by week{target > 0 ? ', against the monthly target' : ''}
                     </p>
-                    <ResponsiveContainer width="100%" height={260}>
-                      <ComposedChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <ResponsiveContainer width="100%" height={320}>
+                      <BarChart data={series} margin={{ top: 24, right: 12, left: 0, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="cumulativeValueGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="var(--color-brand-primary-light)" stopOpacity={1} />
+                            <stop offset="100%" stopColor="var(--color-brand-primary)" stopOpacity={0.9} />
+                          </linearGradient>
+                        </defs>
                         <CartesianGrid stroke="var(--color-brand-gray-border)" strokeDasharray="3 3" vertical={false} />
                         <XAxis
                           dataKey="reportingWeek"
-                          tick={{ fontSize: 10, fill: 'var(--color-brand-text-variant)' }}
+                          tick={{ fontSize: 10, fontWeight: 700, fill: 'var(--color-brand-text-variant)' }}
                           tickLine={false}
                           axisLine={{ stroke: 'var(--color-brand-gray-border)' }}
                           interval="preserveStartEnd"
@@ -942,12 +987,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                           tickFormatter={(v) => formatNumberWithAbbreviation(v as number)}
                           width={48}
                         />
-                        <Tooltip content={<WeeklyValueTooltipContent />} cursor={{ fill: 'var(--color-brand-gray-hover)' }} />
-                        <Legend
-                          verticalAlign="top"
-                          height={28}
-                          wrapperStyle={{ fontSize: 10, fontWeight: 700, color: 'var(--color-brand-text-variant)' }}
-                        />
+                        <Tooltip content={<CumulativeValueTooltipContent />} cursor={{ fill: 'var(--color-brand-gray-hover)' }} />
                         {target > 0 && (
                           <ReferenceLine
                             y={target}
@@ -964,75 +1004,47 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                           />
                         )}
                         <Bar
-                          dataKey="totalValue"
-                          name="Weekly Value"
-                          fill="var(--color-brand-primary)"
-                          fillOpacity={0.28}
-                          radius={[4, 4, 0, 0]}
-                          barSize={22}
-                        />
-                        <Line
-                          type="monotone"
                           dataKey="cumulativeValue"
                           name="Cumulative Value"
-                          stroke="var(--color-brand-primary)"
-                          strokeWidth={2}
-                          dot={{ r: 3, fill: 'var(--color-brand-primary)', strokeWidth: 0 }}
-                          activeDot={{ r: 5 }}
-                        />
-                      </ComposedChart>
+                          fill="url(#cumulativeValueGradient)"
+                          radius={[8, 8, 0, 0]}
+                          barSize={56}
+                        >
+                          <LabelList
+                            dataKey="cumulativeValue"
+                            position="top"
+                            formatter={(v: number) => formatNumberWithAbbreviation(v)}
+                            style={{ fontSize: 10, fontWeight: 800, fill: 'var(--color-brand-primary)' }}
+                          />
+                        </Bar>
+                      </BarChart>
                     </ResponsiveContainer>
                   </div>
 
-                  {/* Wakala Coverage Growth: served vs unserved, one count axis */}
+                  {/* Wakala coverage composition for the latest uploaded week */}
                   <div className="rounded-xl border border-brand-gray-border/70 bg-brand-bg/40 p-4">
-                    <p className="font-sans text-xs font-bold text-brand-text mb-0.5">Wakala Coverage Growth</p>
-                    <p className="font-sans text-[10px] text-brand-text-variant mb-3">
-                      Served vs. unserved wakalas per uploaded week
+                    <p className="font-sans text-xs font-bold text-brand-text mb-0.5">
+                      Wakala Coverage — {latest.reportingWeek}
                     </p>
-                    <ResponsiveContainer width="100%" height={260}>
-                      <LineChart data={series} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                        <CartesianGrid stroke="var(--color-brand-gray-border)" strokeDasharray="3 3" vertical={false} />
-                        <XAxis
-                          dataKey="reportingWeek"
-                          tick={{ fontSize: 10, fill: 'var(--color-brand-text-variant)' }}
-                          tickLine={false}
-                          axisLine={{ stroke: 'var(--color-brand-gray-border)' }}
-                          interval="preserveStartEnd"
-                        />
-                        <YAxis
-                          tick={{ fontSize: 10, fill: 'var(--color-brand-text-variant)' }}
-                          tickLine={false}
-                          axisLine={false}
-                          allowDecimals={false}
-                          width={36}
-                        />
-                        <Tooltip content={<WeeklyCoverageTooltipContent />} cursor={{ stroke: 'var(--color-brand-gray-border)' }} />
-                        <Legend
-                          verticalAlign="top"
-                          height={28}
-                          wrapperStyle={{ fontSize: 10, fontWeight: 700, color: 'var(--color-brand-text-variant)' }}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="served"
-                          name="Served"
-                          stroke="var(--color-status-success-text)"
-                          strokeWidth={2}
-                          dot={{ r: 3, fill: 'var(--color-status-success-text)', strokeWidth: 0 }}
-                          activeDot={{ r: 5 }}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="notServed"
-                          name="Unserved"
-                          stroke="var(--color-status-error-text)"
-                          strokeWidth={2}
-                          dot={{ r: 3, fill: 'var(--color-status-error-text)', strokeWidth: 0 }}
-                          activeDot={{ r: 5 }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
+                    <p className="font-sans text-[10px] text-brand-text-variant mb-3">
+                      Latest uploaded week's status breakdown
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <CoverageDonut
+                        title="Active / Inactive"
+                        data={[
+                          { name: 'Active', value: latest.active, fill: 'var(--color-brand-primary)' },
+                          { name: 'Inactive', value: latest.inactive, fill: 'var(--color-brand-text-variant)' },
+                        ]}
+                      />
+                      <CoverageDonut
+                        title="Served / Unserved"
+                        data={[
+                          { name: 'Served', value: latest.served, fill: 'var(--color-status-success-text)' },
+                          { name: 'Unserved', value: latest.notServed, fill: 'var(--color-status-error-text)' },
+                        ]}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
