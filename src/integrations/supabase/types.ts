@@ -1371,9 +1371,11 @@ export type Database = {
         Row: {
           cash_in_txns: number
           cash_out_txns: number
+          cp_servicing_val: number
           created_at: string
           evaluated_at: string
           id: number
+          iop_value: number
           is_active: boolean
           is_served: boolean | null
           msisdn: string
@@ -1389,9 +1391,11 @@ export type Database = {
         Insert: {
           cash_in_txns?: number
           cash_out_txns?: number
+          cp_servicing_val?: number
           created_at?: string
           evaluated_at?: string
           id?: number
+          iop_value?: number
           is_active?: boolean
           is_served?: boolean | null
           msisdn: string
@@ -1407,9 +1411,11 @@ export type Database = {
         Update: {
           cash_in_txns?: number
           cash_out_txns?: number
+          cp_servicing_val?: number
           created_at?: string
           evaluated_at?: string
           id?: number
+          iop_value?: number
           is_active?: boolean
           is_served?: boolean | null
           msisdn?: string
