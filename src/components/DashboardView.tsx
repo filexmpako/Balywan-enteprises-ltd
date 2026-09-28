@@ -770,17 +770,12 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
               <h3 className="font-sans text-xs font-black uppercase tracking-wider text-brand-primary">Today ({companyKPIs.latestDay})</h3>
             </div>
             <div className="grid grid-cols-1 gap-4">
-              <div className="rounded-2xl border border-brand-gray-border bg-brand-card p-5 shadow-ambient flex flex-col justify-between">
-                <div>
-                  <span className="block font-sans text-[10px] font-bold text-brand-text-variant uppercase tracking-wider">Total Volume</span>
-                  <span className="block font-sans text-xl font-black text-status-info-text mt-2 font-mono">
-                    TZS {companyKPIs.floatServed.toLocaleString()}
-                  </span>
-                </div>
-                <span className="inline-block mt-3 self-start font-sans text-[10px] font-bold text-status-info-text bg-status-info-bg px-2 py-0.5 rounded">
-                  TOTAL SERVICED TODAY
-                </span>
-              </div>
+              <MetricCard
+                title="Total Volume"
+                value={`TZS ${companyKPIs.floatServed.toLocaleString()}`}
+                icon={DollarSign}
+                variant="blue"
+              />
             </div>
           </div>
 
@@ -791,17 +786,12 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
               <h3 className="font-sans text-xs font-black uppercase tracking-wider text-brand-primary">Month to Date ({companyKPIs.reportingMonth})</h3>
             </div>
             <div className="grid grid-cols-1 gap-4">
-              <div className="rounded-2xl border border-brand-gray-border bg-brand-card p-5 shadow-ambient flex flex-col justify-between">
-                <div>
-                  <span className="block font-sans text-[10px] font-bold text-brand-text-variant uppercase tracking-wider">Total Volume</span>
-                  <span className="block font-sans text-xl font-black text-status-info-text mt-2 font-mono">
-                    TZS {companyKPIs.mtdFloatServed.toLocaleString()}
-                  </span>
-                </div>
-                <span className="inline-block mt-3 self-start font-sans text-[10px] font-bold text-status-info-text bg-status-info-bg px-2 py-0.5 rounded">
-                  TOTAL SERVICED MONTH-TO-DATE
-                </span>
-              </div>
+              <MetricCard
+                title="Total Volume"
+                value={`TZS ${companyKPIs.mtdFloatServed.toLocaleString()}`}
+                icon={Activity}
+                variant="blue"
+              />
             </div>
           </div>
 
@@ -811,7 +801,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
               <Target className="h-4 w-4 text-amber-500" />
               <h3 className="font-sans text-xs font-black uppercase tracking-wider text-amber-600">Monthly Goal Progress</h3>
             </div>
-            <div className="rounded-2xl border-2 border-amber-400 bg-amber-400 p-5 shadow-ambient">
+            <div className="rounded-2xl border-2 border-amber-400 bg-gradient-to-br from-amber-400 to-amber-500 p-5 shadow-ambient">
               {!monthlyGoal.hasAny ? (
                 <div className="text-center py-2">
                   <p className="font-sans text-sm font-bold text-black/70">No monthly targets set yet</p>
@@ -821,13 +811,13 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                 <>
                   <div className="flex flex-wrap items-end justify-between gap-3 mb-3">
                     <div>
-                      <span className="block font-sans text-[10px] font-black text-black/60 uppercase tracking-wider">Company Monthly Target</span>
+                      <span className="block font-sans text-[10px] font-black text-black/60 uppercase tracking-wider">Target</span>
                       <span className="block font-sans text-2xl font-black text-black font-mono mt-1">
                         TZS {Math.round(monthlyGoal.total).toLocaleString()}
                       </span>
                     </div>
                     <div className="text-right">
-                      <span className="block font-sans text-[10px] font-black text-black/60 uppercase tracking-wider">Served So Far (MTD)</span>
+                      <span className="block font-sans text-[10px] font-black text-black/60 uppercase tracking-wider">Served (MTD)</span>
                       <span className="block font-sans text-lg font-extrabold text-black font-mono mt-1">
                         TZS {companyKPIs.mtdFloatServed.toLocaleString()}
                       </span>
@@ -847,38 +837,27 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
             </div>
           </div>
 
-          {/* Phase 4 Derived Metrics Row */}
+          {/* Settlement Ledger Row */}
           <div className="space-y-2">
             <div className="flex items-center gap-2 px-1">
               <ShieldCheck className="h-4 w-4 text-brand-primary" />
-              <h3 className="font-sans text-xs font-black uppercase tracking-wider text-brand-primary">Derived Metrics & Settlement Ledger</h3>
+              <h3 className="font-sans text-xs font-black uppercase tracking-wider text-brand-primary">Settlement Ledger</h3>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Total Penalty */}
-              <div className="rounded-2xl border border-rose-200 bg-rose-50/50 p-5 shadow-ambient flex flex-col justify-between">
-                <div>
-                  <span className="block font-sans text-[10px] font-bold text-rose-800 uppercase tracking-wider">Total Penalty</span>
-                  <span className="block font-sans text-xl font-black text-rose-950 mt-2 font-mono">
-                    TZS {(companyKPIs.totalPenalty || 0).toLocaleString()}
-                  </span>
-                </div>
-                <span className="inline-block mt-3 self-start font-sans text-[10px] font-bold text-rose-800 bg-rose-200/70 px-2 py-0.5 rounded">
-                  CP SERVICING VAL
-                </span>
-              </div>
-
-              {/* IOP Volume */}
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5 shadow-ambient flex flex-col justify-between">
-                <div>
-                  <span className="block font-sans text-[10px] font-bold text-emerald-800 uppercase tracking-wider">IOP Volume</span>
-                  <span className="block font-sans text-xl font-black text-emerald-950 mt-2 font-mono">
-                    TZS {(companyKPIs.totalIopVolume || 0).toLocaleString()}
-                  </span>
-                </div>
-                <span className="inline-block mt-3 self-start font-sans text-[10px] font-bold text-emerald-800 bg-emerald-200/70 px-2 py-0.5 rounded">
-                  EXTERNAL SERVICED VOLUME
-                </span>
-              </div>
+              <MetricCard
+                title="Total Penalty"
+                value={`TZS ${(companyKPIs.totalPenalty || 0).toLocaleString()}`}
+                subValue="PENALTY BASIS"
+                icon={AlertTriangle}
+                variant="red"
+              />
+              <MetricCard
+                title="IOP Volume"
+                value={`TZS ${(companyKPIs.totalIopVolume || 0).toLocaleString()}`}
+                subValue="OUTSIDE NETWORK"
+                icon={Layers}
+                variant="purple"
+              />
             </div>
           </div>
         </>
