@@ -12,6 +12,7 @@ import { formatNumberWithAbbreviation } from '../utils/numberFormat';
 import { fetchWakalaStatusHistory } from '../lib/wakalaStatus.functions';
 import { normalizeMsisdn } from '../utils/msisdn';
 import { buildWakalaNameMap } from '../utils/wakalaName';
+import type { BaseWakala } from '../types';
 
 interface Props {
   ownerId: string;
@@ -27,6 +28,10 @@ interface WakalaStatusRow {
   cash_out_txns: number;
   total_txns: number;
   total_value: number;
+  /** CP_Servicing_Val for the week — the penalty basis. Nonzero means the wakala went through a cross-partner ("bank") servicing route. */
+  cp_servicing_val?: number;
+  /** IOP volume for the week, from the report's own IOP column — serviced by a network outside the company. */
+  iop_value?: number;
 }
 
 /**
@@ -35,7 +40,9 @@ interface WakalaStatusRow {
  * row can be expanded to show exactly which wakalas were active/inactive
  * and served/unserved that week.
  */
-type DetailFilter = 'all' | 'active' | 'inactive' | 'served' | 'unserved' | 'nostatus';
+type DetailFilter =
+  | 'all' | 'active' | 'inactive' | 'served' | 'unserved' | 'nostatus'
+  | 'wakalaBank' | 'iopWakala' | 'newWakala' | 'location';
 
 const FILTER_LABELS: Record<DetailFilter, string> = {
   all: 'All',
@@ -44,15 +51,39 @@ const FILTER_LABELS: Record<DetailFilter, string> = {
   served: 'Served',
   unserved: 'Unserved',
   nostatus: 'No Status',
+  wakalaBank: 'Wakala Bank',
+  iopWakala: 'IOP Wakala',
+  newWakala: 'New Wakala',
+  location: 'Location',
 };
 
-function matchesFilter(w: WakalaStatusRow, filter: DetailFilter): boolean {
+/** How many consecutive prior weeks with no "served" reading count as "not served for a long time" for the New Wakala filter. */
+const NEW_WAKALA_LOOKBACK_WEEKS = 4;
+
+interface FilterContext {
+  newWakalaSet: Set<string>;
+  locationMap: Map<string, BaseWakala>;
+  selectedDistrict: string;
+}
+
+function matchesFilter(w: WakalaStatusRow, filter: DetailFilter, ctx: FilterContext): boolean {
+  const norm = normalizeMsisdn(w.msisdn) || w.msisdn;
   switch (filter) {
     case 'active': return w.is_active === true;
     case 'inactive': return w.is_active === false;
     case 'served': return w.is_served === true;
     case 'unserved': return w.is_served === false;
     case 'nostatus': return w.is_served === null || w.is_served === undefined;
+    // Wakala Bank: went through a cross-partner ("bank") servicing route this week.
+    case 'wakalaBank': return (w.cp_servicing_val || 0) > 0;
+    // IOP Wakala: serviced by a network outside our company this week.
+    case 'iopWakala': return (w.iop_value || 0) > 0;
+    // New Wakala: unserved for the lookback window, served this week.
+    case 'newWakala': return ctx.newWakalaSet.has(norm);
+    // Location: sourced from our own Base Wakala Index, never the uploaded report.
+    case 'location':
+      if (!ctx.selectedDistrict) return true;
+      return (ctx.locationMap.get(norm)?.district || '') === ctx.selectedDistrict;
     default: return true;
   }
 }
@@ -62,7 +93,20 @@ export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget, onLates
   const [expandedWeek, setExpandedWeek] = useState<string | null>(null);
   const [weekDetail, setWeekDetail] = useState<Record<string, WakalaStatusRow[] | 'loading' | 'error'>>({});
   const [detailFilter, setDetailFilter] = useState<Record<string, DetailFilter>>({});
+  const [selectedDistrict, setSelectedDistrict] = useState<Record<string, string>>({});
   const nameMap = useMemo(buildWakalaNameMap, [expandedWeek]);
+
+  const locationMap = useMemo(() => {
+    const map = new Map<string, BaseWakala>();
+    try {
+      const base: BaseWakala[] = JSON.parse(localStorage.getItem('baseWakalaIndex') || '[]');
+      base.forEach(w => {
+        const norm = normalizeMsisdn(w.msisdn);
+        if (norm) map.set(norm, w);
+      });
+    } catch { /* location filter degrades to unavailable, never breaks the UI */ }
+    return map;
+  }, [expandedWeek]);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,12 +134,7 @@ export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget, onLates
     onLatestActivity(active, Math.max(0, total - active));
   }, [latest?.reportingWeek, latest?.breakdown?.active, latest?.breakdown?.inactive, latest?.breakdown?.total, onLatestActivity]);
 
-  const toggleWeek = (reportingWeek: string) => {
-    if (expandedWeek === reportingWeek) {
-      setExpandedWeek(null);
-      return;
-    }
-    setExpandedWeek(reportingWeek);
+  const loadWeekDetail = (reportingWeek: string) => {
     if (weekDetail[reportingWeek]) return;
     setWeekDetail(prev => ({ ...prev, [reportingWeek]: 'loading' }));
     fetchWakalaStatusHistory({ data: { reportingWeek, ownerId } })
@@ -108,11 +147,51 @@ export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget, onLates
       });
   };
 
+  const toggleWeek = (reportingWeek: string) => {
+    if (expandedWeek === reportingWeek) {
+      setExpandedWeek(null);
+      return;
+    }
+    setExpandedWeek(reportingWeek);
+    loadWeekDetail(reportingWeek);
+    // Warm the cache for the prior weeks the New Wakala filter needs, so the
+    // "not served for a long time" check has data as soon as it's available.
+    const idx = series.findIndex(s => s.reportingWeek === reportingWeek);
+    if (idx > 0) {
+      series.slice(Math.max(0, idx - NEW_WAKALA_LOOKBACK_WEEKS), idx).forEach(s => loadWeekDetail(s.reportingWeek));
+    }
+  };
+
   const applyFilter = (reportingWeek: string, filter: DetailFilter, e: React.MouseEvent) => {
     e.stopPropagation();
     if (expandedWeek !== reportingWeek) toggleWeek(reportingWeek);
     setDetailFilter(prev => ({ ...prev, [reportingWeek]: prev[reportingWeek] === filter ? 'all' : filter }));
   };
+
+  // Wakalas served this expanded week with no "served" reading in the
+  // lookback window of prior weeks — i.e. not given service for a long time,
+  // recently reached.
+  const newWakalaSet = useMemo(() => {
+    const set = new Set<string>();
+    if (!expandedWeek) return set;
+    const idx = series.findIndex(s => s.reportingWeek === expandedWeek);
+    if (idx <= 0) return set; // no prior weeks to judge "a long time" against
+    const priorWeeks = series.slice(Math.max(0, idx - NEW_WAKALA_LOOKBACK_WEEKS), idx).map(s => s.reportingWeek);
+    const currentDetail = weekDetail[expandedWeek];
+    if (!Array.isArray(currentDetail)) return set;
+    currentDetail.forEach(w => {
+      if (w.is_served !== true) return;
+      const norm = normalizeMsisdn(w.msisdn) || w.msisdn;
+      const servedBefore = priorWeeks.some(week => {
+        const priorDetail = weekDetail[week];
+        if (!Array.isArray(priorDetail)) return false;
+        return priorDetail.some(p => (normalizeMsisdn(p.msisdn) || p.msisdn) === norm && p.is_served === true);
+      });
+      if (!servedBefore) set.add(norm);
+    });
+    return set;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedWeek, weekDetail]);
 
   if (!ownerId || history.length === 0 || !latest) return null;
 
@@ -229,24 +308,46 @@ export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget, onLates
                               )}
                               {Array.isArray(detail) && detail.length > 0 && (() => {
                                 const activeFilter = detailFilter[row.reportingWeek] || 'all';
-                                const filteredDetail = detail.filter(w => matchesFilter(w, activeFilter));
+                                const districtForWeek = selectedDistrict[row.reportingWeek] || '';
+                                const filterCtx: FilterContext = { newWakalaSet, locationMap, selectedDistrict: districtForWeek };
+                                const filteredDetail = detail.filter(w => matchesFilter(w, activeFilter, filterCtx));
+                                const districtOptions = Array.from(new Set(
+                                  detail
+                                    .map(w => locationMap.get(normalizeMsisdn(w.msisdn) || w.msisdn)?.district)
+                                    .filter((d): d is string => !!d)
+                                )).sort();
                                 return (
                                 <div className="overflow-x-auto">
-                                  <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                                    {(['all', 'active', 'inactive', 'served', 'unserved', 'nostatus'] as DetailFilter[]).map(f => (
-                                      <button
-                                        key={f}
-                                        type="button"
-                                        onClick={(e) => applyFilter(row.reportingWeek, f, e)}
-                                        className={`rounded-full px-2.5 py-1 font-sans text-[10px] font-bold cursor-pointer transition-colors ${
-                                          activeFilter === f
-                                            ? 'bg-brand-primary text-white'
-                                            : 'bg-brand-gray-hover text-brand-text-variant hover:text-brand-text'
-                                        }`}
+                                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                                    <select
+                                      value={activeFilter}
+                                      onChange={(e) => {
+                                        e.stopPropagation();
+                                        setDetailFilter(prev => ({ ...prev, [row.reportingWeek]: e.target.value as DetailFilter }));
+                                      }}
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="text-xs rounded-xl border border-slate-200 px-3 py-1.5 bg-slate-50 font-bold text-brand-text focus:outline-none focus:border-brand-primary cursor-pointer"
+                                    >
+                                      {(['all', 'active', 'inactive', 'served', 'unserved', 'nostatus', 'wakalaBank', 'iopWakala', 'newWakala', 'location'] as DetailFilter[]).map(f => (
+                                        <option key={f} value={f}>{FILTER_LABELS[f]}</option>
+                                      ))}
+                                    </select>
+                                    {activeFilter === 'location' && (
+                                      <select
+                                        value={districtForWeek}
+                                        onChange={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedDistrict(prev => ({ ...prev, [row.reportingWeek]: e.target.value }));
+                                        }}
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="text-xs rounded-xl border border-slate-200 px-3 py-1.5 bg-slate-50 font-bold text-brand-text focus:outline-none focus:border-brand-primary cursor-pointer"
                                       >
-                                        {FILTER_LABELS[f]}
-                                      </button>
-                                    ))}
+                                        <option value="">All Districts</option>
+                                        {districtOptions.map(d => (
+                                          <option key={d} value={d}>{d}</option>
+                                        ))}
+                                      </select>
+                                    )}
                                     <span className="font-sans text-[10px] text-brand-text-variant ml-1">
                                       Showing {filteredDetail.length} of {detail.length}
                                     </span>

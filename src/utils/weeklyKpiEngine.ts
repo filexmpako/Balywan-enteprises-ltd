@@ -89,6 +89,10 @@ export interface WeeklyWakalaEvaluation {
   isActive: boolean;
   /** null when the week's rows carried no servicing_status value at all. */
   isServed: boolean | null;
+  /** This wakala's CP_Servicing_Val for the week — the penalty basis. */
+  cpValue: number;
+  /** This wakala's IOP volume for the week, read from the report's own IOP column. */
+  iopValue: number;
 }
 
 export interface WeeklyStatsEntry extends WeeklyWakalaStats {
@@ -339,6 +343,8 @@ export function computeWeeklyStats(
       totalValue: val,
       isActive,
       isServed: finalServed,
+      cpValue,
+      iopValue: reportedIop,
     });
 
     let agg = ownerAgg.get(ownerId);
