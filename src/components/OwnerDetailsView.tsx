@@ -1000,14 +1000,14 @@ export default function OwnerDetailsView({
               <MetricCard
                 title="CP Penalty"
                 value={`TZS ${(localOwner.penalty || 0).toLocaleString()}`}
-                subValue="PENALTY"
+                subValue="CP_SERVICING_VAL x RATE"
                 icon={AlertTriangle}
                 variant="red"
               />
               <MetricCard
-                title="IOP Volume (Daily)"
+                title="External Servicing"
                 value={`TZS ${(localOwner.iopVolume || 0).toLocaleString()}`}
-                subValue="VOLUME"
+                subValue="FROM REPORT'S IOP COLUMN"
                 icon={Layers}
                 variant="purple"
               />

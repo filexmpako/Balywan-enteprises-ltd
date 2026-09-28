@@ -4,6 +4,48 @@ import { getDailyServicingRows, saveDailyServicingData, getServicingRows } from 
 import { normalizeMsisdn } from './msisdn';
 import { resolveOwnerMatch } from './ownerMatch';
 import { formatDateTime } from './dateFormat';
+import { calculatePenalty, getActivityRules } from './activityRules';
+
+/**
+ * Reads a numeric column by name, tolerant of the exact header spelling
+ * uploaded reports actually use: exact match first, then a normalized
+ * (trimmed, case/whitespace/underscore-insensitive) fallback — real
+ * exports have been seen with headers like ' CP_Servicing_Val ' (padded
+ * with spaces), which an exact-key lookup alone would silently miss.
+ */
+function getColumnVal(row: any, keys: string[]): number {
+  for (const k of keys) {
+    if (row[k] !== undefined && row[k] !== null && row[k] !== '') {
+      const v = typeof row[k] === 'number' ? row[k] : parseFloat(String(row[k]).replace(/,/g, '').replace(/[^0-9.-]/g, ''));
+      if (!isNaN(v)) return v;
+    }
+  }
+  const normalizedKeys = keys.map(k => k.trim().toLowerCase().replace(/[\s_-]+/g, ''));
+  for (const rowKey of Object.keys(row)) {
+    const normRowKey = rowKey.trim().toLowerCase().replace(/[\s_-]+/g, '');
+    if (normalizedKeys.includes(normRowKey)) {
+      const v = typeof row[rowKey] === 'number' ? row[rowKey] : parseFloat(String(row[rowKey]).replace(/,/g, '').replace(/[^0-9.-]/g, ''));
+      if (!isNaN(v)) return v;
+    }
+  }
+  return 0;
+}
+
+/** The report's own IOP column: volume serviced outside the company for a wakala still in our base. */
+const IOP_COLUMN_KEYS = ['IOP'];
+/** The penalty basis: CP_Servicing_Val, the value serviced via a cross-partner network. */
+const CP_SERVICING_VAL_KEYS = [
+  'CP_Servicing_Val', 'CP Servicing Val', 'cp_servicing_val',
+  'CP_Servicing_Value', 'cp_servicing_value',
+];
+
+function getIopColumnVal(row: any): number {
+  return getColumnVal(row, IOP_COLUMN_KEYS);
+}
+
+function getCpServicingVal(row: any): number {
+  return getColumnVal(row, CP_SERVICING_VAL_KEYS);
+}
 
 export interface Till {
   id: string;
@@ -948,29 +990,28 @@ export async function recalculateAllPerformances(providedRows?: any[]): Promise<
     });
   }
 
-  // Compute penalty per owner
-  const penaltyByOwnerMap: Record<string, number> = {};
-  const penaltyKeys = ['CP_Servicing_Val', 'CP Servicing Val', 'cp_servicing_val', 'CP_Servicing_Value', 'cp_servicing_value', 'penalty', 'Penalty'];
+  // Compute CP_Servicing_Val (penalty basis) and IOP-column volume per
+  // owner, both read straight from the uploaded monthly servicing rows.
+  const rules = getActivityRules();
+  const cpValueByOwnerMap: Record<string, number> = {};
+  const iopVolumeByOwnerMap: Record<string, number> = {};
   monthlyServicingRows.forEach(row => {
-    let penaltyVal = 0;
-    for (const k of penaltyKeys) {
-      if (row[k] !== undefined && row[k] !== null && row[k] !== '') {
-        const v = typeof row[k] === 'number' ? row[k] : parseFloat(String(row[k]).replace(/,/g, '').replace(/[^0-9.-]/g, ''));
-        if (!isNaN(v)) { penaltyVal = v; break; }
-      }
-    }
-    if (penaltyVal !== 0) {
-      const rawMsisdn = String(row.MSISDN || row.msisdn || row.phone || row.Branch_msisdn || '');
-      const normMsisdn = normalizeMsisdn(rawMsisdn);
-      const baseMatch = normMsisdn ? baseWakalaByMsisdn.get(normMsisdn) : undefined;
-      if (baseMatch && baseMatch.ownerName) {
-        const matchResult = resolveOwnerMatch(baseMatch.ownerName, ownersList, 'Penalty Calculation');
-        if (matchResult.matchedOwner) {
-          const ownerId = matchResult.matchedOwner.id;
-          const ownerNameLower = matchResult.matchedOwner.name.toLowerCase();
-          penaltyByOwnerMap[ownerId] = (penaltyByOwnerMap[ownerId] || 0) + penaltyVal;
-          penaltyByOwnerMap[ownerNameLower] = (penaltyByOwnerMap[ownerNameLower] || 0) + penaltyVal;
-        }
+    const cpVal = getCpServicingVal(row);
+    const iopVal = getIopColumnVal(row);
+    if (cpVal === 0 && iopVal === 0) return;
+
+    const rawMsisdn = String(row.MSISDN || row.msisdn || row.phone || row.Branch_msisdn || '');
+    const normMsisdn = normalizeMsisdn(rawMsisdn);
+    const baseMatch = normMsisdn ? baseWakalaByMsisdn.get(normMsisdn) : undefined;
+    if (baseMatch && baseMatch.ownerName) {
+      const matchResult = resolveOwnerMatch(baseMatch.ownerName, ownersList, 'Penalty Calculation');
+      if (matchResult.matchedOwner) {
+        const ownerId = matchResult.matchedOwner.id;
+        const ownerNameLower = matchResult.matchedOwner.name.toLowerCase();
+        cpValueByOwnerMap[ownerId] = (cpValueByOwnerMap[ownerId] || 0) + cpVal;
+        cpValueByOwnerMap[ownerNameLower] = (cpValueByOwnerMap[ownerNameLower] || 0) + cpVal;
+        iopVolumeByOwnerMap[ownerId] = (iopVolumeByOwnerMap[ownerId] || 0) + iopVal;
+        iopVolumeByOwnerMap[ownerNameLower] = (iopVolumeByOwnerMap[ownerNameLower] || 0) + iopVal;
       }
     }
   });
@@ -1001,15 +1042,14 @@ export async function recalculateAllPerformances(providedRows?: any[]): Promise<
     const ownerId = owner.id || '';
     const ownerNameLower = (owner.name || '').toLowerCase();
 
-    // 1. Resolve Penalty from monthly servicing rows
-    const penalty = (ownerId && penaltyByOwnerMap[ownerId]) || (ownerNameLower && penaltyByOwnerMap[ownerNameLower]) || 0;
+    // 1. Penalty: this owner's CP_Servicing_Val total (monthly servicing
+    // rows) times the configured penalty rate.
+    const cpValue = (ownerId && cpValueByOwnerMap[ownerId]) || (ownerNameLower && cpValueByOwnerMap[ownerNameLower]) || 0;
+    const penalty = calculatePenalty(cpValue, rules);
 
-    // 2. Calculate IOP Volume (wakala not registered to anyone in the company)
-    const iopRows = classifiedRows.filter(c => 
-      c.bucket === 'IOP' && 
-      ((ownerId && c.attributedOwnerId === ownerId) || (ownerNameLower && c.attributedOwnerName?.toLowerCase() === ownerNameLower))
-    );
-    const iopVolume = iopRows.reduce((acc, c) => acc + Math.abs(getAmountVal(c.row)), 0);
+    // 2. IOP volume: this owner's total from the report's own IOP column —
+    // wakalas still in our base that were serviced by an outside network.
+    const iopVolume = (ownerId && iopVolumeByOwnerMap[ownerId]) || (ownerNameLower && iopVolumeByOwnerMap[ownerNameLower]) || 0;
 
     const assignedTills = Array.isArray(deduplicatedTillsList)
       ? deduplicatedTillsList
@@ -1156,19 +1196,6 @@ export async function calculateCompanyKPIs(realRows: any[]): Promise<CompanyKPIs
     const cleaned = String(val).replace(/,/g, '').replace(/[^0-9.-]/g, '');
     const parsed = parseFloat(cleaned);
     return isNaN(parsed) ? 0 : parsed;
-  };
-
-  const getNumVal = (row: any, keys: string[]) => {
-    for (const k of keys) {
-      if (row[k] !== undefined && row[k] !== null && row[k] !== '') {
-        const v = row[k];
-        if (typeof v === 'number') return v;
-        const cleaned = String(v).replace(/,/g, '').replace(/[^0-9.-]/g, '');
-        const parsed = parseFloat(cleaned);
-        if (!isNaN(parsed)) return parsed;
-      }
-    }
-    return 0;
   };
 
   const defaultResult: CompanyKPIsResult = {
@@ -1344,8 +1371,6 @@ export async function calculateCompanyKPIs(realRows: any[]): Promise<CompanyKPIs
   const lastUpload = `${day}/${monthNum}/${yearTwoDigit}`;
 
   // 3. PHASE 4 DERIVED METRICS (Penalty & IOP Ledger)
-
-  // PART A — Compute Penalty correctly
   let monthlyServicingRows: any[] = [];
   try {
     monthlyServicingRows = await getServicingRows(reportingMonth);
@@ -1366,49 +1391,50 @@ export async function calculateCompanyKPIs(realRows: any[]): Promise<CompanyKPIs
     });
   }
 
-  let totalPenalty = 0;
-  let unattributedPenalty = 0;
-  const penaltyByOwner: Record<string, number> = {};
+  // Penalty (CP_Servicing_Val x penalty rate) and IOP volume (the report's
+  // own IOP column) — both read straight from the same monthly servicing
+  // rows in one pass.
+  const rules = getActivityRules();
+  let totalCpValue = 0;
+  let unattributedCpValue = 0;
+  const cpValueByOwner: Record<string, number> = {};
 
-  const penaltyKeys = ['CP_Servicing_Val', 'CP Servicing Val', 'cp_servicing_val', 'CP_Servicing_Value', 'cp_servicing_value', 'penalty', 'Penalty'];
+  let totalIopVolume = 0;
+  const iopVolumeByOwner: Record<string, number> = {};
 
   monthlyServicingRows.forEach(row => {
-    const penaltyVal = getNumVal(row, penaltyKeys);
-    if (penaltyVal !== 0) {
-      totalPenalty += penaltyVal;
+    const cpVal = getCpServicingVal(row);
+    const iopVal = getIopColumnVal(row);
+    if (cpVal === 0 && iopVal === 0) return;
 
-      const rawMsisdn = String(row.MSISDN || row.msisdn || row.phone || row.Phone || row.Branch_msisdn || '');
-      const normMsisdn = normalizeMsisdn(rawMsisdn);
-      const baseMatch = normMsisdn ? baseWakalaByMsisdn.get(normMsisdn) : undefined;
+    totalCpValue += cpVal;
+    totalIopVolume += iopVal;
 
-      if (baseMatch && baseMatch.ownerName) {
-        const matchResult = resolveOwnerMatch(baseMatch.ownerName, ownersForClassification, 'Penalty Calculation');
-        const owner = matchResult.matchedOwner;
-        if (owner) {
-          penaltyByOwner[owner.id] = (penaltyByOwner[owner.id] || 0) + penaltyVal;
-          penaltyByOwner[owner.name.toLowerCase()] = (penaltyByOwner[owner.name.toLowerCase()] || 0) + penaltyVal;
-        } else {
-          unattributedPenalty += penaltyVal;
-        }
+    const rawMsisdn = String(row.MSISDN || row.msisdn || row.phone || row.Phone || row.Branch_msisdn || '');
+    const normMsisdn = normalizeMsisdn(rawMsisdn);
+    const baseMatch = normMsisdn ? baseWakalaByMsisdn.get(normMsisdn) : undefined;
+
+    if (baseMatch && baseMatch.ownerName) {
+      const matchResult = resolveOwnerMatch(baseMatch.ownerName, ownersForClassification, 'Penalty Calculation');
+      const owner = matchResult.matchedOwner;
+      if (owner) {
+        cpValueByOwner[owner.id] = (cpValueByOwner[owner.id] || 0) + cpVal;
+        cpValueByOwner[owner.name.toLowerCase()] = (cpValueByOwner[owner.name.toLowerCase()] || 0) + cpVal;
+        iopVolumeByOwner[owner.id] = (iopVolumeByOwner[owner.id] || 0) + iopVal;
+        iopVolumeByOwner[owner.name.toLowerCase()] = (iopVolumeByOwner[owner.name.toLowerCase()] || 0) + iopVal;
       } else {
-        unattributedPenalty += penaltyVal;
+        unattributedCpValue += cpVal;
       }
+    } else {
+      unattributedCpValue += cpVal;
     }
   });
 
-  // PART B — IOP Volume (wakala not registered to anyone in the company)
-  const iopVolumeRows = classifiedAll.filter(c => c.bucket === 'IOP');
-  const totalIopVolume = iopVolumeRows.reduce((acc, c) => acc + Math.abs(getAmountVal(c.row)), 0);
-
-  const iopVolumeByOwner: Record<string, number> = {};
-  iopVolumeRows.forEach(c => {
-    const amt = Math.abs(getAmountVal(c.row));
-    if (c.attributedOwnerId) {
-      iopVolumeByOwner[c.attributedOwnerId] = (iopVolumeByOwner[c.attributedOwnerId] || 0) + amt;
-    }
-    if (c.attributedOwnerName) {
-      iopVolumeByOwner[c.attributedOwnerName.toLowerCase()] = (iopVolumeByOwner[c.attributedOwnerName.toLowerCase()] || 0) + amt;
-    }
+  const totalPenalty = calculatePenalty(totalCpValue, rules);
+  const unattributedPenalty = calculatePenalty(unattributedCpValue, rules);
+  const penaltyByOwner: Record<string, number> = {};
+  Object.keys(cpValueByOwner).forEach(key => {
+    penaltyByOwner[key] = calculatePenalty(cpValueByOwner[key], rules);
   });
 
   return {

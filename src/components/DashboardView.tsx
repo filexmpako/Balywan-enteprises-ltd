@@ -10,7 +10,14 @@ import { isKpi1RowName, isKpi2RowName } from '../utils/kpiRowMatch';
 import { formatNumberWithAbbreviation } from '../utils/numberFormat';
 import { getDailyServicingRows } from '../utils/indexedDB';
 import { refreshWeeklyStatsHistory, readWeeklyStatsHistory } from '../utils/weeklyHistory';
-import { withCumulativeValue, weekNumberOf, paceLabel, type WeeklyStatsEntry } from '../utils/weeklyKpiEngine';
+import {
+  withCumulativeValue,
+  weekNumberOf,
+  paceLabel,
+  computeWeeklyIopComparison,
+  type WeeklyStatsEntry,
+  type WeeklyIopComparison,
+} from '../utils/weeklyKpiEngine';
 
 import { 
   Users, 
@@ -199,6 +206,44 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
     };
   }, []);
 
+  // Compares the latest uploaded week's own IOP column against Daily MGT's
+  // own IOP-bucket total for that same week's date range. Positive
+  // iopRemaining: Daily MGT is detecting more externally-serviced volume
+  // than the weekly report captured.
+  const [weeklyIopComparison, setWeeklyIopComparison] = useState<WeeklyIopComparison | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (weeklyStats.length === 0) {
+      setWeeklyIopComparison(null);
+      return;
+    }
+    const latestEntry = weeklyStats[weeklyStats.length - 1];
+    (async () => {
+      try {
+        const dailyRows = await getDailyServicingRows();
+        const saTillRegistry = JSON.parse(localStorage.getItem('saTillRegistry') || '[]');
+        const baseWakalaIndex: BaseWakala[] = JSON.parse(localStorage.getItem('baseWakalaIndex') || '[]');
+        const tillsList = JSON.parse(localStorage.getItem('tillsList') || '[]');
+        const owners: Owner[] = JSON.parse(localStorage.getItem('ownersList') || '[]');
+        const classified = getClassifiedRowsCached(dailyRows || [], saTillRegistry, baseWakalaIndex, tillsList, owners);
+        const comparison = computeWeeklyIopComparison(
+          latestEntry.reportingWeek,
+          classified,
+          latestEntry.iopValue || 0,
+          latestEntry.byOwner || []
+        );
+        if (!cancelled) setWeeklyIopComparison(comparison);
+      } catch (e) {
+        console.error('Failed to compute weekly IOP comparison:', e);
+        if (!cancelled) setWeeklyIopComparison(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [weeklyStats]);
+
   const [rawKpis, setRawKpis] = useState<KPIMetric[]>(() => {
     const saved = localStorage.getItem('dashboardKPIs');
     if (saved) {
@@ -358,6 +403,10 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
   const [companyKPIs, setCompanyKPIs] = useState<CompanyKPIsResult>(defaultCompanyKPIs);
   const [topOwnersList, setTopOwnersList] = useState<TopOwner[]>([]);
   const [monthlyGoal, setMonthlyGoal] = useState<{ total: number; hasAny: boolean }>({ total: 0, hasAny: false });
+  // Owners with their penalty/IOP figures (see recalculateAllPerformances),
+  // for the External Servicing ranking below — same source as the Owner
+  // Details page, so the two never disagree.
+  const [ownersWithMetrics, setOwnersWithMetrics] = useState<Owner[]>([]);
 
   // Company-wide Served/Unserved wakala drill-down, opened from the
   // Weekly KPI Progression cards below.
@@ -419,6 +468,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
           // Live KPI1 / KPI2 company-wide totals from accumulated daily data
           try {
             const owners: Owner[] = JSON.parse(localStorage.getItem('ownersList') || '[]');
+            setOwnersWithMetrics(owners);
             const saTillRegistry = JSON.parse(localStorage.getItem('saTillRegistry') || '[]');
             const tillsList = JSON.parse(localStorage.getItem('tillsList') || '[]');
             const baseWakalaIndex: BaseWakala[] = JSON.parse(localStorage.getItem('baseWakalaIndex') || '[]');
@@ -832,6 +882,48 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                 </span>
               </div>
             </div>
+
+            {/* Owners whose base wakalas were serviced by an outside network,
+                read from the report's own IOP column — worst first. */}
+            {(() => {
+              const flagged = ownersWithMetrics
+                .filter(o => (o.iopVolume || 0) > 0)
+                .sort((a, b) => (b.iopVolume || 0) - (a.iopVolume || 0));
+              if (flagged.length === 0) return null;
+              return (
+                <div className="rounded-2xl border border-brand-gray-border bg-brand-card p-5 shadow-ambient mt-2">
+                  <span className="block font-sans text-[10px] font-bold text-brand-text-variant uppercase tracking-wider mb-3">
+                    Owners Serviced by Outside Networks
+                  </span>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[420px] text-left">
+                      <thead>
+                        <tr className="border-b border-brand-gray-border">
+                          {['Owner', 'IOP Volume', 'Penalty'].map(h => (
+                            <th key={h} className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {flagged.map(o => (
+                          <tr key={o.id} className="border-b border-brand-gray-border/50">
+                            <td className="py-2.5 font-sans text-xs font-bold text-brand-text">{o.name}</td>
+                            <td className="py-2.5 font-sans text-xs font-bold text-emerald-700">
+                              TZS {(o.iopVolume || 0).toLocaleString()}
+                            </td>
+                            <td className="py-2.5 font-sans text-xs font-bold text-rose-700">
+                              TZS {(o.penalty || 0).toLocaleString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </>
       )}
@@ -1046,6 +1138,69 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
               <p className="mt-6 pt-6 border-t border-brand-gray-border font-sans text-xs text-brand-text-variant text-center">
                 Upload at least 2 weeks of data to see growth trends here.
               </p>
+            )}
+
+            {/* IOP Remaining: Daily MGT's own IOP-bucket total for this
+                week's dates vs. the weekly report's own IOP column.
+                Positive means Daily MGT is seeing more externally-serviced
+                volume than the report captured. */}
+            {weeklyIopComparison && (weeklyIopComparison.reportedIop !== 0 || weeklyIopComparison.dailyMgtIop !== 0) && (
+              <div className="mt-6 pt-6 border-t border-brand-gray-border">
+                <h4 className="font-sans text-sm font-bold text-brand-text mb-4">
+                  IOP Remaining — {weeklyIopComparison.reportingWeek}
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <MetricCard
+                    title="Report IOP"
+                    value={`TZS ${weeklyIopComparison.reportedIop.toLocaleString()}`}
+                    subValue="FROM WEEKLY REPORT"
+                    icon={Layers}
+                    variant="purple"
+                  />
+                  <MetricCard
+                    title="Daily MGT IOP"
+                    value={`TZS ${weeklyIopComparison.dailyMgtIop.toLocaleString()}`}
+                    subValue="THIS WEEK'S DATES"
+                    icon={Activity}
+                    variant="blue"
+                  />
+                  <MetricCard
+                    title="IOP Remaining"
+                    value={`${weeklyIopComparison.iopRemaining >= 0 ? '+' : ''}TZS ${weeklyIopComparison.iopRemaining.toLocaleString()}`}
+                    subValue={weeklyIopComparison.iopRemaining >= 0 ? 'MGT > REPORT' : 'REPORT > MGT'}
+                    icon={weeklyIopComparison.iopRemaining >= 0 ? AlertTriangle : ShieldCheck}
+                    variant={weeklyIopComparison.iopRemaining >= 0 ? 'red' : 'green'}
+                  />
+                </div>
+
+                {weeklyIopComparison.byOwner.length > 0 && (
+                  <div className="mt-4 overflow-x-auto">
+                    <table className="w-full min-w-[520px] text-left">
+                      <thead>
+                        <tr className="border-b border-brand-gray-border">
+                          {['Owner', 'Report IOP', 'Daily MGT IOP', 'Remaining'].map(h => (
+                            <th key={h} className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {weeklyIopComparison.byOwner.map(o => (
+                          <tr key={o.ownerId} className="border-b border-brand-gray-border/50">
+                            <td className="py-2.5 font-sans text-xs font-bold text-brand-text">{o.ownerName}</td>
+                            <td className="py-2.5 font-sans text-xs text-brand-text">TZS {o.reportedIop.toLocaleString()}</td>
+                            <td className="py-2.5 font-sans text-xs text-brand-text">TZS {o.dailyMgtIop.toLocaleString()}</td>
+                            <td className={`py-2.5 font-sans text-xs font-bold ${o.iopRemaining >= 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
+                              {o.iopRemaining >= 0 ? '+' : ''}TZS {o.iopRemaining.toLocaleString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             )}
 
             <WakalaStatusDetailModal

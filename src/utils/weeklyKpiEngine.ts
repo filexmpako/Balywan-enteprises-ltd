@@ -19,6 +19,7 @@ import { BaseWakala, Owner } from '../types';
 import { normalizeMsisdn } from './msisdn';
 import { resolveOwnerMatch } from './ownerMatch';
 import { getServicedStatusFromColumn, mergeServicedStatus } from './servicingStatus';
+import { formatToISODate } from './mappingEngine';
 import {
   getActivityRules,
   isActiveByRule,
@@ -42,11 +43,16 @@ export interface WeeklyWakalaStats {
   totalTxns: number;
   /** Volume attributed to wakalas that belong to a company owner. */
   baseValue: number;
-  /** Volume from wakalas not registered to any owner (IOP). */
+  /**
+   * IOP volume, read from the uploaded report's own IOP column: value the
+   * report itself says was serviced by a network outside the company, for
+   * wakalas that are still in our own base. Not derived/guessed — taken
+   * as-is from the file.
+   */
   iopValue: number;
   cashInTxns: number;
   cashOutTxns: number;
-  /** Telco penalty accrued on this week's served volume. */
+  /** CP_Servicing_Val summed for the week, times the configured penalty rate. */
   penalty: number;
 }
 
@@ -61,8 +67,12 @@ export interface WeeklyOwnerBreakdown {
   noStatus: number;
   value: number;
   txns: number;
+  /** IOP volume for this owner, read from the report's own IOP column. */
   iopValue: number;
+  /** CP_Servicing_Val summed for this owner, times the configured penalty rate. */
   penalty: number;
+  /** This owner's CP_Servicing_Val total — the penalty basis. */
+  cpValue: number;
 }
 
 /** Per-wakala activity evaluation for one week, kept as history. */
@@ -143,6 +153,13 @@ const VAL_KEYS = [
   'SA Servicing Value', 'sa_servicing_val', 'servicing_val',
   'Servicing Amount', 'Transaction Amount', 'Volume', 'Amount', 'Value',
 ];
+/** The penalty basis: CP_Servicing_Val, the value serviced via a cross-partner network. */
+const CP_VAL_KEYS = [
+  'CP_Servicing_Val', 'CP Servicing Val', 'cp_servicing_val',
+  'CP_Servicing_Value', 'cp_servicing_value',
+];
+/** The report's own IOP column: volume serviced outside the company for a wakala still in our base. */
+const IOP_KEYS = ['IOP', 'iop', 'Iop'];
 
 /**
  * Builds an MSISDN -> ownerId resolver from the Base Wakala index (primary and
@@ -222,6 +239,8 @@ export function computeWeeklyStats(
       hasStatusCol: boolean;
       servedStatus: boolean | null;
       statusActive: boolean;
+      cpValue: number;
+      reportedIop: number;
     }
   >();
 
@@ -234,6 +253,8 @@ export function computeWeeklyStats(
     const rowHasStatus = hasRowStatusKey(row);
     const rowServed = getServicedStatusFromColumn(row);
     const rowStatusActive = isRowStatusActive(row);
+    const rowCpValue = getFieldValue(row, CP_VAL_KEYS);
+    const rowReportedIop = getFieldValue(row, IOP_KEYS);
 
     const existing = wakalaMap.get(msisdn);
     if (existing) {
@@ -245,6 +266,8 @@ export function computeWeeklyStats(
       if (rowHasStatus) existing.hasStatusCol = true;
       existing.servedStatus = mergeServicedStatus(existing.servedStatus, rowServed);
       if (rowStatusActive) existing.statusActive = true;
+      existing.cpValue += rowCpValue;
+      existing.reportedIop += rowReportedIop;
     } else {
       wakalaMap.set(msisdn, {
         txns,
@@ -255,6 +278,8 @@ export function computeWeeklyStats(
         hasStatusCol: rowHasStatus,
         servedStatus: rowServed,
         statusActive: rowStatusActive,
+        cpValue: rowCpValue,
+        reportedIop: rowReportedIop,
       });
     }
   });
@@ -269,12 +294,13 @@ export function computeWeeklyStats(
   let cashOutTxns = 0;
   let baseValue = 0;
   let iopValue = 0;
+  let totalCpValue = 0;
 
   const ownerAgg = new Map<string, WeeklyOwnerBreakdown>();
   const evaluations: WeeklyWakalaEvaluation[] = [];
 
   wakalaMap.forEach((entry, msisdn) => {
-    const { txns, val, cashIn, cashOut, countTotal, servedStatus, statusActive } = entry;
+    const { txns, val, cashIn, cashOut, countTotal, servedStatus, statusActive, cpValue, reportedIop } = entry;
     // Active / inactive is the uploaded wakala_status column merged with the
     // configurable system rule (cash-in + cash-out transaction count against
     // the threshold) — an "active" reading from either source wins, mirroring
@@ -293,13 +319,13 @@ export function computeWeeklyStats(
     totalTxns += txns;
     cashInTxns += cashIn;
     cashOutTxns += cashOut;
+    totalCpValue += cpValue;
+    iopValue += reportedIop;
 
     const match = resolveOwner ? resolveOwner(msisdn) : null;
     const ownerId = match?.ownerId || UNASSIGNED_ID;
     const ownerName = match?.ownerName || 'Unassigned';
-    const isIop = !match;
-    if (isIop) iopValue += val;
-    else baseValue += val;
+    if (match) baseValue += val;
 
     evaluations.push({
       msisdn,
@@ -328,6 +354,7 @@ export function computeWeeklyStats(
         txns: 0,
         iopValue: 0,
         penalty: 0,
+        cpValue: 0,
       };
       ownerAgg.set(ownerId, agg);
     }
@@ -339,11 +366,12 @@ export function computeWeeklyStats(
     else agg.noStatus++;
     agg.value += val;
     agg.txns += txns;
-    if (isIop) agg.iopValue += val;
+    agg.iopValue += reportedIop;
+    agg.cpValue += cpValue;
   });
 
   ownerAgg.forEach(agg => {
-    agg.penalty = calculatePenalty(agg.value, rules);
+    agg.penalty = calculatePenalty(agg.cpValue, rules);
   });
 
   const totalCount = wakalaMap.size;
@@ -367,7 +395,7 @@ export function computeWeeklyStats(
     iopValue,
     cashInTxns,
     cashOutTxns,
-    penalty: calculatePenalty(totalValue, rules),
+    penalty: calculatePenalty(totalCpValue, rules),
     byOwner: Array.from(ownerAgg.values()).sort((a, b) => b.value - a.value),
     evaluations,
   };
@@ -435,3 +463,117 @@ export function paceLabel(progressPercent: number, weekNum: number): {
 }
 
 export const UNASSIGNED_OWNER_ID = UNASSIGNED_ID;
+
+const MONTH_NAMES_LOWER = [
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december',
+];
+
+/**
+ * Parses a "Week N (Month D - Month D, YYYY)" reportingWeek label (see
+ * buildUploadWeekOptions in UploadReportsView.tsx) into an inclusive ISO
+ * date range. Returns null if the label doesn't match that shape.
+ */
+export function parseWeekDateRange(reportingWeek: string): { start: string; end: string } | null {
+  const match = String(reportingWeek || '').match(
+    /\(([A-Za-z]+)\s+(\d{1,2})\s*-\s*[A-Za-z]+\s+(\d{1,2}),\s*(\d{4})\)/
+  );
+  if (!match) return null;
+  const [, monthName, startDay, endDay, year] = match;
+  const monthIndex = MONTH_NAMES_LOWER.indexOf(monthName.toLowerCase());
+  if (monthIndex < 0) return null;
+  const pad = (n: string) => n.padStart(2, '0');
+  return {
+    start: `${year}-${pad(String(monthIndex + 1))}-${pad(startDay)}`,
+    end: `${year}-${pad(String(monthIndex + 1))}-${pad(endDay)}`,
+  };
+}
+
+export interface WeeklyIopOwnerComparison {
+  ownerId: string;
+  ownerName: string;
+  reportedIop: number;
+  dailyMgtIop: number;
+  /** dailyMgtIop - reportedIop. Positive: Daily MGT saw more externally-serviced volume than the report captured for this owner's wakalas this week. */
+  iopRemaining: number;
+}
+
+export interface WeeklyIopComparison {
+  reportingWeek: string;
+  /** This week's IOP total from the uploaded report's own IOP column. */
+  reportedIop: number;
+  /** Daily MGT's own IOP-bucket total (classification.ts) for this week's date range. */
+  dailyMgtIop: number;
+  /** dailyMgtIop - reportedIop. Positive: Daily MGT is detecting more externally-serviced volume than the weekly report captured for the same week. */
+  iopRemaining: number;
+  byOwner: WeeklyIopOwnerComparison[];
+}
+
+/**
+ * Compares one week's Daily MGT IOP-bucket total against the same week's
+ * uploaded report's own IOP column — both scoped to the week's date range
+ * (Daily MGT) or already scoped by the caller (the report figures).
+ * classifiedDailyRows is the full, unfiltered classifyServicingRows() output
+ * for Daily MGT transactions; this filters it to the week internally.
+ */
+export function computeWeeklyIopComparison(
+  reportingWeek: string,
+  classifiedDailyRows: Array<{ row: any; bucket: string; attributedOwnerId: string | null; attributedOwnerName: string | null }>,
+  reportedIopTotal: number,
+  reportedIopByOwner: WeeklyOwnerBreakdown[]
+): WeeklyIopComparison | null {
+  const range = parseWeekDateRange(reportingWeek);
+  if (!range) return null;
+
+  const getAmount = (row: any): number =>
+    Math.abs(Number(row['Amount'] ?? row['Volume (TZS)'] ?? row['volume'] ?? row['servicedVolume'] ?? 0)) || 0;
+
+  let dailyMgtIop = 0;
+  const dailyMgtIopByOwner = new Map<string, { ownerName: string; value: number }>();
+
+  classifiedDailyRows.forEach(c => {
+    if (c.bucket !== 'IOP') return;
+    const dateStr = formatToISODate(
+      String(c.row['Servicing Date'] || c.row['date'] || c.row['Date'] || c.row['Timestamp'] || '')
+    );
+    if (dateStr < range.start || dateStr > range.end) return;
+
+    const amount = getAmount(c.row);
+    dailyMgtIop += amount;
+
+    const ownerId = c.attributedOwnerId || UNASSIGNED_ID;
+    const ownerName = c.attributedOwnerName || 'Unassigned';
+    const existing = dailyMgtIopByOwner.get(ownerId);
+    if (existing) existing.value += amount;
+    else dailyMgtIopByOwner.set(ownerId, { ownerName, value: amount });
+  });
+
+  const byOwnerMap = new Map<string, WeeklyIopOwnerComparison>();
+  reportedIopByOwner.forEach(o => {
+    byOwnerMap.set(o.ownerId, {
+      ownerId: o.ownerId,
+      ownerName: o.ownerName,
+      reportedIop: o.iopValue || 0,
+      dailyMgtIop: 0,
+      iopRemaining: 0,
+    });
+  });
+  dailyMgtIopByOwner.forEach((v, ownerId) => {
+    const existing = byOwnerMap.get(ownerId);
+    if (existing) existing.dailyMgtIop = v.value;
+    else byOwnerMap.set(ownerId, { ownerId, ownerName: v.ownerName, reportedIop: 0, dailyMgtIop: v.value, iopRemaining: 0 });
+  });
+
+  const byOwner = Array.from(byOwnerMap.values())
+    .map(o => ({ ...o, iopRemaining: o.dailyMgtIop - o.reportedIop }))
+    .filter(o => o.reportedIop !== 0 || o.dailyMgtIop !== 0)
+    .sort((a, b) => Math.abs(b.iopRemaining) - Math.abs(a.iopRemaining));
+
+  return {
+    reportingWeek,
+    reportedIop: reportedIopTotal,
+    dailyMgtIop,
+    iopRemaining: dailyMgtIop - reportedIopTotal,
+    byOwner,
+  };
+}
