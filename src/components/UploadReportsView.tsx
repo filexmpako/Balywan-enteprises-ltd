@@ -94,13 +94,13 @@ export const REPORT_TYPES: ReportTypeConfig[] = [
   {
     id: 'kpi',
     title: 'Monthly KPI Ingestion',
-    description: 'Read KPI Summary (KPI, targets, achieved, status) & Servicing Data worksheets to preview and update performance dashboard metrics.',
+    description: 'Upload the monthly per-wakala servicing workbook (MSISDN, CI/CO, servicing value/txns, status, owner, ...) to preview and update performance dashboard metrics. Same file format as the Weekly Checkpoint upload.',
     icon: Target,
   },
   {
     id: 'weekly_kpi',
     title: 'Weekly KPI Checkpoint',
-    description: 'Upload weekly performance files to track progress toward Monthly Targets. Stored separately to preserve monthly data integrity.',
+    description: 'Upload the weekly per-wakala servicing workbook (same format as Monthly KPI Ingestion) to track progress toward Monthly Targets. Stored separately to preserve monthly data integrity.',
     icon: BarChart3,
   },
   {
@@ -691,19 +691,38 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
     };
 
     if (reportType === 'kpi' || reportType === 'weekly_kpi') {
-      const isWeekly = reportType === 'weekly_kpi';
-      const summarySheet = XLSX.utils.aoa_to_sheet([
-        ['KPI', isWeekly ? 'Target' : 'Monthly Target', isWeekly ? 'Achieved' : 'MTD Achieved', 'Performance (%)', 'Status'],
-        ['KPI 1 - Volume', 500000000, 420000000, '84%', 'GOOD'],
-        ['KPI 2 - Wakala Penetration', 1200, 980, '82%', 'GOOD'],
+      // Same single-sheet format for both Monthly and Weekly — this is what
+      // parseKPIExcelFileShared actually accepts (a lone sheet of raw
+      // per-wakala servicing rows; there is no separate KPI Summary sheet in
+      // real exports). siteward/district are left out since ingestion drops
+      // them too.
+      const sheet = XLSX.utils.aoa_to_sheet([
+        [
+          'Month', 'MSISDN', 'Alias_Code', 'Full_Name', 'siteid', 'Sales_region',
+          'CI_val', 'CO_val', 'CICO', 'CI_Txns', 'CO_Txns', 'C2C_val',
+          'SA_Servicing_Val', 'SA_Servicing_Txns', 'SA_Parent_Servicing_Val', 'IOP',
+          'SA_Parent_Servicing_Txns', 'CP_Servicing_Val', 'CP_Servicing_Txns',
+          'AGG_Servicing_Val', 'AGG_Servicing_Txns', 'EPOD_val', 'EPOD_Txns',
+          'creation_date', 'servicing_status', 'wakala_status', 'prod_seller', 'OWNER',
+        ],
+        [
+          '2026-09', '255700111222', '571987', 'Juma Athumani', 'MTR004', 'Newala',
+          57095000, 26132000, 83227000, 391, 97, 1428000,
+          113470000, 44, 71370000, 42100000,
+          18, 78000000, 12,
+          88800000, 41, 129600, 93,
+          '2026-01-15', 1, 1, 0, 'ABDUL',
+        ],
+        [
+          '2026-09', '255700333444', '583360', 'Fatma Hassan', 'MTR034', 'Masasi',
+          17849500, 53357600, 71207100, 260, 214, 60000,
+          222436000, 189, 171936000, 50500000,
+          165, 75025000, 18,
+          86900000, 55, 12000, 6,
+          '2026-01-11', 1, 1, 0, 'MOHAMED',
+        ],
       ]);
-      const servicingSheet = XLSX.utils.aoa_to_sheet([
-        ['MSISDN', 'Owner_Name', 'SA_Servicing_Txns', 'SA_Servicing_Val', 'Wakala_Status'],
-        ['255700111222', 'Juma Athumani', 45, 3200000, 1],
-        ['255700333444', 'Fatma Hassan', 12, 850000, 0],
-      ]);
-      XLSX.utils.book_append_sheet(wb, summarySheet, isWeekly ? 'Weekly KPI Summary' : 'Executive KPI Summary');
-      XLSX.utils.book_append_sheet(wb, servicingSheet, 'Servicing Data');
+      XLSX.utils.book_append_sheet(wb, sheet, 'Servicing Data');
     } else if (reportType === 'mgt') {
       const sheet = XLSX.utils.aoa_to_sheet([
         ['Transaction_ID', 'Branch_msisdn', 'Dest_MSISDN', 'Amount', 'Status', 'Transfer_Date'],
