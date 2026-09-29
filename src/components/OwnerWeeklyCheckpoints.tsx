@@ -106,7 +106,7 @@ export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget, onLates
       });
     } catch { /* location filter degrades to unavailable, never breaks the UI */ }
     return map;
-  }, [expandedWeek]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

@@ -883,7 +883,7 @@ export default function PeopleManagementView({
     });
   }, [personnel, roleMappings]);
 
-  const baseWakalaIndex: BaseWakala[] = useMemo(() => {
+  const readBaseWakalaIndex = (): BaseWakala[] => {
     const saved = localStorage.getItem('baseWakalaIndex');
     if (!saved) return [];
     try {
@@ -893,6 +893,17 @@ export default function PeopleManagementView({
       console.error('Failed to parse baseWakalaIndex in PeopleManagementView:', e);
       return [];
     }
+  };
+  const [baseWakalaIndex, setBaseWakalaIndex] = useState<BaseWakala[]>(readBaseWakalaIndex);
+
+  useEffect(() => {
+    const reload = () => setBaseWakalaIndex(readBaseWakalaIndex());
+    window.addEventListener('base-wakala-updated', reload);
+    window.addEventListener('storage', reload);
+    return () => {
+      window.removeEventListener('base-wakala-updated', reload);
+      window.removeEventListener('storage', reload);
+    };
   }, []);
 
   const ownerWakalaMapping = useMemo(
@@ -1551,10 +1562,10 @@ export default function PeopleManagementView({
                   </div>
                 </div>
                 <div className="rounded-2xl border border-brand-gray-border bg-brand-card p-5 shadow-ambient">
-                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Average Performance Index</span>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Avg. Volume Share (Today)</span>
                   <div className="mt-1 flex items-baseline justify-between">
                     <span className="text-2xl font-black text-blue-600">{ownerStats.avgPerf}%</span>
-                    <span className="text-[10px] text-blue-600 font-bold">ON TRACK</span>
+                    <span className="text-[10px] text-blue-600 font-bold">OF COMPANY TOTAL</span>
                   </div>
                 </div>
               </div>

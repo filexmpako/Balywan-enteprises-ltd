@@ -412,7 +412,7 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
   useEffect(() => {
     loadWakalaStats();
     loadWeeklyWakalaStats();
-  }, []);
+  }, [displayPeriod]);
 
 
   useEffect(() => {
@@ -451,7 +451,7 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
       window.removeEventListener('weekly-kpi-updated', handleUpdate);
       window.removeEventListener('storage', handleUpdate);
     };
-  }, []);
+  }, [displayPeriod]);
 
   const normalizeStatus = (statusStr: string, performance?: number): 'ON TRACK' | 'ACHIEVED' | 'NEEDS ATTENTION' | 'CRITICAL' => {
     const s = String(statusStr || '').trim().toUpperCase();

@@ -2066,6 +2066,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
             .then(() => persistWeeklyServicing(uploadWeek, uploadMonth, parsedServicing, servicingColumns))
             .then((res) => {
               invalidateClassificationCache();
+              window.dispatchEvent(new Event('servicing-rows-updated'));
               window.dispatchEvent(new Event('weekly-kpi-updated'));
               console.log(
                 `Persisted ${res.saved} weekly servicing records for ${uploadWeek} (${res.cloud ? 'cloud + offline mirror' : 'offline mirror only'})`
@@ -2126,6 +2127,8 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
           persistMonthlyServicing(activeMonth, parsedServicing, servicingColumns)
             .then((res) => {
               invalidateClassificationCache();
+              window.dispatchEvent(new Event('servicing-rows-updated'));
+              window.dispatchEvent(new Event('weekly-kpi-updated'));
               console.log(
                 `Persisted ${res.saved} servicing records for ${activeMonth} (cloud: ${res.cloud})`,
               );
@@ -2186,8 +2189,10 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
         });
 
         setImportState('completed');
-        window.dispatchEvent(new Event('servicing-rows-updated'));
-        window.dispatchEvent(new Event('weekly-kpi-updated'));
+        // 'servicing-rows-updated'/'weekly-kpi-updated' now dispatch only once
+        // the Postgres write actually resolves (inside the persist .then()
+        // above), instead of firing here before the async write is guaranteed
+        // durable.
       }
     }, 1100);
   };
