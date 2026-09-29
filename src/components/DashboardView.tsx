@@ -475,7 +475,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
 
             const classified = getClassifiedRowsCached(rows || [], saTillRegistry, baseWakalaIndex, tillsList, owners);
 
-            const kpi1Results = calculateKPI1(classified, [], owners, currentPeriod, manualTargets);
+            const kpi1Results = calculateKPI1(classified, [], owners, currentPeriod, manualTargets, readWeeklyStatsHistory());
             const kpi1Target = kpi1Results.reduce((s, r) => s + (r.hasTarget ? r.monthlyTarget : 0), 0);
             const kpi1Achieved = kpi1Results.reduce((s, r) => s + r.servedVolume, 0);
 

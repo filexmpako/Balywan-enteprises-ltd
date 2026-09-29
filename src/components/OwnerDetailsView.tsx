@@ -48,6 +48,7 @@ import FloatManagementPanel from './FloatManagementPanel';
 import { getDailyServicingRows } from '../utils/indexedDB';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
 import { calculateOwnerMtdVolume } from '../utils/kpiEngine';
+import { readWeeklyStatsHistory } from '../utils/weeklyHistory';
 import { resolveOwnerMatch } from '../utils/ownerMatch';
 import { AgentTarget, ManualOwnerTarget } from '../types';
 import { useAuth } from './AuthContext';
@@ -607,14 +608,16 @@ export default function OwnerDetailsView({
 
     const classified = getClassifiedRowsCached(servicingRows, saTillRegistry, baseWakalaIndex, tillsList, owners);
 
+    const weeklyStats = readWeeklyStatsHistory();
+
     let targetOwnerId = localOwner.id;
-    let vols = calculateOwnerMtdVolume(classified, localOwner.id);
+    let vols = calculateOwnerMtdVolume(classified, localOwner.id, weeklyStats, currentPeriod);
 
     if (vols.servedVolume === 0 && localOwner.name) {
       const matched = resolveOwnerMatch(localOwner.name, owners, 'Owner Portal');
       if (matched.matchedOwner?.id) {
         targetOwnerId = matched.matchedOwner.id;
-        vols = calculateOwnerMtdVolume(classified, matched.matchedOwner.id);
+        vols = calculateOwnerMtdVolume(classified, matched.matchedOwner.id, weeklyStats, currentPeriod);
       }
     }
 

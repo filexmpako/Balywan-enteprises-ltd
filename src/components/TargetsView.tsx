@@ -10,6 +10,7 @@ import { calculateKPI1, KPI1Result, getCompanyTotalKPI1Target } from '../utils/k
 import { calculateKPI2, KPI2Result } from '../utils/kpi2Engine';
 import { getDailyServicingRows } from '../utils/indexedDB';
 import { loadAllWeeklyRows } from '../utils/weeklyStore';
+import { readWeeklyStatsHistory } from '../utils/weeklyHistory';
 import { getServicedStatusFromColumn, mergeServicedStatus } from '../utils/servicingStatus';
 import { getActivityRules, isActiveByRule, isServedByRule, extractTxnCounts, type TxnCounts } from '../utils/activityRules';
 import { normalizeMsisdn } from '../utils/msisdn';
@@ -167,7 +168,7 @@ export default function TargetsView() {
   }, [period]);
 
   const kpi1Results: KPI1Result[] = useMemo(() => {
-    return calculateKPI1(classifiedRows, [], owners, period, manualTargets);
+    return calculateKPI1(classifiedRows, [], owners, period, manualTargets, readWeeklyStatsHistory());
   }, [classifiedRows, owners, period, manualTargets]);
 
   const kpi2Results: KPI2Result[] = useMemo(() => {
