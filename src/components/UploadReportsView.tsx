@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { ViewType, AuditReport, Owner, KPIMetric, BaseWakala, PriorityWakala } from '../types';
 import { normalizeMsisdn } from '../utils/msisdn';
@@ -59,7 +59,7 @@ import { classifyServicingRows, summarizeClassification } from '../utils/classif
 import { ingestClassified } from '../lib/ingest';
 import { invalidateClassificationCache } from '../utils/classificationCache';
 import { saveMonthlyServicingData, clearMonthlyServicingData, getServicingRows, getServicingColumns, saveWeeklyServicingData, clearWeeklyServicingData, getWeeklyServicingRows, getWeeklyServicingColumns, saveDailyServicingData, getDailyServicingRows, clearDailyServicingData } from '../utils/indexedDB';
-import { persistWeeklyServicing } from '../utils/weeklyStore';
+import { persistWeeklyServicing, listStoredWeeks } from '../utils/weeklyStore';
 import { persistMonthlyServicing } from '../utils/monthlyStore';
 import { useReportingMetadata } from '../hooks/useReportingMetadata';
 
@@ -818,7 +818,20 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
 
   // Confirmation dialog
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  
+  // null while checking; true when the selected week already holds data that saving will replace.
+  const [weekAlreadyStored, setWeekAlreadyStored] = useState<boolean | null>(null);
+  const isWeeklyConfirm = showConfirmDialog && reportType === 'weekly_kpi';
+
+  useEffect(() => {
+    if (!isWeeklyConfirm) return;
+    let cancelled = false;
+    setWeekAlreadyStored(null);
+    listStoredWeeks().then((weeks) => {
+      if (!cancelled) setWeekAlreadyStored(weeks.includes(uploadWeek));
+    });
+    return () => { cancelled = true; };
+  }, [isWeeklyConfirm, uploadWeek]);
+
   // Staging list and filter states
   const [stagingRecords, setStagingRecords] = useState<StagingOwner[]>([]);
   const [parsedMgtTransactions, setParsedMgtTransactions] = useState<any[]>([]);
@@ -3692,15 +3705,31 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
                   <Sparkles className="h-5.5 w-5.5" />
                 </div>
                 <div className="space-y-1.5 flex-1">
-                  <h3 className="text-sm font-black text-brand-text">Confirm Monthly KPI Ingestion?</h3>
+                  <h3 className="text-sm font-black text-brand-text">
+                    {isWeeklyConfirm ? 'Confirm Weekly KPI Ingestion?' : 'Confirm Monthly KPI Ingestion?'}
+                  </h3>
                   <p className="text-xs text-brand-text-variant leading-relaxed">
                     You are about to authorize the ingestion of <strong className="text-brand-text">{parsedKpis.length} core KPI Targets</strong> and <strong className="text-brand-text">{parsedServicing.length} Servicing rows</strong> into the sovereign Dodoma ledger.
                   </p>
+                  {isWeeklyConfirm && (
+                    <p className="text-xs text-brand-text-variant leading-relaxed">
+                      Saving as <strong className="text-brand-text">{uploadWeek}</strong> of <strong className="text-brand-text">{uploadMonth}</strong>.
+                    </p>
+                  )}
                   <p className="text-xs text-brand-text-variant leading-relaxed">
                     This action will update the master executive performance gauges and record an auditing delta ledger trace under your active credentials.
                   </p>
                 </div>
               </div>
+
+              {isWeeklyConfirm && weekAlreadyStored && (
+                <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+                  <AlertTriangle className="h-4.5 w-4.5 shrink-0 text-amber-600" />
+                  <p className="leading-relaxed">
+                    <strong>{uploadWeek} already has data.</strong> Continuing will delete it and replace it with this file. Other weeks are not affected. If this file is for a different week, cancel and change the Reporting Week.
+                  </p>
+                </div>
+              )}
 
               <div className="mt-6 flex justify-end gap-3 border-t border-brand-gray-border pt-4">
                 <button
@@ -3711,10 +3740,19 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
                 </button>
                 <button
                   onClick={handleConfirmKpiSync}
-                  className="rounded-xl bg-brand-primary hover:bg-brand-primary-light px-5 py-2.5 text-xs font-black uppercase tracking-wider text-white cursor-pointer shadow-md transition-all inline-flex items-center gap-1.5"
+                  disabled={isWeeklyConfirm && weekAlreadyStored === null}
+                  className={`rounded-xl px-5 py-2.5 text-xs font-black uppercase tracking-wider text-white cursor-pointer shadow-md transition-all inline-flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-wait ${
+                    isWeeklyConfirm && weekAlreadyStored ? 'bg-amber-600 hover:bg-amber-700' : 'bg-brand-primary hover:bg-brand-primary-light'
+                  }`}
                 >
                   <Check className="h-4 w-4" />
-                  Ingest Targets Now
+                  {!isWeeklyConfirm
+                    ? 'Ingest Targets Now'
+                    : weekAlreadyStored === null
+                      ? 'Checking week…'
+                      : weekAlreadyStored
+                        ? `Replace ${uploadWeek.split(' (')[0]} Now`
+                        : 'Ingest Targets Now'}
                 </button>
               </div>
             </motion.div>
