@@ -278,11 +278,6 @@ export default function Header({
           { label: 'Executive Portal', view: ViewType.DASHBOARD },
           { label: 'People Management', active: true }
         ];
-      case ViewType.OWNERS:
-        return [
-          { label: 'Executive Portal', view: ViewType.DASHBOARD },
-          { label: 'Owners Management', active: true }
-        ];
       case ViewType.OWNER_DETAILS:
         return [
           { label: 'People Management', view: ViewType.PEOPLE_MGT },
@@ -307,11 +302,6 @@ export default function Header({
         return [
           { label: 'Executive Portal', view: ViewType.DASHBOARD },
           { label: 'Settings', active: true }
-        ];
-      case ViewType.PERSONNEL:
-        return [
-          { label: 'Executive Portal', view: ViewType.DASHBOARD },
-          { label: 'Personnel Management', active: true }
         ];
       default:
         return [{ label: 'Executive Portal', active: true }];
@@ -353,7 +343,7 @@ export default function Header({
 
         {/* Mobile Minimal Title */}
         <div className="sm:hidden font-sans text-base font-bold text-brand-primary">
-          {currentView === ViewType.OWNER_DETAILS ? 'Owner Profile' : currentView === ViewType.PERSONNEL ? 'Personnel' : currentView === ViewType.PEOPLE_MGT ? 'People Management' : currentView}
+          {currentView === ViewType.OWNER_DETAILS ? 'Owner Profile' : currentView === ViewType.PEOPLE_MGT ? 'People Management' : currentView}
         </div>
       </div>
 
