@@ -916,13 +916,19 @@ export default function OwnerDetailsView({
               <h3 className="font-sans text-xs font-black uppercase text-brand-primary tracking-wider font-mono">
                 Daily MGT Performance KPIs & MTD Serviced Volume
               </h3>
-              <span className="font-sans text-[10px] font-mono font-black text-brand-text-variant bg-slate-100 px-2.5 py-1 rounded">
-                LATEST SYNC: {localOwner.lastSyncDate || "No Ingestion Today"}
-              </span>
+              {loadingMetrics ? (
+                <span className="font-sans text-[10px] font-mono font-black text-brand-primary bg-blue-50 px-2.5 py-1 rounded animate-pulse">
+                  LOADING TRANSACTIONS…
+                </span>
+              ) : (
+                <span className="font-sans text-[10px] font-mono font-black text-brand-text-variant bg-slate-100 px-2.5 py-1 rounded">
+                  LATEST SYNC: {localOwner.lastSyncDate || "No Ingestion Today"}
+                </span>
+              )}
             </div>
 
             {/* Consolidated & Expanded MTD Serviced Volume Card */}
-            <div className="rounded-2xl border border-brand-gray-border bg-brand-card p-6 shadow-ambient flex flex-col justify-between space-y-4">
+            <div className={`rounded-2xl border border-brand-gray-border bg-brand-card p-6 shadow-ambient flex flex-col justify-between space-y-4 transition-opacity ${loadingMetrics ? 'opacity-50 animate-pulse' : ''}`}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <span className="block font-sans text-[10px] font-bold text-brand-text-variant uppercase tracking-wider">
@@ -930,7 +936,7 @@ export default function OwnerDetailsView({
                   </span>
                   <div className="mt-1 flex items-baseline gap-2">
                     <span className="font-sans text-2xl sm:text-3xl font-black text-brand-primary font-mono">
-                      TZS {ownerMtdData.servedVolume.toLocaleString()}
+                      {loadingMetrics ? 'Loading…' : `TZS ${ownerMtdData.servedVolume.toLocaleString()}`}
                     </span>
                   </div>
                 </div>
