@@ -4,7 +4,7 @@ import { normalizeMsisdn } from '../utils/msisdn';
 import { formatDate } from '../utils/dateFormat';
 import { buildOwnerWakalaMap } from '../utils/wakalaMapping';
 import { getOwnerPortfolio } from '../utils/ownerPortfolio';
-import { getActivityRules, isServedByRule } from '../utils/activityRules';
+import { getActivityRules, isActiveByRule } from '../utils/activityRules';
 import { ownersList } from '../data';
 import WorkLocationSection from './WorkLocationSection';
 import TransactionHistorySection from './TransactionHistorySection';
@@ -48,6 +48,7 @@ import FloatManagementPanel from './FloatManagementPanel';
 import { getDailyServicingRows } from '../utils/indexedDB';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
 import { calculateOwnerMtdVolume } from '../utils/kpiEngine';
+import { readWeeklyStatsHistory } from '../utils/weeklyHistory';
 import { resolveOwnerMatch } from '../utils/ownerMatch';
 import { AgentTarget, ManualOwnerTarget } from '../types';
 import { useAuth } from './AuthContext';
@@ -549,8 +550,10 @@ export default function OwnerDetailsView({
           return Number(val) === 1;
         });
 
-        const isServed = isServedByRule({ cashIn: 0, cashOut: 0, total: totalTxns, amount: totalVal }, isActiveRowStatus, getActivityRules());
-        if (isServed) {
+        // Active/Inactive rule — same merge weeklyKpiEngine.ts uses: an "active"
+        // reading from the uploaded status column or the transaction-count rule wins.
+        const isActive = isActiveRowStatus || isActiveByRule({ cashIn: 0, cashOut: 0, total: totalTxns, amount: totalVal }, getActivityRules());
+        if (isActive) {
           active++;
         }
       }
@@ -605,14 +608,16 @@ export default function OwnerDetailsView({
 
     const classified = getClassifiedRowsCached(servicingRows, saTillRegistry, baseWakalaIndex, tillsList, owners);
 
+    const weeklyStats = readWeeklyStatsHistory();
+
     let targetOwnerId = localOwner.id;
-    let vols = calculateOwnerMtdVolume(classified, localOwner.id);
+    let vols = calculateOwnerMtdVolume(classified, localOwner.id, weeklyStats, currentPeriod);
 
     if (vols.servedVolume === 0 && localOwner.name) {
       const matched = resolveOwnerMatch(localOwner.name, owners, 'Owner Portal');
       if (matched.matchedOwner?.id) {
         targetOwnerId = matched.matchedOwner.id;
-        vols = calculateOwnerMtdVolume(classified, matched.matchedOwner.id);
+        vols = calculateOwnerMtdVolume(classified, matched.matchedOwner.id, weeklyStats, currentPeriod);
       }
     }
 

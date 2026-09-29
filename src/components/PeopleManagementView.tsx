@@ -4,6 +4,7 @@ import { ViewType, Owner, Personnel, BaseWakala, SATill, AuditReport } from '../
 import { buildOwnerWakalaMap } from '../utils/wakalaMapping';
 import { formatDate, formatDateTime, formatMonthYear } from '../utils/dateFormat';
 import { invalidateClassificationCache } from '../utils/classificationCache';
+import { addNameAlias } from '../utils/ownerMatch';
 import {
   listUserAccounts,
   createUserAccount,
@@ -564,6 +565,15 @@ export default function PeopleManagementView({
     setOwners(updated);
     localStorage.setItem('ownersList', JSON.stringify(updated));
 
+    // A rename keeps matching everywhere (Base Wakala Index, weekly/monthly
+    // uploads) by auto-aliasing the previous name — otherwise resolveOwnerMatch
+    // fails on the new name and entries showing the old name flip to Unmatched.
+    const oldName = editingOwner.name?.trim();
+    const newName = editOwnerForm.name?.trim();
+    if (oldName && newName && oldName.toLowerCase() !== newName.toLowerCase()) {
+      addNameAlias(editingOwner.id, oldName);
+    }
+
     // Map the new tills in tillsList
     if (editOwnerForm.assignedTillsStr) {
       assignTillsToPerson(editOwnerForm.assignedTillsStr, editOwnerForm.name, editOwnerForm.title, editOwnerForm.region);
@@ -883,7 +893,7 @@ export default function PeopleManagementView({
     });
   }, [personnel, roleMappings]);
 
-  const baseWakalaIndex: BaseWakala[] = useMemo(() => {
+  const readBaseWakalaIndex = (): BaseWakala[] => {
     const saved = localStorage.getItem('baseWakalaIndex');
     if (!saved) return [];
     try {
@@ -893,6 +903,17 @@ export default function PeopleManagementView({
       console.error('Failed to parse baseWakalaIndex in PeopleManagementView:', e);
       return [];
     }
+  };
+  const [baseWakalaIndex, setBaseWakalaIndex] = useState<BaseWakala[]>(readBaseWakalaIndex);
+
+  useEffect(() => {
+    const reload = () => setBaseWakalaIndex(readBaseWakalaIndex());
+    window.addEventListener('base-wakala-updated', reload);
+    window.addEventListener('storage', reload);
+    return () => {
+      window.removeEventListener('base-wakala-updated', reload);
+      window.removeEventListener('storage', reload);
+    };
   }, []);
 
   const ownerWakalaMapping = useMemo(
@@ -1551,10 +1572,10 @@ export default function PeopleManagementView({
                   </div>
                 </div>
                 <div className="rounded-2xl border border-brand-gray-border bg-brand-card p-5 shadow-ambient">
-                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Average Performance Index</span>
+                  <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Avg. Volume Share (Today)</span>
                   <div className="mt-1 flex items-baseline justify-between">
                     <span className="text-2xl font-black text-blue-600">{ownerStats.avgPerf}%</span>
-                    <span className="text-[10px] text-blue-600 font-bold">ON TRACK</span>
+                    <span className="text-[10px] text-blue-600 font-bold">OF COMPANY TOTAL</span>
                   </div>
                 </div>
               </div>

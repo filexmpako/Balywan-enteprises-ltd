@@ -196,6 +196,7 @@ export default function BaseWakalaIndexView() {
     localStorage.setItem('baseWakalaIndex_lastUpdated', nowStr);
     setEntities(updatedList);
     setLastUpdated(nowStr);
+    window.dispatchEvent(new Event('base-wakala-updated'));
   };
 
   // Extract unique districts for filtering

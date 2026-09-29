@@ -150,6 +150,8 @@ function AppContent() {
         if (Array.isArray(dashboard) && dashboard.length) {
           localStorage.setItem("dashboardKPIs", JSON.stringify([]));
         }
+        window.dispatchEvent(new Event("servicing-rows-updated"));
+        window.dispatchEvent(new Event("weekly-kpi-updated"));
       }
       invalidateClassificationCache();
     } catch (e) {
