@@ -79,13 +79,11 @@ export const ReportingPeriodProvider: React.FC<{ children: React.ReactNode }> = 
     window.addEventListener('reportingPeriodChanged', handlePeriodChange);
     window.addEventListener('storage', handlePeriodChange);
     window.addEventListener('servicing-rows-updated', handlePeriodChange);
-    window.addEventListener('agentTargets_updated', handlePeriodChange);
 
     return () => {
       window.removeEventListener('reportingPeriodChanged', handlePeriodChange);
       window.removeEventListener('storage', handlePeriodChange);
       window.removeEventListener('servicing-rows-updated', handlePeriodChange);
-      window.removeEventListener('agentTargets_updated', handlePeriodChange);
     };
   }, [syncState]);
 

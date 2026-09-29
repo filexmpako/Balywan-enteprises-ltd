@@ -471,8 +471,6 @@ export function paceLabel(progressPercent: number, weekNum: number): {
   return { label: 'BEHIND SCHEDULE', tone: 'behind' };
 }
 
-export const UNASSIGNED_OWNER_ID = UNASSIGNED_ID;
-
 const MONTH_NAMES_LOWER = [
   'january', 'february', 'march', 'april', 'may', 'june',
   'july', 'august', 'september', 'october', 'november', 'december',
