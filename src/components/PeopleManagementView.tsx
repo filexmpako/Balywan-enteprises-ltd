@@ -4,6 +4,7 @@ import { ViewType, Owner, Personnel, BaseWakala, SATill, AuditReport } from '../
 import { buildOwnerWakalaMap } from '../utils/wakalaMapping';
 import { formatDate, formatDateTime, formatMonthYear } from '../utils/dateFormat';
 import { invalidateClassificationCache } from '../utils/classificationCache';
+import { addNameAlias } from '../utils/ownerMatch';
 import {
   listUserAccounts,
   createUserAccount,
@@ -563,6 +564,15 @@ export default function PeopleManagementView({
 
     setOwners(updated);
     localStorage.setItem('ownersList', JSON.stringify(updated));
+
+    // A rename keeps matching everywhere (Base Wakala Index, weekly/monthly
+    // uploads) by auto-aliasing the previous name — otherwise resolveOwnerMatch
+    // fails on the new name and entries showing the old name flip to Unmatched.
+    const oldName = editingOwner.name?.trim();
+    const newName = editOwnerForm.name?.trim();
+    if (oldName && newName && oldName.toLowerCase() !== newName.toLowerCase()) {
+      addNameAlias(editingOwner.id, oldName);
+    }
 
     // Map the new tills in tillsList
     if (editOwnerForm.assignedTillsStr) {

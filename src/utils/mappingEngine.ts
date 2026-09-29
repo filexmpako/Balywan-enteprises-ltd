@@ -971,10 +971,19 @@ export async function recalculateAllPerformances(providedRows?: any[]): Promise<
 
   localStorage.setItem('duplicateTillAssignments', JSON.stringify(duplicateTillsList));
 
-  // Load Monthly Servicing Rows for Penalty calculation
+  // Load Monthly Servicing Rows for Penalty/IOP calculation — scoped to the
+  // current reporting month, matching calculateCompanyKPIs, so Owner-page
+  // Penalty/IOP figures agree with the Dashboard's Settlement Ledger
+  // instead of quietly summing every month ever uploaded.
+  const fullMonthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+  const now = new Date();
+  const currentReportingMonth = `${fullMonthNames[now.getMonth()]} ${now.getFullYear()}`;
   let monthlyServicingRows: any[] = [];
   try {
-    monthlyServicingRows = await getServicingRows();
+    monthlyServicingRows = await getServicingRows(currentReportingMonth);
   } catch (e) {
     console.error("Failed loading monthly servicing rows in recalculateAllPerformances:", e);
   }
@@ -1127,7 +1136,10 @@ export async function recalculateAllPerformances(providedRows?: any[]): Promise<
       penalty,
       iopVolume,
       lastSyncDate: formatDateTime(new Date()),
-      status: 'Active'
+      // Transaction activity marks a not-yet-classified/Active owner Active,
+      // but never silently clears an admin's Suspended/Pending decision —
+      // that only changes when an admin changes it.
+      status: (owner.status === 'Suspended' || owner.status === 'Pending') ? owner.status : 'Active'
     };
   });
 
@@ -1360,9 +1372,18 @@ export async function calculateCompanyKPIs(realRows: any[]): Promise<CompanyKPIs
 
   const mtdClosingFloat = getDayClosingFloat(todayDateStr);
 
-  // Format Reporting Month (MMM YYYY)
+  // Format Reporting Month (MMM YYYY) for display, and the full "Month YYYY"
+  // form uploads are actually stored under (see UPLOAD_MONTH_NAMES in
+  // UploadReportsView.tsx) for the getServicingRows(reportingMonth) filter
+  // below — these two must stay in sync or the month filter silently
+  // no-ops and falls back to an all-time read.
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const fullMonthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
   const reportingMonth = `${months[latestDateObj.getMonth()]} ${latestDateObj.getFullYear()}`;
+  const reportingMonthStorageKey = `${fullMonthNames[latestDateObj.getMonth()]} ${latestDateObj.getFullYear()}`;
 
   // Format Last Upload DD/MM/YY
   const day = String(latestDateObj.getDate()).padStart(2, '0');
@@ -1373,10 +1394,7 @@ export async function calculateCompanyKPIs(realRows: any[]): Promise<CompanyKPIs
   // 3. PHASE 4 DERIVED METRICS (Penalty & IOP Ledger)
   let monthlyServicingRows: any[] = [];
   try {
-    monthlyServicingRows = await getServicingRows(reportingMonth);
-    if (!monthlyServicingRows || monthlyServicingRows.length === 0) {
-      monthlyServicingRows = await getServicingRows();
-    }
+    monthlyServicingRows = await getServicingRows(reportingMonthStorageKey);
   } catch (e) {
     console.error("Failed loading monthly servicing rows in calculateCompanyKPIs:", e);
   }
