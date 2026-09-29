@@ -210,67 +210,6 @@ export const createUserAccount = createServerFn({ method: 'POST' })
     return { userId, email, username, password, generated: !data.password };
   });
 
-export const updateUserAccount = createServerFn({ method: 'POST' })
-  .middleware([requireSupabaseAuth])
-  .inputValidator(
-    (input: {
-      userId: string;
-      email?: string;
-      username?: string;
-      name?: string;
-      role?: PortalRole;
-    }) => {
-      if (!input?.userId) throw new Error('userId is required');
-      return input;
-    },
-  )
-  .handler(async ({ data, context }) => {
-    await assertAdmin(context);
-    const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
-
-    const email = data.email?.trim().toLowerCase();
-    const username = data.username?.trim().toLowerCase();
-    const name = data.name?.trim();
-
-    if (email || name || username) {
-      const { error } = await supabaseAdmin.auth.admin.updateUserById(data.userId, {
-        ...(email ? { email } : {}),
-        user_metadata: {
-          ...(username ? { username } : {}),
-          ...(name ? { full_name: name } : {}),
-        },
-      });
-      if (error) throw new Error(error.message);
-
-      const { error: profileError } = await supabaseAdmin
-        .from('profiles')
-        .update({
-          ...(email ? { email } : {}),
-          ...(username ? { username } : {}),
-          ...(name ? { full_name: name } : {}),
-        })
-        .eq('user_id', data.userId);
-      if (profileError) throw new Error(profileError.message);
-    }
-
-    if (data.role) {
-      await supabaseAdmin.from('user_roles').delete().eq('user_id', data.userId);
-      const { error } = await supabaseAdmin
-        .from('user_roles')
-        .insert({ user_id: data.userId, role: ROLE_TO_DB[data.role] });
-      if (error) throw new Error(error.message);
-    }
-
-    await writeAuditLog(supabaseAdmin, context, 'User Updated', name || data.userId, {
-      userId: data.userId,
-      email: email ?? null,
-      username: username ?? null,
-      role: data.role ?? null,
-    });
-
-    return { ok: true };
-  });
-
 export const resetUserPassword = createServerFn({ method: 'POST' })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { userId: string; password?: string }) => {
