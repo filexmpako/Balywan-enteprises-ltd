@@ -93,15 +93,6 @@ export function formatPeriodDisplay(periodStr: string | null | undefined): strin
 }
 
 /**
- * Formats a period string to a short display string e.g. "Jul 2026".
- */
-export function formatPeriodShortDisplay(periodStr: string | null | undefined): string {
-  if (!periodStr || periodStr === '—') return '—';
-  const parsed = parsePeriod(periodStr);
-  return parsed ? parsed.shortDisplay : periodStr;
-}
-
-/**
  * Checks if two period strings represent the exact same month and year.
  */
 export function periodsMatch(periodA: string | null | undefined, periodB: string | null | undefined): boolean {

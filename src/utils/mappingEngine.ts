@@ -686,25 +686,6 @@ export function generatePersonnelSummaries(
     .sort((a, b) => b.totalValue - a.totalValue);
 }
 
-/**
- * Utility to group transactions by assigned person name
- */
-export function groupTransactionsByPerson(mappedTransactions: MappedTransaction[]): {
-  [personName: string]: MappedTransaction[];
-} {
-  const groups: { [personName: string]: MappedTransaction[] } = {};
-  mappedTransactions.forEach((tx) => {
-    if (tx.isMapped) {
-      const name = tx.ownerName;
-      if (!groups[name]) {
-        groups[name] = [];
-      }
-      groups[name].push(tx);
-    }
-  });
-  return groups;
-}
-
 export function assignTillsToPerson(tillsStr: string, personName: string, title: string, location: string = 'N/A'): void {
   const savedTills = localStorage.getItem('tillsList');
   let currentTills: any[] = [];
