@@ -34,6 +34,7 @@ export function getFloatRequestsForOwner(ownerId: string): FloatRequest[] {
 
 function saveAll(requests: FloatRequest[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(requests));
+  window.dispatchEvent(new Event('float-requests-updated'));
 }
 
 export function createFloatRequest(ownerId: string, requestedAmount: number): FloatRequest {
@@ -203,6 +204,11 @@ export function getLoanRecordsForOwner(ownerId: string): LoanRecord[] {
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
+function saveAllLoans(loans: LoanRecord[]): void {
+  localStorage.setItem(LOAN_STORAGE_KEY, JSON.stringify(loans));
+  window.dispatchEvent(new Event('float-requests-updated'));
+}
+
 export function approveLoanForShortfall(requestId: string, managerId: string, managerName: string): void {
   const all = getFloatRequests();
   const target = all.find(r => r.id === requestId);
@@ -223,7 +229,7 @@ export function approveLoanForShortfall(requestId: string, managerId: string, ma
     status: 'Outstanding',
   };
   const allLoans = getLoanRecords();
-  localStorage.setItem(LOAN_STORAGE_KEY, JSON.stringify([...allLoans, loan]));
+  saveAllLoans([...allLoans, loan]);
 
   const updatedRequests = all.map(r =>
     r.id === requestId ? { ...r, status: 'Completed' as const, loanId: loan.id } : r
@@ -250,7 +256,7 @@ export function submitLoanRepayment(
     repaymentDescription: description?.trim(),
     repaymentSubmittedAt: new Date().toISOString(),
   } : l);
-  localStorage.setItem(LOAN_STORAGE_KEY, JSON.stringify(updated));
+  saveAllLoans(updated);
   return { success: true };
 }
 
@@ -266,7 +272,7 @@ export function markLoanPaid(loanId: string, managerId: string, managerName: str
     markedPaidByManagerId: managerId,
     markedPaidByManagerName: managerName,
   } : l);
-  localStorage.setItem(LOAN_STORAGE_KEY, JSON.stringify(updated));
+  saveAllLoans(updated);
   return true;
 }
 
@@ -286,7 +292,7 @@ export function rejectLoanRepayment(loanId: string, managerId: string, managerNa
     repaymentRejectedByManagerId: managerId,
     repaymentRejectedByManagerName: managerName,
   } : l);
-  localStorage.setItem(LOAN_STORAGE_KEY, JSON.stringify(updated));
+  saveAllLoans(updated);
   return true;
 }
 

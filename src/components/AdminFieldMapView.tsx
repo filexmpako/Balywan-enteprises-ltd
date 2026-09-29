@@ -122,6 +122,20 @@ export default function AdminFieldMapView({ onSelectOwner, onNavigate }: AdminFi
   const [entityTypeFilter, setEntityTypeFilter] = useState<'ALL' | 'IOP' | 'WAKALA'>('ALL');
   const [capturedOnlyFilter, setCapturedOnlyFilter] = useState(false);
 
+  // Bumped on owner/personnel changes elsewhere (this tab or another) so the
+  // load effect below re-reads localStorage instead of staying stale for the
+  // life of this mount.
+  const [reloadKey, setReloadKey] = useState(0);
+  useEffect(() => {
+    const bump = () => setReloadKey(k => k + 1);
+    window.addEventListener('people-reclassified', bump);
+    window.addEventListener('storage', bump);
+    return () => {
+      window.removeEventListener('people-reclassified', bump);
+      window.removeEventListener('storage', bump);
+    };
+  }, []);
+
   useEffect(() => {
     // Load all owners from localStorage
     const saved = localStorage.getItem('ownersList');
@@ -290,7 +304,7 @@ export default function AdminFieldMapView({ onSelectOwner, onNavigate }: AdminFi
     };
 
     loadAllPhotos();
-  }, []);
+  }, [reloadKey]);
 
   // Filter options lists
   const uniqueOwnersList = Array.from(new Set(entities.map(e => e.ownerName))).sort();

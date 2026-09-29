@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { History, Eye, Diff, Download, Calendar, User, Clock, CheckCircle } from 'lucide-react';
 import { getCompanyName } from '../../utils/company';
 
@@ -25,8 +25,10 @@ export default function KPIHistoryArchive({
   onSelectForCompare 
 }: KPIHistoryArchiveProps) {
   
-  // Load history from localStorage or fallback
-  const historyList = useMemo((): ArchivedReport[] => {
+  // Load history from localStorage or fallback, refreshed after any upload
+  // (this component stays mounted across uploads made from a sibling tab
+  // within the same Upload Reports page).
+  const readHistoryList = (): ArchivedReport[] => {
     const saved = localStorage.getItem('kpiWorkbookHistory');
     if (saved) {
       try {
@@ -36,6 +38,17 @@ export default function KPIHistoryArchive({
       }
     }
     return [];
+  };
+  const [historyList, setHistoryList] = useState<ArchivedReport[]>(readHistoryList);
+
+  useEffect(() => {
+    const reload = () => setHistoryList(readHistoryList());
+    window.addEventListener('servicing-rows-updated', reload);
+    window.addEventListener('storage', reload);
+    return () => {
+      window.removeEventListener('servicing-rows-updated', reload);
+      window.removeEventListener('storage', reload);
+    };
   }, []);
 
   const downloadReportCSV = (report: ArchivedReport) => {

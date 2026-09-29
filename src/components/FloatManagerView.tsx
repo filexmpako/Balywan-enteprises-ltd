@@ -109,6 +109,14 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
 
   useEffect(() => {
     loadData();
+    window.addEventListener('people-reclassified', loadData);
+    window.addEventListener('storage', loadData);
+    window.addEventListener('float-requests-updated', loadData);
+    return () => {
+      window.removeEventListener('people-reclassified', loadData);
+      window.removeEventListener('storage', loadData);
+      window.removeEventListener('float-requests-updated', loadData);
+    };
   }, []);
 
   // Quick date presets
