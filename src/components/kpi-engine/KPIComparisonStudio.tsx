@@ -29,8 +29,10 @@ export default function KPIComparisonStudio({ initialMonthA }: KPIComparisonStud
   const [monthA, setMonthA] = useState<string>('');
   const [monthB, setMonthB] = useState<string>('');
 
-  // Read historical reports from localStorage
-  const historyList = useMemo((): ArchivedReport[] => {
+  // Read historical reports from localStorage, refreshed after any upload
+  // (this component stays mounted across uploads made from a sibling tab
+  // within the same Upload Reports page).
+  const readHistoryList = (): ArchivedReport[] => {
     const saved = localStorage.getItem('kpiWorkbookHistory');
     if (saved) {
       try {
@@ -40,6 +42,17 @@ export default function KPIComparisonStudio({ initialMonthA }: KPIComparisonStud
       }
     }
     return [];
+  };
+  const [historyList, setHistoryList] = useState<ArchivedReport[]>(readHistoryList);
+
+  useEffect(() => {
+    const reload = () => setHistoryList(readHistoryList());
+    window.addEventListener('servicing-rows-updated', reload);
+    window.addEventListener('storage', reload);
+    return () => {
+      window.removeEventListener('servicing-rows-updated', reload);
+      window.removeEventListener('storage', reload);
+    };
   }, []);
 
   // Set default selections

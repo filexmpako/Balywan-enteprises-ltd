@@ -52,7 +52,11 @@ export function buildOwnerWakalaMap(baseWakalas: BaseWakala[], owners: Owner[]):
       const entry = toWakalaEntry(record);
       const ownerId = result.matchedOwner.id;
       const existing = byOwnerId.get(ownerId);
-      existing ? existing.push(entry) : byOwnerId.set(ownerId, [entry]);
+      if (existing) {
+        existing.push(entry);
+      } else {
+        byOwnerId.set(ownerId, [entry]);
+      }
     } else if (result.status === 'Unmatched') {
       unmatched.push(record);
     } else {

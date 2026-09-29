@@ -68,6 +68,20 @@ export default function OwnerSyncDashboard({ onCancel, onAddAuditReport, onSyncC
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
+  // Bumped on owner/personnel changes elsewhere so the sync preview below
+  // recomputes against current data instead of whatever was cached when
+  // parsedRows last changed.
+  const [reloadKey, setReloadKey] = useState(0);
+  useEffect(() => {
+    const bump = () => setReloadKey(k => k + 1);
+    window.addEventListener('people-reclassified', bump);
+    window.addEventListener('storage', bump);
+    return () => {
+      window.removeEventListener('people-reclassified', bump);
+      window.removeEventListener('storage', bump);
+    };
+  }, []);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Master lists from localStorage
@@ -220,7 +234,7 @@ export default function OwnerSyncDashboard({ onCancel, onAddAuditReport, onSyncC
       updatedPersonnel,
       invalidRecords
     };
-  }, [parsedRows]);
+  }, [parsedRows, reloadKey]);
 
   // Load Preset Till Workbook Demonstration Dataset
   const handleLoadDemoWorkbook = () => {

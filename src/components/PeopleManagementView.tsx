@@ -103,6 +103,19 @@ export default function PeopleManagementView({
   const [saTillLastUpdated, setSaTillLastUpdated] = useState<string | null>(() => {
     return localStorage.getItem('saTillRegistry_lastUpdated') || null;
   });
+
+  // Cross-tab: pick up SA Till Registry edits made in another tab/session.
+  useEffect(() => {
+    const reload = () => {
+      try {
+        const stored = localStorage.getItem('saTillRegistry');
+        if (stored) setSaTills(JSON.parse(stored));
+      } catch { /* keep current state on parse failure */ }
+      setSaTillLastUpdated(localStorage.getItem('saTillRegistry_lastUpdated') || null);
+    };
+    window.addEventListener('storage', reload);
+    return () => window.removeEventListener('storage', reload);
+  }, []);
   const [stagedSaTills, setStagedSaTills] = useState<{ tillMsisdn: string; ownerName?: string; registeredAt: string; isUpdate?: boolean }[] | null>(null);
   const [saTillSearchQuery, setSaTillSearchQuery] = useState('');
   const [saTillDragActive, setSaTillDragActive] = useState(false);
@@ -645,6 +658,24 @@ export default function PeopleManagementView({
   useEffect(() => {
     localStorage.setItem('personnelList', JSON.stringify(personnel));
   }, [personnel]);
+
+  // Cross-tab: pick up owner/personnel edits made in another tab/session
+  // while this page stays open (same-tab edits already flow through the
+  // setOwners/setPersonnel calls above, no listener needed for those).
+  useEffect(() => {
+    const reload = () => {
+      const savedOwners = localStorage.getItem('ownersList');
+      if (savedOwners) {
+        try { setOwners(JSON.parse(savedOwners)); } catch { /* keep current state on parse failure */ }
+      }
+      const savedPersonnel = localStorage.getItem('personnelList');
+      if (savedPersonnel) {
+        try { setPersonnel(JSON.parse(savedPersonnel)); } catch { /* keep current state on parse failure */ }
+      }
+    };
+    window.addEventListener('storage', reload);
+    return () => window.removeEventListener('storage', reload);
+  }, []);
 
   // Create dropdown options
   const entityOptions = useMemo(() => {

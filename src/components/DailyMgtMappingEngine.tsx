@@ -56,21 +56,35 @@ export default function DailyMgtMappingEngine({
 }: DailyMgtMappingEngineProps) {
   const { user: currentUser } = useAuth();
 
+  // Bumped on owner/personnel changes elsewhere so the lists below re-read
+  // localStorage instead of staying frozen at mount for the life of this
+  // ingestion screen.
+  const [reloadKey, setReloadKey] = useState(0);
+  useEffect(() => {
+    const bump = () => setReloadKey(k => k + 1);
+    window.addEventListener('people-reclassified', bump);
+    window.addEventListener('storage', bump);
+    return () => {
+      window.removeEventListener('people-reclassified', bump);
+      window.removeEventListener('storage', bump);
+    };
+  }, []);
+
   // Load database lists
   const currentOwners = useMemo<Owner[]>(() => {
     const saved = localStorage.getItem('ownersList');
     return saved ? JSON.parse(saved) : [];
-  }, []);
+  }, [reloadKey]);
 
   const currentPersonnel = useMemo<Personnel[]>(() => {
     const saved = localStorage.getItem('personnelList');
     return saved ? JSON.parse(saved) : [];
-  }, []);
+  }, [reloadKey]);
 
   const tillsList = useMemo<any[]>(() => {
     const saved = localStorage.getItem('tillsList');
     return saved ? JSON.parse(saved) : [];
-  }, []);
+  }, [reloadKey]);
 
   const [existingTransactions, setExistingTransactions] = useState<any[]>([]);
 

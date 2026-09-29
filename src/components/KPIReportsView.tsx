@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ViewType, KPIMetric } from '../types';
+import { ViewType, KPIMetric, Owner, BaseWakala, PriorityWakala, ManualOwnerTarget } from '../types';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -17,13 +17,18 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import PageHeaderBanner from './PageHeaderBanner';
-import { getServicingRows } from '../utils/indexedDB';
+import { getServicingRows, getDailyServicingRows } from '../utils/indexedDB';
 import { formatShortDate } from '../utils/dateFormat';
-import { refreshWeeklyStatsHistory } from '../utils/weeklyHistory';
+import { refreshWeeklyStatsHistory, readWeeklyStatsHistory } from '../utils/weeklyHistory';
 import { getServicedStatusFromColumn, mergeServicedStatus } from '../utils/servicingStatus';
 import { getActivityRules, isActiveByRule, isServedByRule, extractTxnCounts, type TxnCounts } from '../utils/activityRules';
 import type { WeeklyStatsEntry } from '../utils/weeklyKpiEngine';
 import { calculateCompanyKPIs } from '../utils/mappingEngine';
+import { getClassifiedRowsCached } from '../utils/classificationCache';
+import { getSavedManualOwnerTargets } from '../utils/targetResolution';
+import { isKpi1RowName, isKpi2RowName } from '../utils/kpiRowMatch';
+import { formatNumberWithAbbreviation } from '../utils/numberFormat';
+import { computeLiveKpiTotals, type LiveKpiTotals } from '../utils/liveKpiTotals';
 import { exportKPIAnalysisToPDF } from '../utils/pdfExport';
 import { useReportingPeriod } from './ReportingPeriodContext';
 
@@ -65,7 +70,7 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
     error: string | null;
   } | null>(null);
 
-  const [kpis, setKpis] = useState<KPIMetric[]>(() => {
+  const [rawKpis, setRawKpis] = useState<KPIMetric[]>(() => {
     const saved = localStorage.getItem('dashboardKPIs');
     if (saved) {
       try {
@@ -76,6 +81,63 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
     }
     return [];
   });
+
+  // Live engine inputs (same recompute DashboardView uses via
+  // computeLiveKpiTotals) so KPI1/KPI2 rows here can never drift from the
+  // Dashboard's numbers for the same period.
+  const [liveTotals, setLiveTotals] = useState<LiveKpiTotals>({ kpi1: null, kpi2: null });
+
+  const kpis: KPIMetric[] = useMemo(() => {
+    return rawKpis.map(kpi => {
+      const applyLive = (targetVal: number, achievedVal: number, isCurrency: boolean): KPIMetric => {
+        const realPct = targetVal > 0 ? (achievedVal / targetVal) * 100 : 0;
+        const performance = Math.round(Math.min(realPct, 100) * 10) / 10;
+        return {
+          ...kpi,
+          targetVal,
+          achievedVal,
+          target: isCurrency ? `TZS ${formatNumberWithAbbreviation(targetVal)}` : `${Math.round(targetVal).toLocaleString('en-US')}`,
+          achieved: isCurrency ? `TZS ${formatNumberWithAbbreviation(achievedVal)}` : `${Math.round(achievedVal).toLocaleString('en-US')}`,
+          performance,
+        };
+      };
+
+      if (isKpi1RowName(kpi.name) && liveTotals.kpi1) {
+        return applyLive(liveTotals.kpi1.target, liveTotals.kpi1.achieved, true);
+      }
+      if (isKpi2RowName(kpi.name) && liveTotals.kpi2) {
+        return applyLive(liveTotals.kpi2.target, liveTotals.kpi2.achieved, false);
+      }
+      return kpi;
+    });
+  }, [rawKpis, liveTotals]);
+
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      let rows: any[] = [];
+      try {
+        rows = await getDailyServicingRows();
+      } catch (e) {
+        console.error('Failed to load daily servicing rows in KPIReportsView:', e);
+      }
+      try {
+        const owners: Owner[] = JSON.parse(localStorage.getItem('ownersList') || '[]');
+        const saTillRegistry = JSON.parse(localStorage.getItem('saTillRegistry') || '[]');
+        const tillsList = JSON.parse(localStorage.getItem('tillsList') || '[]');
+        const baseWakalaIndex: BaseWakala[] = JSON.parse(localStorage.getItem('baseWakalaIndex') || '[]');
+        const priorityWakalas: PriorityWakala[] = JSON.parse(localStorage.getItem('priorityWakalaList') || '[]');
+        const manualTargets: ManualOwnerTarget[] = getSavedManualOwnerTargets();
+
+        const classified = getClassifiedRowsCached(rows || [], saTillRegistry, baseWakalaIndex, tillsList, owners);
+        const totals = computeLiveKpiTotals(classified, owners, displayPeriod, manualTargets, priorityWakalas, baseWakalaIndex, readWeeklyStatsHistory());
+        if (isMounted) setLiveTotals(totals);
+      } catch (e) {
+        console.error('Failed to compute live KPI1/KPI2 totals in KPIReportsView:', e);
+      }
+    })();
+    return () => { isMounted = false; };
+  }, [displayPeriod]);
 
   const [weeklyHistory, setWeeklyHistory] = useState<any[]>(() => {
     const saved = localStorage.getItem('weeklyKpiHistory');
@@ -420,12 +482,12 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
       const savedKpis = localStorage.getItem('dashboardKPIs');
       if (savedKpis) {
         try {
-          setKpis(JSON.parse(savedKpis));
+          setRawKpis(JSON.parse(savedKpis));
         } catch (e) {
-          setKpis([]);
+          setRawKpis([]);
         }
       } else {
-        setKpis([]);
+        setRawKpis([]);
       }
 
       const savedWeekly = localStorage.getItem('weeklyKpiHistory');

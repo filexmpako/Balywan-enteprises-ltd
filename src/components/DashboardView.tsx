@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { ViewType, KPIMetric, TopOwner, RecentReport, AuditReport, Owner, ManualOwnerTarget, PriorityWakala, BaseWakala } from '../types';
 import { dashboardKPIs, topOwners, recentReports } from '../data';
 import { calculateCompanyKPIs, CompanyKPIsResult } from '../utils/mappingEngine';
-import { getCompanyTotalKPI1Target, calculateKPI1 } from '../utils/kpiEngine';
-import { calculateKPI2 } from '../utils/kpi2Engine';
+import { getCompanyTotalKPI1Target } from '../utils/kpiEngine';
+import { computeLiveKpiTotals } from '../utils/liveKpiTotals';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
 import { getSavedManualOwnerTargets } from '../utils/targetResolution';
 import { isKpi1RowName, isKpi2RowName } from '../utils/kpiRowMatch';
@@ -475,19 +475,10 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
 
             const classified = getClassifiedRowsCached(rows || [], saTillRegistry, baseWakalaIndex, tillsList, owners);
 
-            const kpi1Results = calculateKPI1(classified, [], owners, currentPeriod, manualTargets, readWeeklyStatsHistory());
-            const kpi1Target = kpi1Results.reduce((s, r) => s + (r.hasTarget ? r.monthlyTarget : 0), 0);
-            const kpi1Achieved = kpi1Results.reduce((s, r) => s + r.servedVolume, 0);
-
-            const kpi2Results = calculateKPI2(classified, owners, currentPeriod, manualTargets, priorityWakalas, baseWakalaIndex);
-            const kpi2Target = kpi2Results.reduce((s, r) => s + (r.hasTarget ? r.normalTarget + r.priorityTarget : 0), 0);
-            const kpi2Achieved = kpi2Results.reduce((s, r) => s + (r.hasTarget ? r.normalServed + r.priorityServed : 0), 0);
+            const totals = computeLiveKpiTotals(classified, owners, currentPeriod, manualTargets, priorityWakalas, baseWakalaIndex, readWeeklyStatsHistory());
 
             if (isMounted) {
-              setLiveTotals({
-                kpi1: kpi1Target > 0 ? { target: kpi1Target, achieved: kpi1Achieved } : null,
-                kpi2: kpi2Target > 0 ? { target: kpi2Target, achieved: kpi2Achieved } : null,
-              });
+              setLiveTotals(totals);
             }
           } catch (e) {
             console.error('Failed to compute live KPI1/KPI2 totals:', e);

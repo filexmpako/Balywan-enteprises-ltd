@@ -50,9 +50,18 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
   const [receiptPreviews, setReceiptPreviews] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    const saved = localStorage.getItem('personnelList');
-    const all: Personnel[] = saved ? JSON.parse(saved) : [];
-    setManagers(all.filter(p => (p.title || '').toUpperCase() === 'MANAGER'));
+    const loadManagers = () => {
+      const saved = localStorage.getItem('personnelList');
+      const all: Personnel[] = saved ? JSON.parse(saved) : [];
+      setManagers(all.filter(p => (p.title || '').toUpperCase() === 'MANAGER'));
+    };
+    loadManagers();
+    window.addEventListener('people-reclassified', loadManagers);
+    window.addEventListener('storage', loadManagers);
+    return () => {
+      window.removeEventListener('people-reclassified', loadManagers);
+      window.removeEventListener('storage', loadManagers);
+    };
   }, []);
 
   useEffect(() => {
@@ -76,6 +85,17 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
     setRequests(getFloatRequestsForOwner(ownerId));
     setLoans(getLoanRecordsForOwner(ownerId));
   };
+
+  // Pick up a Manager's confirm/reject/loan/repayment actions made in a
+  // separate session, and cross-tab edits, without requiring a reload.
+  useEffect(() => {
+    window.addEventListener('float-requests-updated', refresh);
+    window.addEventListener('storage', refresh);
+    return () => {
+      window.removeEventListener('float-requests-updated', refresh);
+      window.removeEventListener('storage', refresh);
+    };
+  }, [ownerId]);
 
   const pendingRequest = requests.find(r => r.status === 'Pending');
   const confirmedRequest = requests.find(r => r.status === 'Confirmed');
