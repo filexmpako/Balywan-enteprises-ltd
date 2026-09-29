@@ -151,11 +151,9 @@ export default function Sidebar({
         <nav className={`flex-1 space-y-1.5 py-6 overflow-y-auto ${isCollapsed ? 'lg:px-3' : 'px-4'}`}>
           {menuItems.map((item) => {
             const Icon = item.icon;
-            const isActive = currentView === item.view || 
-                             (item.view === ViewType.PEOPLE_MGT && 
-                              (currentView === ViewType.PEOPLE_MGT || 
-                               currentView === ViewType.OWNERS || 
-                               currentView === ViewType.PERSONNEL || 
+            const isActive = currentView === item.view ||
+                             (item.view === ViewType.PEOPLE_MGT &&
+                              (currentView === ViewType.PEOPLE_MGT ||
                                currentView === ViewType.OWNER_DETAILS));
             return (
               <button

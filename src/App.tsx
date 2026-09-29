@@ -16,13 +16,11 @@ import { ReportingPeriodProvider } from "./components/ReportingPeriodContext";
 
 // Existing sub views
 import DashboardView from "./components/DashboardView";
-import OwnersView from "./components/OwnersView";
 import OwnerDetailsView from "./components/OwnerDetailsView";
 import UploadReportsView from "./components/UploadReportsView";
 import KPIReportsView from "./components/KPIReportsView";
 import ReportHistoryView from "./components/ReportHistoryView";
 import SettingsView from "./components/SettingsView";
-import PersonnelView from "./components/PersonnelView";
 import PeopleManagementView from "./components/PeopleManagementView";
 import AdminFieldMapView from "./components/AdminFieldMapView";
 import BaseWakalaView from "./components/BaseWakalaView";
