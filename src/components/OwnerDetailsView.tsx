@@ -583,6 +583,16 @@ export default function OwnerDetailsView({
     };
   }, [localOwner, currentPeriod]);
 
+  // Roster wakala with no row in the latest weekly report had no recorded
+  // activity that week, so they count as inactive: Active + Inactive = Wakala.
+  const rosterWakalaCount = priorityWakalaCount + normalWakalaCount;
+  const weeklyInactive = latestWeeklyActivity
+    ? Math.max(0, rosterWakalaCount - latestWeeklyActivity.active)
+    : null;
+  const notInReportCount = latestWeeklyActivity && weeklyInactive !== null
+    ? weeklyInactive - latestWeeklyActivity.inactive
+    : 0;
+
   const [manualTargetsList] = useState<ManualOwnerTarget[]>(() => getSavedManualOwnerTargets());
 
   const ownerMtdData = useMemo(() => {
@@ -902,8 +912,14 @@ export default function OwnerDetailsView({
               />
               <MetricCard
                 title="Inactive Wakala"
-                value={latestWeeklyActivity?.inactive ?? (isSynced ? inactiveWakalaCount : 'Not yet synced')}
-                subValue={latestWeeklyActivity ? 'LATEST WEEKLY RULE' : (isSynced ? 'DAILY INGESTION' : 'Awaiting Ingestion')}
+                value={weeklyInactive ?? (isSynced ? inactiveWakalaCount : 'Not yet synced')}
+                subValue={
+                  latestWeeklyActivity
+                    ? notInReportCount > 0
+                      ? `LATEST WEEKLY RULE · INCL. ${notInReportCount} NOT IN REPORT`
+                      : 'LATEST WEEKLY RULE'
+                    : (isSynced ? 'DAILY INGESTION' : 'Awaiting Ingestion')
+                }
                 icon={UserX}
                 variant="red"
               />
