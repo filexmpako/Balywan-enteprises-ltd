@@ -226,11 +226,33 @@ export async function persistClassifiedRows(
   uploadId: string,
   classified: Array<{ row: any; bucket: string; attributedOwnerId: string | null; attributedOwnerName: string | null; matchedVia: string; auditRecord: any }>,
 ) {
-  const txRows = classified.map(({ row, bucket, attributedOwnerId, attributedOwnerName, matchedVia }) => {
+  // owner_id only drives RLS visibility: an owner must see every transaction
+  // sent from their own tills (BASE, IOP and SA transfers alike), while
+  // attributed_owner_id keeps who the volume is credited to. The servicing
+  // owner is the audit record's ownerId; staff tills have none.
+  const servicingIds = Array.from(
+    new Set(
+      classified
+        .map(({ auditRecord }) => String(auditRecord?.ownerId ?? '').trim())
+        .filter((id) => id && id !== 'UNASSIGNED'),
+    ),
+  );
+  const knownOwnerIds = new Set<string>();
+  for (const ids of chunk(servicingIds, 500)) {
+    const { data, error } = await supabase.from('owners').select('owner_id').in('owner_id', ids);
+    if (error) throw new Error(`owners lookup: ${error.message}`);
+    for (const owner of data ?? []) knownOwnerIds.add(String(owner.owner_id));
+  }
+  const visibleOwnerId = (auditRecord: any, attributedOwnerId: string | null) => {
+    const servicingId = String(auditRecord?.ownerId ?? '').trim();
+    return knownOwnerIds.has(servicingId) ? servicingId : attributedOwnerId;
+  };
+
+  const txRows = classified.map(({ row, bucket, attributedOwnerId, attributedOwnerName, matchedVia, auditRecord }) => {
     const date = String(row['Servicing Date'] || '').slice(0, 10) || null;
     return {
       upload_id: uploadId,
-      owner_id: attributedOwnerId,
+      owner_id: visibleOwnerId(auditRecord, attributedOwnerId),
       wakala_id: null,
       transaction_ref: String(row['Transaction ID'] ?? ''),
       branch_msisdn: String(row['Branch_msisdn'] ?? ''),
