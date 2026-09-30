@@ -142,11 +142,6 @@ export default function DailyMgtMappingEngine({
         items: mappedTransactions.filter(t => t.validationErrors.includes('Unknown Till'))
       },
       {
-        type: 'Duplicate Transactions',
-        count: mappedTransactions.filter(t => t.isDuplicate).length,
-        items: mappedTransactions.filter(t => t.isDuplicate)
-      },
-      {
         type: 'Corrupted Records',
         count: mappedTransactions.filter(t => t.validationErrors.includes('Corrupted Records')).length,
         items: mappedTransactions.filter(t => t.validationErrors.includes('Corrupted Records'))
@@ -225,9 +220,11 @@ export default function DailyMgtMappingEngine({
     setIsImporting(true);
 
     setTimeout(async () => {
-      // 1. Append transactions to IndexedDB, discarding true duplicates
+      // 1. Send every mapped row. Already-uploaded rows are refreshed in place
+      //    by the server (upsert on transaction ref + till), never duplicated,
+      //    so a re-upload picks up the latest till owners and SA list.
       const newServicingRows = mappedTransactions
-        .filter(t => t.isMapped && !t.isDuplicate)
+        .filter(t => t.isMapped)
         .map(t => ({
           _id: t.id,
           "Transaction ID": t.transactionId,
@@ -418,7 +415,7 @@ export default function DailyMgtMappingEngine({
       </div>
 
       {/* CORE STATS GRID */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
         {/* Transactions Processed */}
         <div className="bg-brand-card p-4 rounded-xl border border-brand-gray-border flex flex-col justify-between">
           <div>
@@ -464,13 +461,22 @@ export default function DailyMgtMappingEngine({
           <span className="text-[9px] font-bold text-rose-600 block mt-2">Anomalies Detected</span>
         </div>
 
+        {/* Already Uploaded */}
+        <div className={`bg-brand-card p-4 rounded-xl border flex flex-col justify-between ${stats.alreadyUploadedCount > 0 ? 'border-sky-200 bg-sky-50/20' : 'border-brand-gray-border'}`}>
+          <div>
+            <p className="text-[10px] font-extrabold text-sky-700 uppercase tracking-wider">Already Uploaded</p>
+            <p className="text-xl font-black text-sky-600 mt-1">{stats.alreadyUploadedCount}</p>
+          </div>
+          <span className="text-[9px] font-bold text-sky-600 block mt-2">Will Refresh, Not Duplicate</span>
+        </div>
+
         {/* Ready for Import */}
         <div className="bg-brand-card p-4 rounded-xl border border-emerald-200 bg-emerald-50/10 flex flex-col justify-between">
           <div>
             <p className="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider">Ready for Import</p>
             <p className="text-xl font-black text-emerald-600 mt-1">{stats.readyForImport}</p>
           </div>
-          <span className="text-[9px] font-bold text-emerald-600 block mt-2">Valid Mapped Sum</span>
+          <span className="text-[9px] font-bold text-emerald-600 block mt-2">New Valid Rows</span>
         </div>
       </div>
 
@@ -1078,7 +1084,10 @@ export default function DailyMgtMappingEngine({
                 </div>
                 <h3 className="text-lg font-black text-brand-text">Confirm Ledger Integration</h3>
                 <p className="text-xs text-brand-text-variant leading-relaxed max-w-sm mx-auto">
-                  This action will commit <strong>{stats.mappedCount} transactions</strong>, dynamically update live metrics for <strong>{stats.ownersUpdated} owners</strong> and <strong>{stats.personnelUpdated} personnel</strong>, and update company dashboard achievements.
+                  This action will commit <strong>{stats.mappedCount} transactions</strong>
+                  {stats.alreadyUploadedCount > 0 && (
+                    <> (<strong>{stats.mappedCount - stats.alreadyUploadedCount} new</strong> · <strong>{stats.alreadyUploadedCount} already uploaded</strong>, refreshed in place, not duplicated)</>
+                  )}, dynamically update live metrics for <strong>{stats.ownersUpdated} owners</strong> and <strong>{stats.personnelUpdated} personnel</strong>, and update company dashboard achievements.
                 </p>
               </div>
 
@@ -1101,6 +1110,10 @@ export default function DailyMgtMappingEngine({
                   <div className="flex justify-between">
                     <span>Unmatched (Review Pool)</span>
                     <strong className="text-amber-600">{stats.unmappedCount} items</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Already Uploaded (Refreshed)</span>
+                    <strong className="text-sky-600">{stats.alreadyUploadedCount} items</strong>
                   </div>
                   <div className="flex justify-between">
                     <span>Validation Diagnostics</span>
