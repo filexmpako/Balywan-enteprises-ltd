@@ -250,6 +250,12 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
     ownerStatus: 'Matched' | 'Unmatched' | 'Unassigned';
     matchedOwnerName?: string;
   }[] | null>(null);
+  const [replaceBaseWakalaIndex, setReplaceBaseWakalaIndex] = useState(false);
+  const baseWakalasNotInFile = useMemo(() => {
+    if (!stagedBaseWakalas) return 0;
+    const inFile = new Set(stagedBaseWakalas.map(s => normalizeMsisdn(s.record.msisdn)));
+    return baseWakalas.filter(b => !inFile.has(normalizeMsisdn(b.msisdn))).length;
+  }, [stagedBaseWakalas, baseWakalas]);
 
   const [baseWakalaSuccess, setBaseWakalaSuccess] = useState<{ count: number; timestamp: string } | null>(null);
 
@@ -283,13 +289,13 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
 
       // Column keys mapping
       const msisdnKeys = ['msisdn', 'phone', 'mobile', 'till msisdn', 'tillmsisdn', 'agent id', 'agentid', 'phone number', 'branch_msisdn', 'wakala msisdn'];
-      const codeKeys = ['code', 'agent code', 'agentcode', 'wakala code', 'terminal code'];
+      const codeKeys = ['code', 'agent code', 'agentcode', 'wakala code', 'terminal code', 'alias code', 'alias_code'];
       const fullNameKeys = ['full_name', 'fullname', 'full name', 'name', 'agent name', 'wakala name'];
       const siteIdKeys = ['siteid', 'site id', 'site', 'location id', 'site code'];
       const siteWardKeys = ['siteward', 'site ward', 'ward', 'location ward'];
       const districtKeys = ['district', 'location district', 'region/district'];
       const creationDateKeys = ['creation_date', 'creation date', 'created at', 'date created', 'date'];
-      const altNoKeys = ['altern no', 'alternate no', 'alternate phone', 'alt msisdn', 'alternate number', 'altern_no', 'alt phone', 'alternno'];
+      const altNoKeys = ['altern no', 'alternate no', 'alternate phone', 'alt msisdn', 'alternate number', 'altern_no', 'alt phone', 'alternno', 'alter no', 'alternative no', 'alternative number'];
       const ownerKeys = ['owner', 'owner name', 'ownername', 'master agent name', 'master agent', 'owner_name', 'sa owner', 'sa_owner', 'agent owner', 'owner code', 'ownerid', 'owner id'];
 
       const masterOwners = getMasterOwners();
@@ -423,6 +429,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
             siteWard: rawSiteWard || undefined,
             district: rawDistrict || undefined,
             alternateNumber: normAltNo || undefined,
+            altMsisdn: normAltNo || undefined,
             ownerName: ownerName,
             creationDate: rawCreationDate || undefined
           },
@@ -448,8 +455,10 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
     if (!stagedBaseWakalas) return;
 
     const wakalaMap = new Map<string, BaseWakala>();
-    for (const item of baseWakalas) {
-      wakalaMap.set(normalizeMsisdn(item.msisdn), item);
+    if (!replaceBaseWakalaIndex) {
+      for (const item of baseWakalas) {
+        wakalaMap.set(normalizeMsisdn(item.msisdn), item);
+      }
     }
 
     for (const item of stagedBaseWakalas) {
@@ -470,6 +479,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
       timestamp: nowStr,
     });
     setStagedBaseWakalas(null);
+    setReplaceBaseWakalaIndex(false);
     setSelectedFile(null);
 
     if (onAddAuditReport) {
@@ -2715,10 +2725,24 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
                         </table>
                       </div>
 
+                      {baseWakalasNotInFile > 0 && (
+                        <label className="flex items-start gap-2.5 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={replaceBaseWakalaIndex}
+                            onChange={(e) => setReplaceBaseWakalaIndex(e.target.checked)}
+                            className="mt-0.5 h-4 w-4 accent-amber-600"
+                          />
+                          <span className="leading-relaxed">
+                            <strong>Replace the whole Base Wakala Index with this file.</strong> {baseWakalasNotInFile} wakala currently in the index are not in this file and will be removed. Leave unticked to only add and update wakala from this file.
+                          </span>
+                        </label>
+                      )}
+
                       <div className="flex justify-end gap-3 pt-2">
                         <button
                           type="button"
-                          onClick={() => { setStagedBaseWakalas(null); setSelectedFile(null); }}
+                          onClick={() => { setStagedBaseWakalas(null); setReplaceBaseWakalaIndex(false); setSelectedFile(null); }}
                           className="rounded-xl border border-slate-300 bg-white hover:bg-slate-50 px-4 py-2.5 text-xs font-bold text-slate-700 transition-all cursor-pointer"
                         >
                           Cancel

@@ -4,6 +4,25 @@ import { resolveOwnerMatch } from './ownerMatch';
 import { resolveOwnerTarget, getSavedManualOwnerTargets } from './targetResolution';
 import { formatToISODate } from './mappingEngine';
 import { parseWeekDateRange, type WeeklyStatsEntry } from './weeklyKpiEngine';
+import { periodsMatch, toIsoPeriod } from './periodUtils';
+
+function rowIsoDate(cr: ClassifiedRow): string {
+  return formatToISODate(
+    String(cr.row['Servicing Date'] || cr.row['date'] || cr.row['Date'] || cr.row['Timestamp'] || '')
+  );
+}
+
+/**
+ * Keeps only the rows whose servicing date falls in `period` (ISO "YYYY-MM"
+ * or a label like "September 2026"). Daily MGT history spans every uploaded
+ * month, so month-to-date figures must be cut to the selected month.
+ */
+export function filterClassifiedRowsToPeriod(rows: ClassifiedRow[], period?: string): ClassifiedRow[] {
+  if (!period) return rows;
+  const iso = toIsoPeriod(period);
+  if (!/^\d{4}-\d{2}$/.test(iso)) return rows;
+  return rows.filter(cr => rowIsoDate(cr).slice(0, 7) === iso);
+}
 
 export type KPI1Status = 'Green' | 'Blue' | 'Yellow' | 'Red';
 
@@ -14,78 +33,70 @@ export interface OwnerMtdVolumeResult {
 }
 
 /**
- * Per owner, per week within `period`: takes the greater of Daily MGT's
- * classified served volume and the Weekly Report's own served volume for
- * that week. Daily MGT and the Weekly Report are two independent
- * descriptions of the same underlying business (the same reason "IOP
- * Remaining" compares rather than adds them) — summing them would double
- * count, so weeks are reconciled by max, not addition. Days that fall
- * outside every parsed weekly-report week (no weekly upload covers them)
- * have no counterpart to compare against, so their Daily MGT volume is
- * counted as-is.
+ * The newest weekly-report entry for `period`, by the end date of its week
+ * (upload order as the tie-breaker).
+ */
+function latestWeeklyEntryForPeriod(weeklyStats: WeeklyStatsEntry[], period: string): WeeklyStatsEntry | null {
+  let latest: WeeklyStatsEntry | null = null;
+  let latestEnd = '';
+  weeklyStats.forEach(w => {
+    if (!periodsMatch(w.reportingMonth, period)) return;
+    const end = parseWeekDateRange(w.reportingWeek)?.end || '';
+    if (!latest || end >= latestEnd) {
+      latest = w;
+      latestEnd = end;
+    }
+  });
+  return latest;
+}
+
+/**
+ * Per owner: the greater of Daily MGT's month-to-date served volume and the
+ * latest weekly report's served value for the month. The telco weekly report
+ * is itself month-to-date (its Month column is the whole month and its
+ * values track Daily MGT's MTD totals), so weeks must not be added to each
+ * other or to earlier Daily MGT days — that double counts. `classifiedRows`
+ * must already be cut to `period`.
  */
 function calculateServedVolumeWithWeeklyMax(
   classifiedRows: ClassifiedRow[],
   weeklyStats: WeeklyStatsEntry[],
   period: string
 ): Map<string, number> {
-  const rowsWithDate = classifiedRows
-    .filter(cr => cr.bucket === 'BASE' || cr.bucket === 'IOP')
-    .map(cr => ({
-      ownerId: cr.auditRecord?.ownerId,
-      amount: cr.auditRecord?.amount || 0,
-      date: formatToISODate(
-        String(cr.row['Servicing Date'] || cr.row['date'] || cr.row['Date'] || cr.row['Timestamp'] || '')
-      ),
-    }))
-    .filter((r): r is { ownerId: string; amount: number; date: string } => !!r.ownerId && r.ownerId !== 'UNASSIGNED');
+  const dailyByOwner = new Map<string, number>();
+  classifiedRows.forEach(cr => {
+    if (cr.bucket !== 'BASE' && cr.bucket !== 'IOP') return;
+    const ownerId = cr.auditRecord?.ownerId;
+    if (!ownerId || ownerId === 'UNASSIGNED') return;
+    dailyByOwner.set(ownerId, (dailyByOwner.get(ownerId) || 0) + (cr.auditRecord?.amount || 0));
+  });
 
-  const weeksInPeriod = weeklyStats.filter(w => w.reportingMonth === period);
-  const coveredDates = new Set<string>();
+  const reportByOwner = new Map<string, number>();
+  (latestWeeklyEntryForPeriod(weeklyStats, period)?.byOwner || []).forEach(b => {
+    if (b.ownerId) reportByOwner.set(b.ownerId, b.value || 0);
+  });
+
   const servedByOwner = new Map<string, number>();
-
-  weeksInPeriod.forEach(week => {
-    const range = parseWeekDateRange(week.reportingWeek);
-    if (!range) return;
-
-    const dailyByOwner = new Map<string, number>();
-    rowsWithDate.forEach(r => {
-      if (r.date < range.start || r.date > range.end) return;
-      coveredDates.add(r.date);
-      dailyByOwner.set(r.ownerId, (dailyByOwner.get(r.ownerId) || 0) + r.amount);
-    });
-
-    const reportByOwner = new Map<string, number>();
-    (week.byOwner || []).forEach(b => reportByOwner.set(b.ownerId, b.value || 0));
-
-    const ownerIdsThisWeek = new Set([...dailyByOwner.keys(), ...reportByOwner.keys()]);
-    ownerIdsThisWeek.forEach(ownerId => {
-      const weekMax = Math.max(dailyByOwner.get(ownerId) || 0, reportByOwner.get(ownerId) || 0);
-      servedByOwner.set(ownerId, (servedByOwner.get(ownerId) || 0) + weekMax);
-    });
+  new Set([...dailyByOwner.keys(), ...reportByOwner.keys()]).forEach(ownerId => {
+    servedByOwner.set(ownerId, Math.max(dailyByOwner.get(ownerId) || 0, reportByOwner.get(ownerId) || 0));
   });
-
-  rowsWithDate.forEach(r => {
-    if (coveredDates.has(r.date)) return;
-    servedByOwner.set(r.ownerId, (servedByOwner.get(r.ownerId) || 0) + r.amount);
-  });
-
   return servedByOwner;
 }
 
 /**
  * Calculates MTD volume breakdown (served, base, iop) across classified rows for all owners.
- * Base/IOP split always comes from Daily MGT classification. When weeklyStats + period are
- * given, `servedVolume` (the figure KPI1 achievement is measured against) is reconciled
- * week-by-week against the Weekly Report using calculateServedVolumeWithWeeklyMax, so an
- * uploaded weekly report counts toward the target instead of being invisible to it.
+ * Only rows dated in `period` count when a period is given. Base/IOP split always comes from
+ * Daily MGT classification. When weeklyStats + period are given, `servedVolume` (the figure
+ * KPI1 achievement is measured against) is the greater of Daily MGT and the latest weekly
+ * report for the month (see calculateServedVolumeWithWeeklyMax).
  */
 export function calculateMtdVolumes(
-  classifiedRows: ClassifiedRow[],
+  allClassifiedRows: ClassifiedRow[],
   weeklyStats?: WeeklyStatsEntry[],
   period?: string
 ): Map<string, OwnerMtdVolumeResult> {
   const result = new Map<string, OwnerMtdVolumeResult>();
+  const classifiedRows = filterClassifiedRowsToPeriod(allClassifiedRows, period);
 
   for (const cr of classifiedRows) {
     if (cr.bucket !== 'BASE' && cr.bucket !== 'IOP') continue;
@@ -137,7 +148,7 @@ export function calculateOwnerMtdVolume(
     let totalServed = 0;
     let totalBase = 0;
     let totalIop = 0;
-    for (const cr of classifiedRows) {
+    for (const cr of filterClassifiedRowsToPeriod(classifiedRows, period)) {
       if (cr.bucket !== 'BASE' && cr.bucket !== 'IOP') continue;
       const amount = cr.auditRecord?.amount || 0;
       totalServed += amount;

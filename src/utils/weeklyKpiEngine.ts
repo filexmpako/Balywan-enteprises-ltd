@@ -434,25 +434,22 @@ export function mergeWeeklyHistory(
   );
 }
 
-/** Cumulative servicing value across weeks, in week order. */
+// The telco weekly report is month-to-date, so each week's own value already
+// is the month's cumulative figure; summing weeks would double count.
+
+/** Month-to-date servicing value as of each week, in week order. */
 export function withCumulativeValue(entries: WeeklyStatsEntry[]): Array<WeeklyStatsEntry & { cumulativeValue: number }> {
-  let running = 0;
-  return entries.map(e => {
-    running += e.totalValue || 0;
-    return { ...e, cumulativeValue: running };
-  });
+  return entries.map(e => ({ ...e, cumulativeValue: e.totalValue || 0 }));
 }
 
-/** Cumulative servicing value for one owner across weeks, in week order. */
+/** Month-to-date servicing value for one owner as of each week, in week order. */
 export function ownerWeeklySeries(
   entries: WeeklyStatsEntry[],
   ownerId: string
 ): Array<{ reportingWeek: string; breakdown: WeeklyOwnerBreakdown | null; cumulativeValue: number }> {
-  let running = 0;
   return entries.map(e => {
     const breakdown = (e.byOwner || []).find(b => b.ownerId === ownerId) || null;
-    running += breakdown?.value || 0;
-    return { reportingWeek: e.reportingWeek, breakdown, cumulativeValue: running };
+    return { reportingWeek: e.reportingWeek, breakdown, cumulativeValue: breakdown?.value || 0 };
   });
 }
 

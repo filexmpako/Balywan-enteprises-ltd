@@ -1,6 +1,7 @@
 import { kvGet, kvSet } from '../lib/hasidadi/kv';
 import { ManualOwnerTarget, PriorityWakala } from '../types';
 import { normalizeMsisdn } from './msisdn';
+import { periodsMatch } from './periodUtils';
 
 /**
  * Resolves KPI 1 target for a given owner and period. Manual only —
@@ -11,7 +12,7 @@ export function resolveOwnerTarget(
   period: string,
   manualTargets: ManualOwnerTarget[]
 ): { monthlyTarget: number; source: 'manual' | 'none' } {
-  const manual = manualTargets.find(m => m.ownerId === ownerId && m.period === period);
+  const manual = manualTargets.find(m => m.ownerId === ownerId && periodsMatch(m.period, period));
   if (manual && (manual.kpi1BaseTarget !== undefined || manual.kpi1IopTarget !== undefined)) {
     const monthlyTarget = (manual.kpi1BaseTarget || 0) + (manual.kpi1IopTarget || 0);
     return { monthlyTarget, source: 'manual' };

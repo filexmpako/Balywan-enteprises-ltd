@@ -1,6 +1,7 @@
 import { ClassifiedRow } from './classification';
 import { Owner, PriorityWakala, BaseWakala, ManualOwnerTarget } from '../types';
-import { KPI1Status } from './kpiEngine';
+import { KPI1Status, filterClassifiedRowsToPeriod } from './kpiEngine';
+import { periodsMatch } from './periodUtils';
 import { normalizeMsisdn } from './msisdn';
 import { buildOwnerWakalaMap } from './wakalaMapping';
 import { getSavedManualOwnerTargets } from './targetResolution';
@@ -43,7 +44,7 @@ function round1(n: number): number {
  * figure is involved.
  */
 export function calculateKPI2(
-  classifiedRows: ClassifiedRow[],
+  allClassifiedRows: ClassifiedRow[],
   owners: Owner[],
   period: string,
   manualTargets?: ManualOwnerTarget[],
@@ -59,6 +60,7 @@ export function calculateKPI2(
 ): KPI2Result[] {
   const actualManualTargets = (manualTargets && Array.isArray(manualTargets)) ? manualTargets : getSavedManualOwnerTargets();
   const activityRules = getActivityRules();
+  const classifiedRows = filterClassifiedRowsToPeriod(allClassifiedRows, period);
   const priorityWakalas: PriorityWakala[] = priorityWakalasParam || (() => {
     try {
       const saved = localStorage.getItem('priorityWakalaList');
@@ -68,7 +70,7 @@ export function calculateKPI2(
     }
   })();
 
-  const periodPriorityWakalas = priorityWakalas.filter(p => !p.period || p.period === period);
+  const periodPriorityWakalas = priorityWakalas.filter(p => !p.period || periodsMatch(p.period, period));
 
   const baseWakalaIndex: BaseWakala[] = baseWakalasParam || [];
   const ownerWakalaMapping = buildOwnerWakalaMap(baseWakalaIndex, owners);
@@ -108,7 +110,7 @@ export function calculateKPI2(
     const normalWakalaCount = Math.max(0, wakalasMap.size - priorityWakalaCount);
 
     // Resolve this owner's admin-set percentages for this period
-    const manual = actualManualTargets.find(m => m.ownerId === ownerId && m.period === period);
+    const manual = actualManualTargets.find(m => m.ownerId === ownerId && periodsMatch(m.period, period));
     const normalPercent = manual?.kpi2NormalPercent ?? null;
     const priorityPercent = manual?.kpi2PriorityPercent ?? null;
 
