@@ -36,7 +36,7 @@ export interface OwnerMtdVolumeResult {
  * The newest weekly-report entry for `period`, by the end date of its week
  * (upload order as the tie-breaker).
  */
-function latestWeeklyEntryForPeriod(weeklyStats: WeeklyStatsEntry[], period: string): WeeklyStatsEntry | null {
+export function latestWeeklyEntryForPeriod(weeklyStats: WeeklyStatsEntry[], period: string): WeeklyStatsEntry | null {
   let latest: WeeklyStatsEntry | null = null;
   let latestEnd = '';
   weeklyStats.forEach(w => {
