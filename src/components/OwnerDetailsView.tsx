@@ -47,7 +47,9 @@ import { motion, AnimatePresence } from 'motion/react';
 import FloatManagementPanel from './FloatManagementPanel';
 import { getDailyServicingRows } from '../utils/indexedDB';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
-import { calculateOwnerMtdVolume } from '../utils/kpiEngine';
+import { calculateOwnerMtdVolume, latestWeeklyEntryForPeriod } from '../utils/kpiEngine';
+import { periodsMatch } from '../utils/periodUtils';
+import { fetchMonthlyMonths } from '../lib/monthly.functions';
 import { readWeeklyStatsHistory } from '../utils/weeklyHistory';
 import { resolveOwnerMatch } from '../utils/ownerMatch';
 import { AgentTarget, ManualOwnerTarget } from '../types';
@@ -593,6 +595,33 @@ export default function OwnerDetailsView({
     ? weeklyInactive - latestWeeklyActivity.inactive
     : 0;
 
+  // CP Penalty / External Servicing: the uploaded Monthly report is final for
+  // its month; until one exists, the latest (month-to-date) weekly report for
+  // the month supplies the same two columns.
+  const [monthlyReportMonths, setMonthlyReportMonths] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetchMonthlyMonths()
+      .then(res => { if (!cancelled) setMonthlyReportMonths(res?.months ?? []); })
+      .catch(() => { if (!cancelled) setMonthlyReportMonths([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const settlement = useMemo(() => {
+    if (!localOwner) return { penalty: 0, iop: 0, source: 'NO REPORT YET' };
+    if (monthlyReportMonths.some(m => periodsMatch(m, currentPeriod))) {
+      return { penalty: localOwner.penalty || 0, iop: localOwner.iopVolume || 0, source: 'MONTHLY REPORT' };
+    }
+    const week = latestWeeklyEntryForPeriod(readWeeklyStatsHistory(), currentPeriod);
+    if (!week) return { penalty: 0, iop: 0, source: 'NO REPORT YET' };
+    const b = (week.byOwner || []).find(o => o.ownerId === localOwner.id);
+    return {
+      penalty: b?.penalty || 0,
+      iop: b?.iopValue || 0,
+      source: `WEEKLY REPORT · ${week.reportingWeek.split(' (')[0].toUpperCase()}`,
+    };
+  }, [localOwner, currentPeriod, monthlyReportMonths]);
+
   const [manualTargetsList] = useState<ManualOwnerTarget[]>(() => getSavedManualOwnerTargets());
 
   const ownerMtdData = useMemo(() => {
@@ -1032,22 +1061,22 @@ export default function OwnerDetailsView({
             </div>
           </div>
 
-          {/* Monthly Report Section — settlement figures from the uploaded Monthly report, kept apart from Daily MGT so the source is never ambiguous */}
+          {/* Settlement Section — report figures (Monthly report once uploaded, else the latest weekly report), kept apart from Daily MGT so the source is never ambiguous */}
           <div className="space-y-2">
             <h3 className="font-sans text-xs font-black uppercase text-brand-primary tracking-wider font-mono">
-              Monthly Report — Settlement Ledger
+              Report Settlement Ledger — {settlement.source}
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <MetricCard
                 title="CP Penalty"
-                value={`TZS ${(localOwner.penalty || 0).toLocaleString()}`}
+                value={`TZS ${settlement.penalty.toLocaleString()}`}
                 subValue="CP_SERVICING_VAL x RATE"
                 icon={AlertTriangle}
                 variant="red"
               />
               <MetricCard
                 title="External Servicing"
-                value={`TZS ${(localOwner.iopVolume || 0).toLocaleString()}`}
+                value={`TZS ${settlement.iop.toLocaleString()}`}
                 subValue="FROM REPORT'S IOP COLUMN"
                 icon={Layers}
                 variant="purple"

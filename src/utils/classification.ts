@@ -12,7 +12,7 @@ export interface ClassifiedRow {
   bucket: ClassificationBucket;
   attributedOwnerId: string | null;
   attributedOwnerName: string | null;
-  matchedVia: 'sa_till' | 'base_wakala' | 'unmatched';
+  matchedVia: 'sa_till' | 'staff_till' | 'base_wakala' | 'unmatched';
   auditRecord: ClassificationAuditRecord;
 }
 
@@ -21,10 +21,11 @@ export interface ClassifiedRow {
  * or IOP by looking up Dest_MSISDN against the SA Till Registry, then the 
  * Base Wakala Index. 
  *
- * Strict 3-Tier Lookup Chain:
+ * Strict Lookup Chain:
  * 1. SA Till Registry Match:
- *    - Dest_MSISDN in saTillRegistry
- *    - Same owner -> SA_INTERNAL
+ *    - Dest_MSISDN in saTillRegistry -> SA_INTERNAL
+ * 1b. Sent From A Staff Till:
+ *    - Branch_msisdn is a registered till not assigned to an owner -> SA_INTERNAL
  * 2. Base Wakala Index Match:
  *    - Dest_MSISDN (or altMsisdn) in baseWakalaIndex
  *    - Any match -> BASE (credited to servicing owner)
@@ -128,6 +129,37 @@ export function classifyServicingRows(
         attributedOwnerId: saOwnerId || null,
         attributedOwnerName: saOwnerName || null,
         matchedVia: 'sa_till',
+        auditRecord
+      };
+    }
+
+    // --- STEP 1b: Sent From A Staff / Company Till ---
+    // A registered till that does not belong to an owner (CP, cashier,
+    // manager, supervisor) moves company float. It is internal: credited to
+    // no owner and excluded from volume, wherever the money went.
+    if (!servicingOwnerId && branchMsisdn && tillOwnerByMsisdn.has(branchMsisdn)) {
+      const auditRecord: ClassificationAuditRecord = {
+        id: `audit-${txId}-${idx}`,
+        transactionId: txId,
+        timestamp,
+        rawMsisdn: rawDestMsisdn,
+        normalizedMsisdn: destMsisdn,
+        amount,
+        ownerId: 'UNASSIGNED',
+        matchedEntityId: branchMsisdn,
+        matchedEntityType: 'NONE',
+        classificationBucket: 'SA_INTERNAL',
+        ruleTriggered: `Sent From Staff Till (${servicingTillOwnerName || 'Unknown'}) — Internal, Excluded From Volume`
+      };
+
+      auditRecords.push(auditRecord);
+
+      return {
+        row,
+        bucket: 'SA_INTERNAL',
+        attributedOwnerId: null,
+        attributedOwnerName: servicingTillOwnerName || null,
+        matchedVia: 'staff_till',
         auditRecord
       };
     }
