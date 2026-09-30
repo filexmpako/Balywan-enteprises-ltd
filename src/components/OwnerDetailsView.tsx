@@ -40,7 +40,8 @@ import {
   Navigation,
   AlertCircle,
   Info,
-  Layers
+  Layers,
+  Smartphone
 } from 'lucide-react';
 import MetricCard from './MetricCard';
 import IopLabel, { type IopSource } from './IopLabel';
@@ -481,6 +482,22 @@ export default function OwnerDetailsView({
     });
   }, [servicingRows, tillsList, localOwner]);
 
+  // The owner's own transaction till(s), shown in the header for easy identification.
+  const ownerTills = useMemo(() => {
+    if (!localOwner) return [];
+    const nameLower = (localOwner.name || '').trim().toLowerCase();
+    const seen = new Set<string>();
+    return (tillsList || [])
+      .filter((t: any) => {
+        const till = String(t.transactionTill || '').trim();
+        if (!till || seen.has(till)) return false;
+        const match = String(t.assignedOwner || '').trim().toLowerCase() === nameLower;
+        if (match) seen.add(till);
+        return match;
+      })
+      .map((t: any) => ({ till: String(t.transactionTill).trim(), name: String(t.tillName || '').trim() }));
+  }, [tillsList, localOwner]);
+
   // Derive metrics
   const { 
     totalVolumeServed, 
@@ -818,6 +835,21 @@ export default function OwnerDetailsView({
                   <Calendar className="h-4 w-4 text-brand-primary/60 shrink-0" />
                   <span>Member Since: <strong className="text-brand-text">{localOwner.memberSince}</strong></span>
                 </div>
+              </div>
+
+              <div className="mt-2 flex flex-wrap items-center justify-center sm:justify-start gap-1.5 text-xs font-medium text-brand-text-variant">
+                <Smartphone className="h-4 w-4 text-brand-primary/60 shrink-0" />
+                <span>{ownerTills.length > 1 ? 'Tills:' : 'Till:'}</span>
+                {ownerTills.length === 0 ? (
+                  <span className="italic text-slate-400">No till assigned</span>
+                ) : (
+                  ownerTills.map(t => (
+                    <span key={t.till} className="inline-flex items-center gap-1.5 rounded-lg border border-brand-primary/20 bg-brand-primary/5 px-2 py-0.5">
+                      <strong className="font-mono text-brand-text">{t.till}</strong>
+                      {t.name && <span className="text-[10px] text-slate-500">{t.name}</span>}
+                    </span>
+                  ))
+                )}
               </div>
             </div>
           </div>
