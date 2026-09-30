@@ -12,7 +12,18 @@ export const fetchWorkspace = createServerFn({ method: 'GET' })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { loadWorkspace } = await import('./hasidadi/repo.server');
-    return loadWorkspace(context.supabase as any);
+    // Owners need the full company reference lists (tills, SA tills, Base
+    // Wakala Index) to see their own tills and wakala. Those are read-only
+    // here; writes still go through the user's RLS-scoped client.
+    let referenceClient: any;
+    try {
+      const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+      const { error } = await supabaseAdmin.from('sa_tills').select('till_msisdn', { head: true, count: 'exact' });
+      if (!error) referenceClient = supabaseAdmin;
+    } catch {
+      referenceClient = undefined;
+    }
+    return loadWorkspace(context.supabase as any, referenceClient);
   });
 
 export const saveCollection = createServerFn({ method: 'POST' })
