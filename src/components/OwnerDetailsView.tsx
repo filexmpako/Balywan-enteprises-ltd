@@ -909,8 +909,13 @@ export default function OwnerDetailsView({
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {[
+              {
+                tab: 'overview' as const,
+                title: 'Dashboard',
+                desc: 'Volume, KPIs & settlement',
+              },
               {
                 tab: 'wakalas' as const,
                 title: 'Wakala Management',
@@ -969,50 +974,6 @@ export default function OwnerDetailsView({
           )}
         </div>
       </motion.div>
-
-      {/* Tab Selector - Always show tabs */}
-      <div className="flex border-b border-brand-gray-border overflow-x-auto">
-        <button
-          onClick={() => setActiveTab('overview')}
-          className={`px-5 py-3 font-sans text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === 'overview'
-              ? 'border-brand-primary text-brand-primary font-bold'
-              : 'border-transparent text-brand-text-variant hover:text-brand-text'
-          }`}
-        >
-          Overview Dashboard
-        </button>
-        <button
-          onClick={() => setActiveTab('wakalas')}
-          className={`px-5 py-3 font-sans text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === 'wakalas'
-              ? 'border-brand-primary text-brand-primary font-bold'
-              : 'border-transparent text-brand-text-variant hover:text-brand-text'
-          }`}
-        >
-          Wakala Management
-        </button>
-        <button
-          onClick={() => setActiveTab('location')}
-          className={`px-5 py-3 font-sans text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === 'location'
-              ? 'border-brand-primary text-brand-primary font-bold'
-              : 'border-transparent text-brand-text-variant hover:text-brand-text'
-          }`}
-        >
-          Work Location
-        </button>
-        <button
-          onClick={() => setActiveTab('float')}
-          className={`px-5 py-3 font-sans text-sm font-bold border-b-2 transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === 'float'
-              ? 'border-brand-primary text-brand-primary font-bold'
-              : 'border-transparent text-brand-text-variant hover:text-brand-text'
-          }`}
-        >
-          Float
-        </button>
-      </div>
 
       {activeTab === 'overview' && (
         <>
