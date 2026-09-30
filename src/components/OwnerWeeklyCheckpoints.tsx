@@ -52,7 +52,7 @@ const FILTER_LABELS: Record<DetailFilter, string> = {
   unserved: 'Unserved',
   nostatus: 'No Status',
   wakalaBank: 'Wakala Bank',
-  iopWakala: 'IOP Wakala',
+  iopWakala: 'IOP Wakala · Weekly',
   newWakala: 'New Wakala',
   location: 'Location',
 };

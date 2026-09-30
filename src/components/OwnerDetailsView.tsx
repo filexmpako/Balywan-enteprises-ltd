@@ -43,6 +43,7 @@ import {
   Layers
 } from 'lucide-react';
 import MetricCard from './MetricCard';
+import IopLabel, { type IopSource } from './IopLabel';
 import { motion, AnimatePresence } from 'motion/react';
 import FloatManagementPanel from './FloatManagementPanel';
 import { getDailyServicingRows } from '../utils/indexedDB';
@@ -607,18 +608,19 @@ export default function OwnerDetailsView({
     return () => { cancelled = true; };
   }, []);
 
-  const settlement = useMemo(() => {
-    if (!localOwner) return { penalty: 0, iop: 0, source: 'NO REPORT YET' };
+  const settlement = useMemo((): { penalty: number; iop: number; source: string; kind: IopSource | null } => {
+    if (!localOwner) return { penalty: 0, iop: 0, source: 'NO REPORT YET', kind: null };
     if (monthlyReportMonths.some(m => periodsMatch(m, currentPeriod))) {
-      return { penalty: localOwner.penalty || 0, iop: localOwner.iopVolume || 0, source: 'MONTHLY REPORT' };
+      return { penalty: localOwner.penalty || 0, iop: localOwner.iopVolume || 0, source: 'MONTHLY REPORT', kind: 'monthly' };
     }
     const week = latestWeeklyEntryForPeriod(readWeeklyStatsHistory(), currentPeriod);
-    if (!week) return { penalty: 0, iop: 0, source: 'NO REPORT YET' };
+    if (!week) return { penalty: 0, iop: 0, source: 'NO REPORT YET', kind: null };
     const b = (week.byOwner || []).find(o => o.ownerId === localOwner.id);
     return {
       penalty: b?.penalty || 0,
       iop: b?.iopValue || 0,
       source: `WEEKLY REPORT · ${week.reportingWeek.split(' (')[0].toUpperCase()}`,
+      kind: 'weekly',
     };
   }, [localOwner, currentPeriod, monthlyReportMonths]);
 
@@ -977,7 +979,7 @@ export default function OwnerDetailsView({
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <span className="block font-sans text-[10px] font-bold text-brand-text-variant uppercase tracking-wider">
-                    MTD Serviced Volume (Base + IOP)
+                    MTD Serviced Volume (Base + <IopLabel source="daily" />)
                   </span>
                   <div className="mt-1 flex items-baseline gap-2">
                     <span className="font-sans text-2xl sm:text-3xl font-black text-brand-primary font-mono">
@@ -1043,7 +1045,8 @@ export default function OwnerDetailsView({
                   </span>
                   <span className="flex items-center gap-1.5 text-slate-700">
                     <span className="h-2 w-2 rounded-full bg-purple-500 inline-block" />
-                    IOP Volume: <span className="text-purple-700">TZS {ownerMtdData.iopVolume.toLocaleString()}</span>
+<IopLabel source="daily" /> Volume: <span className="text-purple-700">TZS {ownerMtdData.iopVolume.toLocaleString()}</span>
+                    <span className="font-sans font-medium text-[10px] text-slate-500">(our tills → wakala not in our base)</span>
                   </span>
                 </div>
               </div>
@@ -1075,9 +1078,9 @@ export default function OwnerDetailsView({
                 variant="red"
               />
               <MetricCard
-                title="External Servicing"
+                title={settlement.kind ? <IopLabel source={settlement.kind} /> : 'IOP'}
                 value={`TZS ${settlement.iop.toLocaleString()}`}
-                subValue="FROM REPORT'S IOP COLUMN"
+                subValue="BASE WAKALA SERVED BY OUTSIDE SA"
                 icon={Layers}
                 variant="purple"
               />

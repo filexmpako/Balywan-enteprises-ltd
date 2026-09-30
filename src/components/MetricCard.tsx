@@ -5,7 +5,7 @@ import type { LucideIcon } from 'lucide-react';
 export type MetricCardVariant = 'blue' | 'green' | 'red' | 'amber' | 'purple' | 'indigo' | 'slate';
 
 interface MetricCardProps {
-  title: string;
+  title: React.ReactNode;
   value: React.ReactNode;
   subValue?: React.ReactNode;
   icon: LucideIcon;
