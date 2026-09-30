@@ -2,7 +2,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { ViewType, KPIMetric, TopOwner, RecentReport, AuditReport, Owner, ManualOwnerTarget, PriorityWakala, BaseWakala } from '../types';
 import { dashboardKPIs, topOwners, recentReports } from '../data';
 import { calculateCompanyKPIs, CompanyKPIsResult } from '../utils/mappingEngine';
-import { getCompanyTotalKPI1Target } from '../utils/kpiEngine';
+import { getCompanyTotalKPI1Target, latestWeeklyEntryForPeriod } from '../utils/kpiEngine';
+import { periodsMatch } from '../utils/periodUtils';
+import { fetchMonthlyMonths } from '../lib/monthly.functions';
+import IopLabel from './IopLabel';
 import { computeLiveKpiTotals } from '../utils/liveKpiTotals';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
 import { getSavedManualOwnerTargets } from '../utils/targetResolution';
@@ -156,6 +159,16 @@ function CoverageDonut({
 export default function DashboardView({ onNavigate, onSelectOwner }: DashboardViewProps) {
   const { companyName } = useCompany();
   const { displayPeriod, currentPeriod } = useReportingPeriod();
+  // Settlement Ledger: the Monthly report is final for its month; until one
+  // is uploaded, the latest (month-to-date) weekly report supplies the figures.
+  const [monthlyReportMonths, setMonthlyReportMonths] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetchMonthlyMonths()
+      .then(res => { if (!cancelled) setMonthlyReportMonths(res?.months ?? []); })
+      .catch(() => { if (!cancelled) setMonthlyReportMonths([]); });
+    return () => { cancelled = true; };
+  }, []);
   const [validationWarnings, setValidationWarnings] = useState<any[]>(() => {
     const saved = localStorage.getItem('kpiValidationWarnings');
     if (saved) {
@@ -829,28 +842,39 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
           </div>
 
           {/* Settlement Ledger Row */}
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 px-1">
-              <ShieldCheck className="h-4 w-4 text-brand-primary" />
-              <h3 className="font-sans text-xs font-black uppercase tracking-wider text-brand-primary">Settlement Ledger</h3>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <MetricCard
-                title="Total Penalty"
-                value={`TZS ${(companyKPIs.totalPenalty || 0).toLocaleString()}`}
-                subValue="PENALTY BASIS"
-                icon={AlertTriangle}
-                variant="red"
-              />
-              <MetricCard
-                title="IOP Volume"
-                value={`TZS ${(companyKPIs.totalIopVolume || 0).toLocaleString()}`}
-                subValue="OUTSIDE NETWORK"
-                icon={Layers}
-                variant="purple"
-              />
-            </div>
-          </div>
+          {(() => {
+            const hasMonthly = monthlyReportMonths.some(m => periodsMatch(m, currentPeriod));
+            const week = hasMonthly ? null : latestWeeklyEntryForPeriod(readWeeklyStatsHistory(), currentPeriod);
+            const settlement = hasMonthly
+              ? { penalty: companyKPIs.totalPenalty || 0, iop: companyKPIs.totalIopVolume || 0, source: 'MONTHLY REPORT', kind: 'monthly' as const }
+              : week
+                ? { penalty: week.penalty || 0, iop: week.iopValue || 0, source: `WEEKLY REPORT · ${week.reportingWeek.split(' (')[0].toUpperCase()}`, kind: 'weekly' as const }
+                : { penalty: 0, iop: 0, source: 'NO REPORT YET', kind: null };
+            return (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 px-1">
+                  <ShieldCheck className="h-4 w-4 text-brand-primary" />
+                  <h3 className="font-sans text-xs font-black uppercase tracking-wider text-brand-primary">Settlement Ledger — {settlement.source}</h3>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <MetricCard
+                    title="Total Penalty"
+                    value={`TZS ${settlement.penalty.toLocaleString()}`}
+                    subValue="CP_SERVICING_VAL x RATE"
+                    icon={AlertTriangle}
+                    variant="red"
+                  />
+                  <MetricCard
+                    title={settlement.kind ? <IopLabel source={settlement.kind} /> : 'IOP'}
+                    value={`TZS ${settlement.iop.toLocaleString()}`}
+                    subValue="BASE WAKALA SERVED BY OUTSIDE SA"
+                    icon={Layers}
+                    variant="purple"
+                  />
+                </div>
+              </div>
+            );
+          })()}
         </>
       )}
 
@@ -922,17 +946,16 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                 variant="indigo"
               />
               {(() => {
+                // Weekly reports are month-to-date: the month's latest report is the month's figure.
                 const month = (latest as any).reportingMonth;
-                const monthEntries = month
-                  ? series.filter(e => (e as any).reportingMonth === month)
-                  : series;
-                const penaltyMtd = monthEntries.reduce((s, e) => s + ((e as any).penalty || 0), 0);
-                const iopMtd = monthEntries.reduce((s, e) => s + ((e as any).iopValue || 0), 0);
+                const monthLatest = (month && latestWeeklyEntryForPeriod(series, month)) || latest;
+                const penaltyMtd = (monthLatest as any).penalty || 0;
+                const iopMtd = (monthLatest as any).iopValue || 0;
                 return (
                   <MetricCard
                     title="Penalty (Month to date)"
                     value={formatNumberWithAbbreviation(penaltyMtd)}
-                    subValue={`IOP volume ${formatNumberWithAbbreviation(iopMtd)}`}
+                    subValue={<><IopLabel source="weekly" /> {formatNumberWithAbbreviation(iopMtd)}</>}
                     icon={AlertTriangle}
                     variant="amber"
                   />
@@ -946,7 +969,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                   <tr className="border-b border-brand-gray-border">
                     {['Week', 'Active', 'Inactive', 'Served', 'Unserved', 'Weekly Value', 'IOP Value', 'Penalty', 'Cumulative', 'vs Target'].map(h => (
                       <th key={h} className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">
-                        {h}
+                        {h === 'IOP Value' ? <IopLabel source="weekly" /> : h}
                       </th>
                     ))}
                   </tr>
@@ -1066,11 +1089,10 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
               </p>
             )}
 
-            {/* IOP Remaining: Daily MGT's own IOP-bucket total for this
-                week's dates vs. the weekly report's own IOP column, plus
-                the CP_Servicing_Val penalty basis. IOP is externally-serviced
-                (leaked) volume — it is a danger/loss signal in either
-                direction, never shown as a positive/green outcome. */}
+            {/* Daily MGT IOP (our tills paid a wakala outside our base) and the
+                weekly report's IOP (a base wakala served by an outside SA) are
+                different measures, so they sit side by side and are never
+                subtracted from each other. */}
             {weeklyIopComparison && (weeklyIopComparison.reportedIop !== 0 || weeklyIopComparison.dailyMgtIop !== 0) && (
               <div className="mt-6 pt-6 border-t border-brand-gray-border">
                 <div
@@ -1078,7 +1100,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                   className="flex items-center gap-2 cursor-pointer select-none group mb-4"
                 >
                   <h4 className="font-sans text-sm font-bold text-brand-text group-hover:text-brand-primary transition-colors">
-                    IOP Remaining — {weeklyIopComparison.reportingWeek}
+                    IOP Daily vs Weekly — {weeklyIopComparison.reportingWeek}
                   </h4>
                   <ChevronDown
                     className={`h-4 w-4 text-brand-text-variant transition-transform duration-200 ${isIopRemainingCollapsed ? 'rotate-180' : ''}`}
@@ -1087,18 +1109,18 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
 
                 {!isIopRemainingCollapsed && (
                   <>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <MetricCard
-                        title="Report IOP"
+                        title={<IopLabel source="weekly" />}
                         value={`TZS ${weeklyIopComparison.reportedIop.toLocaleString()}`}
-                        subValue="FROM WEEKLY REPORT"
+                        subValue="BASE WAKALA SERVED BY OUTSIDE SA"
                         icon={Layers}
                         variant="purple"
                       />
                       <MetricCard
-                        title="Daily MGT IOP"
+                        title={<IopLabel source="daily" />}
                         value={`TZS ${weeklyIopComparison.dailyMgtIop.toLocaleString()}`}
-                        subValue="THIS WEEK'S DATES"
+                        subValue="OUR TILLS → WAKALA NOT IN OUR BASE (THIS WEEK'S DATES)"
                         icon={Activity}
                         variant="blue"
                       />
@@ -1109,25 +1131,17 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                         icon={AlertCircle}
                         variant="amber"
                       />
-                      <MetricCard
-                        title="IOP Remaining"
-                        value={`${weeklyIopComparison.iopRemaining >= 0 ? '+' : ''}TZS ${weeklyIopComparison.iopRemaining.toLocaleString()}`}
-                        subValue={weeklyIopComparison.iopRemaining >= 0 ? 'MGT > REPORT — LOSS' : 'REPORT > MGT — LOSS'}
-                        icon={AlertTriangle}
-                        variant="red"
-                      />
                     </div>
 
                     {weeklyIopComparison.byOwner.length > 0 && (
                       <div className="mt-4 overflow-x-auto">
-                        <table className="w-full min-w-[620px] text-left">
+                        <table className="w-full min-w-[520px] text-left">
                           <thead>
                             <tr className="border-b border-brand-gray-border">
-                              {['Owner', 'Report IOP', 'Daily MGT IOP', 'CP Servicing Value', 'Remaining'].map(h => (
-                                <th key={h} className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">
-                                  {h}
-                                </th>
-                              ))}
+                              <th className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Owner</th>
+                              <th className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant"><IopLabel source="weekly" /></th>
+                              <th className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant"><IopLabel source="daily" /></th>
+                              <th className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">CP Servicing Value</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1137,9 +1151,6 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                                 <td className="py-2.5 font-sans text-xs text-brand-text">TZS {o.reportedIop.toLocaleString()}</td>
                                 <td className="py-2.5 font-sans text-xs text-brand-text">TZS {o.dailyMgtIop.toLocaleString()}</td>
                                 <td className="py-2.5 font-sans text-xs text-brand-text">TZS {o.cpValue.toLocaleString()}</td>
-                                <td className="py-2.5 font-sans text-xs font-bold text-rose-700">
-                                  {o.iopRemaining >= 0 ? '+' : ''}TZS {o.iopRemaining.toLocaleString()}
-                                </td>
                               </tr>
                             ))}
                           </tbody>

@@ -11,6 +11,7 @@ import { calculateKPI2, KPI2Result } from '../utils/kpi2Engine';
 import { getDailyServicingRows } from '../utils/indexedDB';
 import { loadAllWeeklyRows } from '../utils/weeklyStore';
 import { readWeeklyStatsHistory } from '../utils/weeklyHistory';
+import IopLabel from './IopLabel';
 import { getServicedStatusFromColumn, mergeServicedStatus } from '../utils/servicingStatus';
 import { getActivityRules, isActiveByRule, isServedByRule, extractTxnCounts, type TxnCounts } from '../utils/activityRules';
 import { normalizeMsisdn } from '../utils/msisdn';
@@ -349,7 +350,7 @@ export default function TargetsView() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <span className="block font-sans text-[10px] font-bold text-brand-text-variant uppercase tracking-wider">
-                MTD SERVICED VOLUME (BASE + IOP)
+                MTD SERVICED VOLUME (BASE + <IopLabel source="daily" />)
               </span>
               <div className="mt-1 flex items-baseline gap-2">
                 <span className="font-sans text-2xl sm:text-3xl font-black text-brand-primary font-mono">
@@ -753,7 +754,7 @@ export default function TargetsView() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 mb-1">IOP Target</label>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1"><IopLabel source="daily" /> Target</label>
                   <input
                     value={kpi1IopInput}
                     onChange={e => setKpi1IopInput(e.target.value)}

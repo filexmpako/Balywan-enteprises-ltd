@@ -24,6 +24,7 @@ import PageHeaderBanner from './PageHeaderBanner';
 import { useCompany } from './CompanyContext';
 import { useReportingPeriod } from './ReportingPeriodContext';
 import { getClassificationAuditLogs, clearClassificationAuditLogs, saveClassificationAuditRecords } from '../utils/indexedDB';
+import IopLabel from './IopLabel';
 
 const PAGE_SIZE = 25;
 
@@ -274,7 +275,7 @@ export default function ClassificationAuditLogView() {
         {/* IOP */}
         <div className="bg-purple-50/70 p-3.5 rounded-2xl border border-purple-200 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between text-purple-800">
-            <span className="text-xs font-bold uppercase tracking-wider">IOP (Unmatched)</span>
+            <span className="text-xs font-bold uppercase tracking-wider"><IopLabel source="daily" /> (Not In Base)</span>
             <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-200 text-purple-900">
               Fallback
             </span>
@@ -340,7 +341,7 @@ export default function ClassificationAuditLogView() {
             <option value="ALL">All Classification Buckets</option>
             <option value="SA_INTERNAL">SA_INTERNAL</option>
             <option value="BASE">BASE</option>
-            <option value="IOP">IOP</option>
+            <option value="IOP">IOP · Daily</option>
           </select>
 
           {/* Matched Entity Type Filter */}
@@ -431,7 +432,7 @@ export default function ClassificationAuditLogView() {
                         )}
                         {(!log.matchedEntityType || log.matchedEntityType === 'NONE') && (
                           <span className="inline-flex items-center gap-1 font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-[10px]">
-                            None (IOP)
+                            None (IOP · Daily)
                           </span>
                         )}
                       </td>

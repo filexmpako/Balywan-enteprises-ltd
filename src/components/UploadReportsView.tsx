@@ -60,6 +60,7 @@ import { ingestClassified } from '../lib/ingest';
 import { invalidateClassificationCache } from '../utils/classificationCache';
 import { saveMonthlyServicingData, clearMonthlyServicingData, getServicingRows, getServicingColumns, saveWeeklyServicingData, clearWeeklyServicingData, getWeeklyServicingRows, getWeeklyServicingColumns, saveDailyServicingData, getDailyServicingRows, clearDailyServicingData } from '../utils/indexedDB';
 import { persistWeeklyServicing, listStoredWeeks } from '../utils/weeklyStore';
+import IopLabel from './IopLabel';
 import { persistMonthlyServicing } from '../utils/monthlyStore';
 import { useReportingMetadata } from '../hooks/useReportingMetadata';
 
@@ -3654,7 +3655,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
                     <div className="bg-white dark:bg-slate-800 border border-sky-200 dark:border-sky-900/40 rounded-xl p-3.5 space-y-1.5 shadow-xs">
                       <div className="flex justify-between items-center">
                         <span className="text-[10px] font-extrabold uppercase tracking-wider text-sky-700 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/40 px-2 py-0.5 rounded-md border border-sky-100 dark:border-sky-900/50">
-                          IOP (Independent)
+                          <IopLabel source="daily" /> (Not In Base)
                         </span>
                         <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-300">{(summary.IOP?.count || 0).toLocaleString()} rows</span>
                       </div>
