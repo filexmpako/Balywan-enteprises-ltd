@@ -237,6 +237,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "classification_audit_records_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "owners"
+            referencedColumns: ["owner_id"]
+          },
+          {
             foreignKeyName: "classification_audit_records_upload_id_fkey"
             columns: ["upload_id"]
             isOneToOne: false
@@ -386,6 +393,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "daily_transaction_records_attributed_owner_id_fkey"
+            columns: ["attributed_owner_id"]
+            isOneToOne: false
+            referencedRelation: "owners"
+            referencedColumns: ["owner_id"]
+          },
+          {
             foreignKeyName: "daily_transaction_records_owner_id_fkey"
             columns: ["owner_id"]
             isOneToOne: false
@@ -508,6 +522,13 @@ export type Database = {
           status?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "float_requests_loan_id_fkey"
+            columns: ["loan_id"]
+            isOneToOne: false
+            referencedRelation: "loan_records"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "float_requests_owner_id_fkey"
             columns: ["owner_id"]
