@@ -42,11 +42,19 @@ export async function loadCollection(supabase: DB, mapper: CollectionMapper): Pr
   return rows.map((row: any) => fromRow(mapper, row));
 }
 
-export async function loadWorkspace(supabase: DB): Promise<Workspace> {
+/**
+ * Company-wide reference lists. Every signed-in user needs the whole list to
+ * resolve tills and wakala to owners, so these may be read with a separate
+ * (read-only, server-side) client instead of the owner-scoped one.
+ */
+export const REFERENCE_KEYS = new Set(['saTillRegistry', 'tillsList', 'baseWakalaIndex']);
+
+export async function loadWorkspace(supabase: DB, referenceClient?: DB): Promise<Workspace> {
   const collections: Record<string, any[]> = {};
   await Promise.all(
     COLLECTIONS.map(async (mapper) => {
-      collections[mapper.key] = await loadCollection(supabase, mapper);
+      const client = referenceClient && REFERENCE_KEYS.has(mapper.key) ? referenceClient : supabase;
+      collections[mapper.key] = await loadCollection(client, mapper);
     }),
   );
 
@@ -66,6 +74,38 @@ export function workspaceToSnapshot(ws: Workspace): KvSnapshot {
   for (const [key, value] of Object.entries(ws.collections)) snapshot[key] = JSON.stringify(value);
   for (const [key, value] of Object.entries(ws.documents)) snapshot[key] = JSON.stringify(value);
   return snapshot;
+}
+
+/**
+ * Fills a missing owner_id from the row's owner name (exact name or alias,
+ * case-insensitive). Rows are owner-scoped by owner_id in RLS, so a row with
+ * only a name is invisible to that owner. Unknown names stay unassigned.
+ */
+async function fillOwnerIdsFromNames(supabase: DB, rows: Record<string, any>[]): Promise<void> {
+  const nameOf = (row: Record<string, any>) =>
+    row.owner_name ?? (row.extras && typeof row.extras === 'object' ? row.extras.assignedOwner : undefined);
+  const needsFill = rows.some((row) => {
+    const blankId = row.owner_id === null || row.owner_id === undefined || String(row.owner_id).trim() === '';
+    return blankId && String(nameOf(row) ?? '').trim() !== '';
+  });
+  if (!needsFill) return;
+
+  const owners = await selectAll(supabase, 'owners', 'owner_id, name, name_aliases');
+  const idByName = new Map<string, string>();
+  const norm = (v: unknown) => String(v ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+  for (const owner of owners) {
+    const names = [owner.name, ...(Array.isArray(owner.name_aliases) ? owner.name_aliases : [])];
+    for (const name of names) {
+      const key = norm(name);
+      if (key && !idByName.has(key)) idByName.set(key, String(owner.owner_id));
+    }
+  }
+
+  for (const row of rows) {
+    if (row.owner_id !== null && row.owner_id !== undefined && String(row.owner_id).trim() !== '') continue;
+    const ownerId = idByName.get(norm(nameOf(row)));
+    if (ownerId) row.owner_id = ownerId;
+  }
 }
 
 async function clearUnresolvedBaseWakalaOwners(
@@ -113,6 +153,7 @@ export async function saveCollection(supabase: DB, key: string, items: any[]): P
   // those rows unassigned instead of violating the FK; owner_name and the
   // source ID remain available for the later reconciliation pass.
   if (key === 'baseWakalaIndex') await clearUnresolvedBaseWakalaOwners(supabase, rows);
+  if (REFERENCE_KEYS.has(key)) await fillOwnerIdsFromNames(supabase, rows);
 
   for (const batch of chunk(rows, 500)) {
     const { error } = await supabase.from(mapper.table).upsert(batch, { onConflict: mapper.pk });
