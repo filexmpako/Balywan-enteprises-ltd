@@ -41,12 +41,14 @@ import {
   AlertCircle,
   Info,
   Layers,
-  Smartphone
+  Smartphone,
+  ArrowRight
 } from 'lucide-react';
 import MetricCard from './MetricCard';
 import IopLabel, { type IopSource } from './IopLabel';
 import { motion, AnimatePresence } from 'motion/react';
 import FloatManagementPanel from './FloatManagementPanel';
+import { getFloatRequestsForOwner } from '../utils/floatManagement';
 import { getDailyServicingRows } from '../utils/indexedDB';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
 import { calculateOwnerMtdVolume, latestWeeklyEntryForPeriod } from '../utils/kpiEngine';
@@ -498,6 +500,22 @@ export default function OwnerDetailsView({
       .map((t: any) => ({ till: String(t.transactionTill).trim(), name: String(t.tillName || '').trim() }));
   }, [tillsList, localOwner]);
 
+  const [floatTick, setFloatTick] = useState(0);
+  useEffect(() => {
+    const bump = () => setFloatTick(t => t + 1);
+    window.addEventListener('float-requests-updated', bump);
+    window.addEventListener('storage', bump);
+    return () => {
+      window.removeEventListener('float-requests-updated', bump);
+      window.removeEventListener('storage', bump);
+    };
+  }, []);
+  const pendingFloatCount = useMemo(
+    () => (localOwner?.id ? getFloatRequestsForOwner(localOwner.id).filter(r => r.status === 'Pending').length : 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [localOwner?.id, floatTick]
+  );
+
   // Derive metrics
   const { 
     totalVolumeServed, 
@@ -797,110 +815,159 @@ export default function OwnerDetailsView({
         </div>
       )}
 
-      {/* Profile Header Block (Image 8 layout) */}
+      {/* Profile Header Card: banner, overlapping photo, identity + actions, and section shortcuts */}
       <motion.div 
         initial={{ y: 15, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="rounded-2xl border border-brand-gray-border bg-brand-card p-6 shadow-ambient"
+        className="rounded-2xl border border-brand-gray-border bg-brand-card shadow-ambient overflow-hidden"
       >
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
-            <OwnerAvatar 
-              ownerName={localOwner.name} 
-              avatarPhotoId={localOwner.avatarPhotoId} 
-              className="h-20 w-20 rounded-2xl object-cover ring-4 ring-brand-primary/10 shrink-0 shadow-sm" 
-            />
-            <div className="text-center sm:text-left font-sans">
-              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
-                <h2 className="text-xl sm:text-2xl font-black text-brand-text tracking-tight">{localOwner.name}</h2>
-                <span className="rounded-full bg-amber-100 border border-brand-accent px-3 py-0.5 text-[10px] font-extrabold text-brand-secondary uppercase tracking-wider">
-                  {localOwner.title || 'Premium Partner'}
+        <div className="relative h-28 sm:h-32 bg-gradient-to-r from-brand-primary via-blue-600 to-sky-400 overflow-hidden">
+          <div className="absolute -right-10 -top-16 h-48 w-48 rounded-full bg-amber-300/40 blur-3xl" />
+          <div className="absolute left-1/3 -bottom-20 h-40 w-72 rounded-full bg-white/15 blur-3xl" />
+          <button
+            onClick={handleOpenEdit}
+            title="Edit profile"
+            className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-brand-primary shadow-sm hover:bg-white transition-colors cursor-pointer"
+          >
+            <Edit className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="px-5 sm:px-6 pb-6">
+          <div className="flex flex-col md:flex-row md:justify-between gap-6">
+            <div className="font-sans text-center sm:text-left">
+              <OwnerAvatar 
+                ownerName={localOwner.name} 
+                avatarPhotoId={localOwner.avatarPhotoId} 
+                className="relative z-10 -mt-12 sm:-mt-14 mx-auto sm:mx-0 h-24 w-24 sm:h-28 sm:w-28 rounded-full object-cover ring-4 ring-white bg-white shadow-md"
+              />
+              <h2 className="mt-3 text-2xl sm:text-3xl font-black text-brand-text tracking-tight">{localOwner.name}</h2>
+              <p className="mt-1 text-sm font-medium text-slate-500">{localOwner.title || 'Premium Partner'}</p>
+              <p className="mt-1 flex items-center justify-center sm:justify-start gap-1.5 text-sm text-slate-500">
+                <MapPin className="h-4 w-4 text-brand-primary/60 shrink-0" />
+                {localOwner.workLocation?.address || localOwner.region}
+              </p>
+              <p className="mt-1 flex items-center justify-center sm:justify-start gap-1.5 text-xs text-slate-400">
+                <Calendar className="h-3.5 w-3.5 shrink-0" />
+                Member since {localOwner.memberSince}
+              </p>
+
+              <div className="mt-4 flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
+                <button 
+                  onClick={handleOpenEdit}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-slate-900 px-5 py-2.5 font-sans text-xs font-bold text-white hover:bg-slate-700 transition-all cursor-pointer"
+                >
+                  Edit Profile
+                </button>
+                {!isStandaloneAgent && (
+                  <button 
+                    onClick={() => onNavigate(ViewType.KPI_REPORTS)}
+                    className="inline-flex items-center gap-1.5 rounded-full border-2 border-slate-300 bg-white px-5 py-2 font-sans text-xs font-bold text-slate-800 hover:border-slate-400 transition-all cursor-pointer"
+                  >
+                    View Network
+                  </button>
+                )}
+                {isAdmin && !isStandaloneAgent && (
+                  <button 
+                    onClick={() => setShowDeleteModal(true)}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-white px-4 py-2 font-sans text-xs font-bold text-rose-700 hover:bg-rose-600 hover:text-white transition-all cursor-pointer"
+                    title="Permanently delete this owner record"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete Owner
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="font-sans flex flex-col items-center sm:items-start md:items-end gap-5 md:pt-5">
+              <div className="flex flex-col items-center sm:items-start md:items-end gap-2">
+                <span className="flex items-center gap-1.5 text-sm font-medium text-slate-500">
+                  Master Agent ID <Briefcase className="h-4 w-4" />
+                </span>
+                <span className="rounded-full bg-slate-100 px-3.5 py-1.5 font-mono text-xs font-bold text-brand-text">
+                  {localOwner.masterAgentId}
                 </span>
               </div>
-              
-              <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-y-1.5 gap-x-4 text-xs font-medium text-brand-text-variant">
-                <div className="flex items-center justify-center sm:justify-start gap-1.5">
-                  <Briefcase className="h-4 w-4 text-brand-primary/60 shrink-0" />
-                  <span>Master Agent ID: <strong className="font-mono text-brand-text">{localOwner.masterAgentId}</strong></span>
-                </div>
-                <div className="flex items-center justify-center sm:justify-start gap-1.5">
-                  <MapPin className="h-4 w-4 text-brand-primary/60 shrink-0" />
-                  {localOwner.workLocation?.address ? (
-                    <span>Location: <strong className="text-brand-text">{localOwner.workLocation.address}</strong></span>
+              <div className="flex flex-col items-center sm:items-start md:items-end gap-2">
+                <span className="flex items-center gap-1.5 text-sm font-medium text-slate-500">
+                  {ownerTills.length > 1 ? 'Tills' : 'Till'} <Smartphone className="h-4 w-4" />
+                </span>
+                <div className="flex flex-wrap justify-center sm:justify-start md:justify-end gap-2">
+                  {ownerTills.length === 0 ? (
+                    <span className="rounded-full bg-slate-100 px-3.5 py-1.5 text-xs italic text-slate-400">No till assigned</span>
                   ) : (
-                    <span>Region: <strong className="text-brand-text">{localOwner.region}</strong></span>
+                    ownerTills.map(t => (
+                      <span key={t.till} className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-100 px-3.5 py-1.5">
+                        <strong className="font-mono text-xs text-brand-text">{t.till}</strong>
+                        {t.name && <span className="text-[10px] text-slate-500">{t.name}</span>}
+                      </span>
+                    ))
                   )}
                 </div>
-                <div className="flex items-center justify-center sm:justify-start gap-1.5">
-                  <Calendar className="h-4 w-4 text-brand-primary/60 shrink-0" />
-                  <span>Member Since: <strong className="text-brand-text">{localOwner.memberSince}</strong></span>
-                </div>
-              </div>
-
-              <div className="mt-2 flex flex-wrap items-center justify-center sm:justify-start gap-1.5 text-xs font-medium text-brand-text-variant">
-                <Smartphone className="h-4 w-4 text-brand-primary/60 shrink-0" />
-                <span>{ownerTills.length > 1 ? 'Tills:' : 'Till:'}</span>
-                {ownerTills.length === 0 ? (
-                  <span className="italic text-slate-400">No till assigned</span>
-                ) : (
-                  ownerTills.map(t => (
-                    <span key={t.till} className="inline-flex items-center gap-1.5 rounded-lg border border-brand-primary/20 bg-brand-primary/5 px-2 py-0.5">
-                      <strong className="font-mono text-brand-text">{t.till}</strong>
-                      {t.name && <span className="text-[10px] text-slate-500">{t.name}</span>}
-                    </span>
-                  ))
-                )}
               </div>
             </div>
           </div>
 
-          <div className="flex gap-2.5 w-full md:w-auto self-stretch md:self-auto flex-wrap md:flex-nowrap">
-            <button 
-              onClick={handleOpenEdit}
-              className="flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 rounded-xl border border-brand-gray-border bg-white px-4 py-2.5 font-sans text-xs font-bold text-brand-primary hover:bg-brand-gray-hover transition-all cursor-pointer"
-            >
-              <Edit className="h-4 w-4" />
-              Edit Profile
-            </button>
-            {!isStandaloneAgent && (
-              <button 
-                onClick={() => onNavigate(ViewType.KPI_REPORTS)}
-                className="flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 rounded-xl bg-brand-primary px-4 py-2.5 font-sans text-xs font-bold text-white shadow-ambient hover:bg-brand-primary-light transition-all cursor-pointer"
+          <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {[
+              {
+                tab: 'wakalas' as const,
+                title: 'Wakala Management',
+                desc: `${priorityWakalaCount + normalWakalaCount} wakala · ${priorityWakalaCount} priority`,
+              },
+              {
+                tab: 'location' as const,
+                title: 'Work Location',
+                desc: localOwner.workLocation && typeof localOwner.workLocation.lat === 'number'
+                  ? 'Location captured on the map'
+                  : 'Not set yet — capture it on the map',
+              },
+              {
+                tab: 'float' as const,
+                title: 'Float',
+                desc: pendingFloatCount > 0
+                  ? `${pendingFloatCount} pending request${pendingFloatCount === 1 ? '' : 's'}`
+                  : 'No pending requests',
+              },
+            ].map(tile => (
+              <button
+                key={tile.tab}
+                onClick={() => setActiveTab(tile.tab)}
+                className={`flex items-center justify-between gap-3 rounded-xl p-4 text-left font-sans transition-colors cursor-pointer ${
+                  activeTab === tile.tab ? 'bg-blue-100/70 ring-1 ring-brand-primary/30' : 'bg-slate-50 hover:bg-blue-50'
+                }`}
               >
-                View Network
+                <span>
+                  <span className="block text-sm font-bold text-brand-text">{tile.title}</span>
+                  <span className="mt-0.5 block text-xs text-slate-500">{tile.desc}</span>
+                </span>
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-brand-primary text-brand-primary">
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </span>
               </button>
-            )}
-            {isAdmin && !isStandaloneAgent && (
-              <button 
-                onClick={() => setShowDeleteModal(true)}
-                className="flex-1 md:flex-none inline-flex items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 font-sans text-xs font-bold text-rose-700 hover:bg-rose-600 hover:text-white transition-all cursor-pointer shadow-xs"
-                title="Permanently delete this owner record"
-              >
-                <Trash2 className="h-4 w-4" />
-                Delete Owner
-              </button>
-            )}
+            ))}
           </div>
-        </div>
 
-        {editSaveStatus && (
-          <motion.div 
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            className={`mt-4 p-3 rounded-xl border font-sans text-xs font-semibold flex items-center gap-2 ${
-              editSaveStatus.type === 'success' 
-                ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
-                : 'bg-rose-50 text-rose-800 border-rose-200'
-            }`}
-          >
-            {editSaveStatus.type === 'success' ? (
-              <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600 shrink-0" />
-            ) : (
-              <AlertTriangle className="h-4.5 w-4.5 text-rose-600 shrink-0" />
-            )}
-            {editSaveStatus.message}
-          </motion.div>
-        )}
+          {editSaveStatus && (
+            <motion.div 
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              className={`mt-4 p-3 rounded-xl border font-sans text-xs font-semibold flex items-center gap-2 ${
+                editSaveStatus.type === 'success' 
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+                  : 'bg-rose-50 text-rose-800 border-rose-200'
+              }`}
+            >
+              {editSaveStatus.type === 'success' ? (
+                <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600 shrink-0" />
+              ) : (
+                <AlertTriangle className="h-4.5 w-4.5 text-rose-600 shrink-0" />
+              )}
+              {editSaveStatus.message}
+            </motion.div>
+          )}
+        </div>
       </motion.div>
 
       {/* Tab Selector - Always show tabs */}
