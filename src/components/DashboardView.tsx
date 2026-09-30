@@ -41,7 +41,8 @@ import {
   Target,
   UserCheck,
   UserX,
-  ChevronDown
+  ChevronDown,
+  Loader2
 } from 'lucide-react';
 import MetricCard from './MetricCard';
 import WakalaStatusDetailModal from './WakalaStatusDetailModal';
@@ -417,6 +418,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
   };
 
   const [companyKPIs, setCompanyKPIs] = useState<CompanyKPIsResult>(defaultCompanyKPIs);
+  const [dashboardLoadState, setDashboardLoadState] = useState<'loading' | 'empty' | 'ready' | 'error'>('loading');
   const [topOwnersList, setTopOwnersList] = useState<TopOwner[]>([]);
   const [monthlyGoal, setMonthlyGoal] = useState<{ total: number; hasAny: boolean }>({ total: 0, hasAny: false });
 
@@ -462,8 +464,17 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
       }
 
       if (isMounted) {
-        const kpis = await calculateCompanyKPIs(rows);
+        let kpis: CompanyKPIsResult;
+        try {
+          kpis = await calculateCompanyKPIs(rows);
+        } catch (e) {
+          console.error('Failed to compute company KPIs in DashboardView:', e);
+          if (isMounted) setDashboardLoadState('error');
+          return;
+        }
         if (isMounted) {
+          // calculateCompanyKPIs reports "—" as its month only when there is no Daily MGT data.
+          setDashboardLoadState(kpis.reportingMonth === '—' ? 'empty' : 'ready');
           setCompanyKPIs({ ...kpis, reportingMonth: displayPeriod });
           setTopOwnersList(computeTopOwnersList(rows));
 
@@ -744,7 +755,29 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
       />
 
       {/* Today and Month to Date Rows */}
-      {companyKPIs.reportingMonth === '—' ? (
+      {dashboardLoadState === 'loading' ? (
+        <div className="bg-brand-card border border-brand-gray-border rounded-2xl p-8 shadow-ambient flex flex-col items-center justify-center text-center gap-3 py-12">
+          <Loader2 className="h-8 w-8 text-brand-primary animate-spin" />
+          <h4 className="font-sans text-base font-black text-slate-800">Loading dashboard figures…</h4>
+          <p className="font-sans text-xs text-brand-text-variant font-medium max-w-md">
+            Reading this month's Daily MGT transactions. This can take up to a minute on a slow connection.
+          </p>
+        </div>
+      ) : dashboardLoadState === 'error' ? (
+        <div className="bg-brand-card border border-rose-200 rounded-2xl p-8 shadow-ambient flex flex-col items-center justify-center text-center gap-3 py-12">
+          <AlertTriangle className="h-8 w-8 text-rose-600" />
+          <h4 className="font-sans text-base font-black text-slate-800">Could not load dashboard figures</h4>
+          <p className="font-sans text-xs text-brand-text-variant font-medium max-w-md">
+            Your data is safe. Check the connection and try again.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-2 inline-flex items-center gap-2 bg-brand-primary text-white text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer hover:bg-opacity-90 transition-all shadow-sm"
+          >
+            Retry
+          </button>
+        </div>
+      ) : dashboardLoadState === 'empty' ? (
         <div className="bg-brand-card border border-brand-gray-border rounded-2xl p-8 shadow-ambient flex flex-col items-center justify-center text-center gap-4 py-12">
           <div className="h-14 w-14 rounded-2xl bg-brand-primary/10 text-brand-primary flex items-center justify-center">
             <UploadCloud className="h-7 w-7" />
