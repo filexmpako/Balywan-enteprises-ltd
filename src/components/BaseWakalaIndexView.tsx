@@ -313,7 +313,7 @@ export default function BaseWakalaIndexView() {
       };
 
       jsonRows.forEach((row, idx) => {
-        const rawCode = pick(row, ['Wakala Code', 'WakalaCode', 'CODE', 'Terminal Code', 'TerminalCode', 'Agent Code']);
+        const rawCode = pick(row, ['Wakala Code', 'WakalaCode', 'CODE', 'Terminal Code', 'TerminalCode', 'Agent Code', 'Alias_Code']);
 
         const rawName = pick(row, ['Wakala Name', 'WakalaName', 'Full_Name', 'Full Name', 'NAME', 'Agent Name']);
 
@@ -329,7 +329,7 @@ export default function BaseWakalaIndexView() {
 
         const rawRegion = pick(row, ['Region']);
 
-        const rawAltMsisdn = pick(row, ['Alt MSISDN', 'AltMSISDN', 'Alternate Number', 'ALTERN NO', 'Alt Phone']);
+        const rawAltMsisdn = pick(row, ['Alt MSISDN', 'AltMSISDN', 'Alternate Number', 'ALTERN NO', 'Alt Phone', 'ALTER no', 'Alternative Number']);
 
 
         const normalizedMsisdn = normalizeMsisdn(rawMsisdn);

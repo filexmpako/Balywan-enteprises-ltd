@@ -41,7 +41,7 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
   const [saTillLastUpdated, setSaTillLastUpdated] = useState<string | null>(null);
   const [baseWakalaLastUpdated, setBaseWakalaLastUpdated] = useState<string | null>(null);
 
-  const { displayPeriod } = useReportingPeriod();
+  const { displayPeriod, currentPeriod } = useReportingPeriod();
 
   useEffect(() => {
     const lastUpd = localStorage.getItem('saTillRegistry_lastUpdated');
@@ -130,14 +130,14 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
         const manualTargets: ManualOwnerTarget[] = getSavedManualOwnerTargets();
 
         const classified = getClassifiedRowsCached(rows || [], saTillRegistry, baseWakalaIndex, tillsList, owners);
-        const totals = computeLiveKpiTotals(classified, owners, displayPeriod, manualTargets, priorityWakalas, baseWakalaIndex, readWeeklyStatsHistory());
+        const totals = computeLiveKpiTotals(classified, owners, currentPeriod, manualTargets, priorityWakalas, baseWakalaIndex, readWeeklyStatsHistory());
         if (isMounted) setLiveTotals(totals);
       } catch (e) {
         console.error('Failed to compute live KPI1/KPI2 totals in KPIReportsView:', e);
       }
     })();
     return () => { isMounted = false; };
-  }, [displayPeriod]);
+  }, [currentPeriod]);
 
   const [weeklyHistory, setWeeklyHistory] = useState<any[]>(() => {
     const saved = localStorage.getItem('weeklyKpiHistory');

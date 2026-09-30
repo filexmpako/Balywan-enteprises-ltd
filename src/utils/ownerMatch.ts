@@ -16,7 +16,7 @@ export function normalizeOwnerName(raw: string | null | undefined): string | nul
   const trimmed = raw.trim();
   if (!trimmed) return null;
   const upper = trimmed.toUpperCase();
-  if (upper === '#N/A' || upper === 'N/A' || upper === 'NONE' || upper === 'NULL') return null;
+  if (upper === '#N/A' || upper === 'N/A' || upper === 'NONE' || upper === 'NULL' || upper === '0' || upper === 'NAN' || upper === '-') return null;
   return trimmed;
 }
 
