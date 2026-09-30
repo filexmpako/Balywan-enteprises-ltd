@@ -291,39 +291,6 @@ export type Database = {
         }
         Relationships: []
       }
-      daily_kpi_snapshots: {
-        Row: {
-          active_wakalas: number
-          attainment_rate: number
-          created_at: string
-          product_sellers: number
-          reporting_date: string
-          snapshot_id: number
-          total_transactions: number
-          total_volume: number
-        }
-        Insert: {
-          active_wakalas?: number
-          attainment_rate?: number
-          created_at?: string
-          product_sellers?: number
-          reporting_date: string
-          snapshot_id?: never
-          total_transactions?: number
-          total_volume?: number
-        }
-        Update: {
-          active_wakalas?: number
-          attainment_rate?: number
-          created_at?: string
-          product_sellers?: number
-          reporting_date?: string
-          snapshot_id?: never
-          total_transactions?: number
-          total_volume?: number
-        }
-        Relationships: []
-      }
       daily_transaction_records: {
         Row: {
           amount: number
@@ -408,6 +375,170 @@ export type Database = {
           },
           {
             foreignKeyName: "daily_transaction_records_upload_id_fkey"
+            columns: ["upload_id"]
+            isOneToOne: false
+            referencedRelation: "file_upload_archives"
+            referencedColumns: ["upload_id"]
+          },
+        ]
+      }
+      deprecated_daily_kpi_snapshots: {
+        Row: {
+          active_wakalas: number
+          attainment_rate: number
+          created_at: string
+          product_sellers: number
+          reporting_date: string
+          snapshot_id: number
+          total_transactions: number
+          total_volume: number
+        }
+        Insert: {
+          active_wakalas?: number
+          attainment_rate?: number
+          created_at?: string
+          product_sellers?: number
+          reporting_date: string
+          snapshot_id?: never
+          total_transactions?: number
+          total_volume?: number
+        }
+        Update: {
+          active_wakalas?: number
+          attainment_rate?: number
+          created_at?: string
+          product_sellers?: number
+          reporting_date?: string
+          snapshot_id?: never
+          total_transactions?: number
+          total_volume?: number
+        }
+        Relationships: []
+      }
+      deprecated_float_return_entries: {
+        Row: {
+          amount: number
+          channel: string
+          channel_other: string | null
+          created_at: string
+          extras: Json
+          float_request_id: string
+          id: string
+          receipt_photo_id: string | null
+        }
+        Insert: {
+          amount: number
+          channel: string
+          channel_other?: string | null
+          created_at?: string
+          extras?: Json
+          float_request_id: string
+          id: string
+          receipt_photo_id?: string | null
+        }
+        Update: {
+          amount?: number
+          channel?: string
+          channel_other?: string | null
+          created_at?: string
+          extras?: Json
+          float_request_id?: string
+          id?: string
+          receipt_photo_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "float_return_entries_float_request_id_fkey"
+            columns: ["float_request_id"]
+            isOneToOne: false
+            referencedRelation: "float_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deprecated_notifications: {
+        Row: {
+          alert_type: string
+          created_at: string
+          is_read: boolean
+          message: string
+          notification_id: number
+          recipient_user_id: string
+          title: string
+        }
+        Insert: {
+          alert_type: string
+          created_at?: string
+          is_read?: boolean
+          message?: string
+          notification_id?: never
+          recipient_user_id: string
+          title: string
+        }
+        Update: {
+          alert_type?: string
+          created_at?: string
+          is_read?: boolean
+          message?: string
+          notification_id?: never
+          recipient_user_id?: string
+          title?: string
+        }
+        Relationships: []
+      }
+      deprecated_owner_reconciliation_records: {
+        Row: {
+          classification: string
+          detected_changes: Json | null
+          is_reviewed: boolean
+          mapped_owner_id: string | null
+          parsed_owner_code: string
+          parsed_owner_name: string
+          parsed_phone: string | null
+          reco_record_id: number
+          resolution_action: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          upload_id: string
+        }
+        Insert: {
+          classification?: string
+          detected_changes?: Json | null
+          is_reviewed?: boolean
+          mapped_owner_id?: string | null
+          parsed_owner_code: string
+          parsed_owner_name: string
+          parsed_phone?: string | null
+          reco_record_id?: never
+          resolution_action?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          upload_id: string
+        }
+        Update: {
+          classification?: string
+          detected_changes?: Json | null
+          is_reviewed?: boolean
+          mapped_owner_id?: string | null
+          parsed_owner_code?: string
+          parsed_owner_name?: string
+          parsed_phone?: string | null
+          reco_record_id?: never
+          resolution_action?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          upload_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "owner_reconciliation_records_mapped_owner_id_fkey"
+            columns: ["mapped_owner_id"]
+            isOneToOne: false
+            referencedRelation: "owners"
+            referencedColumns: ["owner_id"]
+          },
+          {
+            foreignKeyName: "owner_reconciliation_records_upload_id_fkey"
             columns: ["upload_id"]
             isOneToOne: false
             referencedRelation: "file_upload_archives"
@@ -535,47 +666,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "owners"
             referencedColumns: ["owner_id"]
-          },
-        ]
-      }
-      float_return_entries: {
-        Row: {
-          amount: number
-          channel: string
-          channel_other: string | null
-          created_at: string
-          extras: Json
-          float_request_id: string
-          id: string
-          receipt_photo_id: string | null
-        }
-        Insert: {
-          amount: number
-          channel: string
-          channel_other?: string | null
-          created_at?: string
-          extras?: Json
-          float_request_id: string
-          id: string
-          receipt_photo_id?: string | null
-        }
-        Update: {
-          amount?: number
-          channel?: string
-          channel_other?: string | null
-          created_at?: string
-          extras?: Json
-          float_request_id?: string
-          id?: string
-          receipt_photo_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "float_return_entries_float_request_id_fkey"
-            columns: ["float_request_id"]
-            isOneToOne: false
-            referencedRelation: "float_requests"
-            referencedColumns: ["id"]
           },
         ]
       }
@@ -825,36 +915,6 @@ export type Database = {
           },
         ]
       }
-      notifications: {
-        Row: {
-          alert_type: string
-          created_at: string
-          is_read: boolean
-          message: string
-          notification_id: number
-          recipient_user_id: string
-          title: string
-        }
-        Insert: {
-          alert_type: string
-          created_at?: string
-          is_read?: boolean
-          message?: string
-          notification_id?: never
-          recipient_user_id: string
-          title: string
-        }
-        Update: {
-          alert_type?: string
-          created_at?: string
-          is_read?: boolean
-          message?: string
-          notification_id?: never
-          recipient_user_id?: string
-          title?: string
-        }
-        Relationships: []
-      }
       owner_performance_snapshots: {
         Row: {
           active_wakalas: number
@@ -917,71 +977,14 @@ export type Database = {
           },
         ]
       }
-      owner_reconciliation_records: {
-        Row: {
-          classification: string
-          detected_changes: Json | null
-          is_reviewed: boolean
-          mapped_owner_id: string | null
-          parsed_owner_code: string
-          parsed_owner_name: string
-          parsed_phone: string | null
-          reco_record_id: number
-          resolution_action: string
-          reviewed_at: string | null
-          reviewed_by: string | null
-          upload_id: string
-        }
-        Insert: {
-          classification?: string
-          detected_changes?: Json | null
-          is_reviewed?: boolean
-          mapped_owner_id?: string | null
-          parsed_owner_code: string
-          parsed_owner_name: string
-          parsed_phone?: string | null
-          reco_record_id?: never
-          resolution_action?: string
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          upload_id: string
-        }
-        Update: {
-          classification?: string
-          detected_changes?: Json | null
-          is_reviewed?: boolean
-          mapped_owner_id?: string | null
-          parsed_owner_code?: string
-          parsed_owner_name?: string
-          parsed_phone?: string | null
-          reco_record_id?: never
-          resolution_action?: string
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          upload_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "owner_reconciliation_records_mapped_owner_id_fkey"
-            columns: ["mapped_owner_id"]
-            isOneToOne: false
-            referencedRelation: "owners"
-            referencedColumns: ["owner_id"]
-          },
-          {
-            foreignKeyName: "owner_reconciliation_records_upload_id_fkey"
-            columns: ["upload_id"]
-            isOneToOne: false
-            referencedRelation: "file_upload_archives"
-            referencedColumns: ["upload_id"]
-          },
-        ]
-      }
       owners: {
         Row: {
           avatar: string | null
           avatar_photo_id: string | null
           created_at: string
+          deprecated_work_address: string | null
+          deprecated_work_lat: number | null
+          deprecated_work_lng: number | null
           extras: Json
           master_agent_id: string
           member_since: string | null
@@ -993,14 +996,14 @@ export type Database = {
           title: string | null
           updated_at: string
           user_id: string | null
-          work_address: string | null
-          work_lat: number | null
-          work_lng: number | null
         }
         Insert: {
           avatar?: string | null
           avatar_photo_id?: string | null
           created_at?: string
+          deprecated_work_address?: string | null
+          deprecated_work_lat?: number | null
+          deprecated_work_lng?: number | null
           extras?: Json
           master_agent_id?: string
           member_since?: string | null
@@ -1012,14 +1015,14 @@ export type Database = {
           title?: string | null
           updated_at?: string
           user_id?: string | null
-          work_address?: string | null
-          work_lat?: number | null
-          work_lng?: number | null
         }
         Update: {
           avatar?: string | null
           avatar_photo_id?: string | null
           created_at?: string
+          deprecated_work_address?: string | null
+          deprecated_work_lat?: number | null
+          deprecated_work_lng?: number | null
           extras?: Json
           master_agent_id?: string
           member_since?: string | null
@@ -1031,9 +1034,6 @@ export type Database = {
           title?: string | null
           updated_at?: string
           user_id?: string | null
-          work_address?: string | null
-          work_lat?: number | null
-          work_lng?: number | null
         }
         Relationships: []
       }
