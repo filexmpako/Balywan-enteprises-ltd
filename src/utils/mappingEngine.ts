@@ -94,6 +94,7 @@ export interface MappedTransaction {
   date: string;
   timestamp: string;
   isMapped: boolean;
+  /** Already stored from an earlier upload; re-applying refreshes it in place. Not a validation error. */
   isDuplicate: boolean;
   validationErrors: string[];
   [key: string]: any; // Allow original extra CSV properties
@@ -107,6 +108,9 @@ export interface DailySummaryStats {
   ownersUpdated: number;
   personnelUpdated: number;
   validationErrorsCount: number;
+  /** Rows already stored from an earlier upload (refreshed in place, never duplicated). */
+  alreadyUploadedCount: number;
+  /** New rows with no validation errors. */
   readyForImport: number;
 }
 
@@ -392,9 +396,6 @@ export function mapTransactions(
     if (hasMissingRef && !tx.transactionId) {
       validationErrors.push('Missing Transaction Reference');
     }
-    if (isDuplicate) {
-      validationErrors.push('Duplicate Transaction');
-    }
     if (isNaN(volume)) {
       validationErrors.push('Corrupted Records');
     }
@@ -469,7 +470,8 @@ export function calculateCompanyStats(mappedTransactions: MappedTransaction[]): 
     ownersUpdated: ownersUpdatedSet.size,
     personnelUpdated: personnelUpdatedSet.size,
     validationErrorsCount,
-    readyForImport: mappedTxns.filter((t) => t.validationErrors.length === 0).length,
+    alreadyUploadedCount: mappedTxns.filter((t) => t.isDuplicate).length,
+    readyForImport: mappedTxns.filter((t) => !t.isDuplicate && t.validationErrors.length === 0).length,
   };
 }
 

@@ -291,6 +291,27 @@ export async function persistClassifiedRows(
     details: auditRecord,
   }));
 
+  // A re-uploaded transaction replaces its earlier audit record instead of
+  // adding a second one: delete exact (transaction_ref, branch_msisdn) matches.
+  for (const batch of chunk(auditRows, 200)) {
+    const pairs = new Set(batch.map((r) => `${r.transaction_ref}|${r.branch_msisdn}`));
+    const refs = Array.from(new Set(batch.map((r) => r.transaction_ref)));
+    const branches = Array.from(new Set(batch.map((r) => r.branch_msisdn)));
+    const existing = await selectAll(
+      supabase,
+      'classification_audit_records',
+      'id, transaction_ref, branch_msisdn',
+      (q) => q.in('transaction_ref', refs).in('branch_msisdn', branches),
+    );
+    const staleIds = existing
+      .filter((r: any) => pairs.has(`${r.transaction_ref}|${r.branch_msisdn}`))
+      .map((r: any) => r.id);
+    for (const ids of chunk(staleIds, 200)) {
+      const { error } = await supabase.from('classification_audit_records').delete().in('id', ids);
+      if (error) throw new Error(`classification_audit_records replace: ${error.message}`);
+    }
+  }
+
   for (const batch of chunk(auditRows, 500)) {
     const { error } = await supabase.from('classification_audit_records').insert(batch);
     if (error) throw new Error(`classification_audit_records: ${error.message}`);
