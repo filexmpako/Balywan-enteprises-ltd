@@ -548,11 +548,12 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
           const norm = normalizeMsisdn(bw.msisdn);
           if (norm) msisdnMap.set(norm, bw);
         }
-        const altNo = bw.alternateNumber || (bw as any).altMsisdn;
-        if (altNo) {
-          const normAlt = normalizeMsisdn(altNo);
-          if (normAlt) msisdnMap.set(normAlt, bw);
-        }
+      }
+      // Alternate numbers only fill numbers that are no wakala's main number,
+      // so another wakala's alternate entry can never take over a main number.
+      for (const bw of currentBaseWakalas) {
+        const normAlt = normalizeMsisdn(bw.alternateNumber || (bw as any).altMsisdn);
+        if (normAlt && !msisdnMap.has(normAlt)) msisdnMap.set(normAlt, bw);
       }
 
       // Exact header match candidate arrays
