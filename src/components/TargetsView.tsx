@@ -12,7 +12,12 @@ import { getDailyServicingRows } from '../utils/indexedDB';
 import { loadAllWeeklyRows } from '../utils/weeklyStore';
 import { readWeeklyStatsHistory } from '../utils/weeklyHistory';
 import IopLabel from './IopLabel';
-import { getServicedStatusFromColumn, mergeServicedStatus } from '../utils/servicingStatus';
+import {
+  getActiveStatusFromColumn,
+  getServicedStatusFromColumn,
+  mergeServicedStatus,
+  preferColumnStatus,
+} from '../utils/servicingStatus';
 import { getActivityRules, isActiveByRule, isServedByRule, extractTxnCounts, type TxnCounts } from '../utils/activityRules';
 import { normalizeMsisdn } from '../utils/msisdn';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
@@ -132,6 +137,7 @@ export default function TargetsView() {
       .then(rows => {
         if (!isMounted) return;
         const columnServedMap = new Map<string, boolean | null>();
+        const columnActiveMap = new Map<string, boolean | null>();
         const countsMap = new Map<string, TxnCounts>();
         (rows || []).forEach((row: any) => {
           const month = String(row?.reportingMonth || row?.reporting_month || '').trim();
@@ -139,6 +145,7 @@ export default function TargetsView() {
           const key = normalizeMsisdn(row?.MSISDN || row?.msisdn);
           if (!key) return;
           columnServedMap.set(key, mergeServicedStatus(columnServedMap.get(key) ?? null, getServicedStatusFromColumn(row)));
+          columnActiveMap.set(key, mergeServicedStatus(columnActiveMap.get(key) ?? null, getActiveStatusFromColumn(row)));
           const rowCounts = extractTxnCounts(row);
           const existing = countsMap.get(key);
           countsMap.set(key, existing
@@ -150,15 +157,13 @@ export default function TargetsView() {
               }
             : rowCounts);
         });
-        // Served/unserved is the uploaded servicing_status column merged with
-        // the computed amount/transaction rule — a "served" reading from
-        // either source wins.
+        // The uploaded servicing_status / wakala_status columns are final when
+        // present; the system rules only fill a wakala with no status reading.
         const rules = getActivityRules();
         const resolved = new Map<string, boolean>();
         countsMap.forEach((counts, key) => {
-          const isActive = isActiveByRule(counts, rules);
-          const merged = mergeServicedStatus(columnServedMap.get(key) ?? null, isServedByRule(counts, isActive, rules));
-          if (merged !== null) resolved.set(key, merged);
+          const isActive = preferColumnStatus(columnActiveMap.get(key) ?? null, isActiveByRule(counts, rules));
+          resolved.set(key, preferColumnStatus(columnServedMap.get(key) ?? null, isServedByRule(counts, isActive, rules)));
         });
         setWeeklyServedMap(resolved);
       })
