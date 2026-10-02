@@ -34,7 +34,7 @@ export const DEFAULT_ACTIVITY_RULES: ActivityRules = {
   servedTxnThreshold: 6,
   mode: 'combined',
   window: 'weekly',
-  penaltyRate: 0.005,
+  penaltyRate: 0.05, // percent: 0.05% of CP_Servicing_Val
 };
 
 export function normalizeActivityRules(raw: any): ActivityRules {
