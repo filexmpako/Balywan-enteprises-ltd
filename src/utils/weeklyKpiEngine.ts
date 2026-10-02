@@ -181,15 +181,27 @@ export function buildMsisdnOwnerResolver(
     byMsisdn.set(key, { ownerId, ownerName });
   };
 
-  (baseWakalaIndex || []).forEach(w => {
-    if (!w) return;
+  const baseOwners = (baseWakalaIndex || []).filter(Boolean).map(w => {
     const direct = (w as any).ownerId
       ? ownersById.get(String((w as any).ownerId).trim().toLowerCase())
       : undefined;
-    const matched = direct || resolveOwnerMatch((w as any).ownerName, owners).matchedOwner;
+    return { w, matched: direct || resolveOwnerMatch((w as any).ownerName, owners).matchedOwner };
+  });
+
+  // Main numbers first: a wakala's own number must never be claimed by another
+  // wakala that lists it as an alternate number (that made ownership depend on
+  // row order). A main number with no owner still blocks the alternate.
+  const mainNumbers = new Set<string>();
+  baseOwners.forEach(({ w, matched }) => {
+    const key = normalizeMsisdn(w.msisdn);
+    if (key) mainNumbers.add(key);
+    if (matched && matched.id) register(w.msisdn, matched.id, matched.name || 'Unknown Owner');
+  });
+  baseOwners.forEach(({ w, matched }) => {
     if (!matched || !matched.id) return;
-    register(w.msisdn, matched.id, matched.name || 'Unknown Owner');
-    register((w as any).altMsisdn || (w as any).alternateNumber, matched.id, matched.name || 'Unknown Owner');
+    const alt = (w as any).altMsisdn || (w as any).alternateNumber;
+    if (mainNumbers.has(normalizeMsisdn(alt))) return;
+    register(alt, matched.id, matched.name || 'Unknown Owner');
   });
 
   // Tills explicitly assigned to an owner (manual adds / owner sync)

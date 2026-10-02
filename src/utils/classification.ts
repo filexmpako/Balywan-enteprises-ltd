@@ -55,9 +55,12 @@ export function classifyServicingRows(
   baseWakalaIndex.forEach(w => {
     const msisdnKey = normalizeMsisdn(w.msisdn);
     if (msisdnKey) baseWakalaByMsisdn.set(msisdnKey, w);
-
+  });
+  // Alternate numbers only fill numbers that are no wakala's main number, so
+  // another wakala's alternate entry can never take over a main number.
+  baseWakalaIndex.forEach(w => {
     const altKey = normalizeMsisdn((w as any).altMsisdn || (w as any).alternateNumber);
-    if (altKey) baseWakalaByMsisdn.set(altKey, w);
+    if (altKey && !baseWakalaByMsisdn.has(altKey)) baseWakalaByMsisdn.set(altKey, w);
   });
 
   // Transaction Till -> assigned owner lookup map, built once (mirrors
