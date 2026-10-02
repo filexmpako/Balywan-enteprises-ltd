@@ -12,7 +12,8 @@ import {
 import { periodsMatch, toIsoPeriod } from '../utils/periodUtils';
 import { fetchMonthlyMonths } from '../lib/monthly.functions';
 import IopLabel from './IopLabel';
-import IopVariance from './IopVariance';
+import IopVariance, { shortMonth } from './IopVariance';
+import { getActivityRules } from '../utils/activityRules';
 import type { ClassifiedRow } from '../utils/classification';
 import { computeLiveKpiTotals } from '../utils/liveKpiTotals';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
@@ -891,18 +892,18 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
             const week = hasMonthly ? null : latestWeeklyEntryAtOrBefore(weeklyStats, currentPeriod);
             const isFallback = !!week && !periodsMatch(week.reportingMonth, currentPeriod);
             const settlement = hasMonthly
-              ? { penalty: companyKPIs.totalPenalty || 0, iop: companyKPIs.totalIopVolume || 0, source: 'MONTHLY REPORT', kind: 'monthly' as const, period: currentPeriod, monthLabel: displayPeriod, endDate: undefined }
+              ? { penalty: companyKPIs.totalPenalty || 0, iop: companyKPIs.totalIopVolume || 0, source: `Monthly · ${shortMonth(displayPeriod)}`, kind: 'monthly' as const, period: currentPeriod, monthLabel: displayPeriod, endDate: undefined }
               : week
                 ? {
                     penalty: week.penalty || 0,
                     iop: week.iopValue || 0,
-                    source: `WEEKLY REPORT · ${week.reportingWeek.split(' (')[0].toUpperCase()}${isFallback ? ` · ${String(week.reportingMonth).toUpperCase()} · LATEST AVAILABLE` : ''}`,
+                    source: `${week.reportingWeek.split(' (')[0]} · ${shortMonth(String(week.reportingMonth))}${isFallback ? ' · Latest' : ''}`,
                     kind: 'weekly' as const,
                     period: toIsoPeriod(week.reportingMonth || ''),
                     monthLabel: String(week.reportingMonth),
                     endDate: reportEndDate(week),
                   }
-                : { penalty: 0, iop: 0, source: 'NO REPORT YET', kind: null, period: null, monthLabel: '', endDate: undefined };
+                : { penalty: 0, iop: 0, source: 'No report yet', kind: null, period: null, monthLabel: '', endDate: undefined };
             // Same month-to-date window as the report it is compared with.
             const dailyIop = settlement.period
               ? dailyIopForPeriod(classifiedDaily, settlement.period, undefined, settlement.endDate)
@@ -911,20 +912,20 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
               <div className="space-y-2">
                 <div className="flex items-center gap-2 px-1">
                   <ShieldCheck className="h-4 w-4 text-brand-primary" />
-                  <h3 className="font-sans text-xs font-black uppercase tracking-wider text-brand-primary">Settlement Ledger — {settlement.source}</h3>
+                  <h3 className="font-sans text-xs font-black uppercase tracking-wider text-brand-primary">Settlement · {settlement.source}</h3>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <MetricCard
-                    title="Total Penalty"
+                    title="Penalty"
                     value={`TZS ${settlement.penalty.toLocaleString()}`}
-                    subValue="CP_SERVICING_VAL x RATE"
+                    subValue={`CP × ${getActivityRules().penaltyRate}%`}
                     icon={AlertTriangle}
                     variant="red"
                   />
                   <MetricCard
                     title={settlement.kind ? <IopLabel source={settlement.kind} /> : 'IOP'}
                     value={`TZS ${settlement.iop.toLocaleString()}`}
-                    subValue="BASE WAKALA SERVED BY OUTSIDE SA"
+                    subValue="Outside SA"
                     icon={Layers}
                     variant="purple"
                   >
@@ -1160,7 +1161,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                   className="flex items-center gap-2 cursor-pointer select-none group mb-4"
                 >
                   <h4 className="font-sans text-sm font-bold text-brand-text group-hover:text-brand-primary transition-colors">
-                    IOP Daily vs Weekly — {weeklyIopComparison.reportingWeek}
+                    IOP Daily vs Weekly · {weeklyIopComparison.reportingWeek.split(' (')[0]}
                   </h4>
                   <ChevronDown
                     className={`h-4 w-4 text-brand-text-variant transition-transform duration-200 ${isIopRemainingCollapsed ? 'rotate-180' : ''}`}
@@ -1173,21 +1174,21 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                       <MetricCard
                         title={<IopLabel source="weekly" />}
                         value={`TZS ${weeklyIopComparison.reportedIop.toLocaleString()}`}
-                        subValue="BASE WAKALA SERVED BY OUTSIDE SA"
+                        subValue="Outside SA"
                         icon={Layers}
                         variant="purple"
                       />
                       <MetricCard
                         title={<IopLabel source="daily" />}
                         value={`TZS ${weeklyIopComparison.dailyMgtIop.toLocaleString()}`}
-                        subValue="OUR TILLS → WAKALA NOT IN OUR BASE (MONTH TO DATE)"
+                        subValue="Month to date"
                         icon={Activity}
                         variant="blue"
                       />
                       <MetricCard
-                        title="CP Servicing Value"
+                        title="CP Value"
                         value={`TZS ${weeklyIopComparison.cpValue.toLocaleString()}`}
-                        subValue="PENALTY BASIS"
+                        subValue="Penalty basis"
                         icon={AlertCircle}
                         variant="amber"
                       />
@@ -1201,7 +1202,8 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                               <th className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Owner</th>
                               <th className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant"><IopLabel source="weekly" /></th>
                               <th className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant"><IopLabel source="daily" /></th>
-                              <th className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">CP Servicing Value</th>
+                              <th className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Δ Daily − Weekly</th>
+                              <th className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">CP Value</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1210,6 +1212,9 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                                 <td className="py-2.5 font-sans text-xs font-bold text-brand-text">{o.ownerName}</td>
                                 <td className="py-2.5 font-sans text-xs text-brand-text">TZS {o.reportedIop.toLocaleString()}</td>
                                 <td className="py-2.5 font-sans text-xs text-brand-text">TZS {o.dailyMgtIop.toLocaleString()}</td>
+                                <td className={`py-2.5 font-sans text-xs font-bold ${o.iopRemaining > 0 ? 'text-emerald-600' : o.iopRemaining < 0 ? 'text-rose-600' : 'text-slate-500'}`}>
+                                  {o.iopRemaining > 0 ? '+' : o.iopRemaining < 0 ? '−' : ''}TZS {Math.abs(o.iopRemaining).toLocaleString()}
+                                </td>
                                 <td className="py-2.5 font-sans text-xs text-brand-text">TZS {o.cpValue.toLocaleString()}</td>
                               </tr>
                             ))}

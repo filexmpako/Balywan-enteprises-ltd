@@ -47,7 +47,7 @@ import {
 } from 'lucide-react';
 import MetricCard from './MetricCard';
 import IopLabel, { type IopSource } from './IopLabel';
-import IopVariance from './IopVariance';
+import IopVariance, { shortMonth } from './IopVariance';
 import { motion, AnimatePresence } from 'motion/react';
 import FloatManagementPanel from './FloatManagementPanel';
 import { getFloatRequestsForOwner } from '../utils/floatManagement';
@@ -661,10 +661,10 @@ export default function OwnerDetailsView({
     monthLabel: string;
     endDate?: string;
   } => {
-    const none = { penalty: 0, iop: 0, source: 'NO REPORT YET', kind: null, period: null, monthLabel: '' };
+    const none = { penalty: 0, iop: 0, source: 'No report yet', kind: null, period: null, monthLabel: '' };
     if (!localOwner) return none;
     if (monthlyReportMonths.some(m => periodsMatch(m, currentPeriod))) {
-      return { penalty: localOwner.penalty || 0, iop: localOwner.iopVolume || 0, source: 'MONTHLY REPORT', kind: 'monthly', period: currentPeriod, monthLabel: displayPeriod };
+      return { penalty: localOwner.penalty || 0, iop: localOwner.iopVolume || 0, source: `Monthly · ${shortMonth(displayPeriod)}`, kind: 'monthly', period: currentPeriod, monthLabel: displayPeriod };
     }
     // The selected month's own report; in the first days of a month (no
     // report yet) the latest earlier month's weekly report.
@@ -675,7 +675,7 @@ export default function OwnerDetailsView({
     return {
       penalty: b?.penalty || 0,
       iop: b?.iopValue || 0,
-      source: `WEEKLY REPORT · ${week.reportingWeek.split(' (')[0].toUpperCase()}${isFallback ? ` · ${String(week.reportingMonth).toUpperCase()} · LATEST AVAILABLE` : ''}`,
+      source: `${week.reportingWeek.split(' (')[0]} · ${shortMonth(String(week.reportingMonth))}${isFallback ? ' · Latest' : ''}`,
       kind: 'weekly',
       period: toIsoPeriod(week.reportingMonth || ''),
       monthLabel: String(week.reportingMonth),
@@ -1172,20 +1172,20 @@ export default function OwnerDetailsView({
           {/* Settlement Section — report figures (Monthly report once uploaded, else the latest weekly report), kept apart from Daily MGT so the source is never ambiguous */}
           <div className="space-y-2">
             <h3 className="font-sans text-xs font-black uppercase text-brand-primary tracking-wider font-mono">
-              Report Settlement Ledger — {settlement.source}
+              Settlement · {settlement.source}
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <MetricCard
-                title="CP Penalty"
+                title="Penalty"
                 value={`TZS ${settlement.penalty.toLocaleString()}`}
-                subValue="CP_SERVICING_VAL x RATE"
+                subValue={`CP × ${getActivityRules().penaltyRate}%`}
                 icon={AlertTriangle}
                 variant="red"
               />
               <MetricCard
                 title={settlement.kind ? <IopLabel source={settlement.kind} /> : 'IOP'}
                 value={`TZS ${settlement.iop.toLocaleString()}`}
-                subValue="BASE WAKALA SERVED BY OUTSIDE SA"
+                subValue="Outside SA"
                 icon={Layers}
                 variant="purple"
               >
