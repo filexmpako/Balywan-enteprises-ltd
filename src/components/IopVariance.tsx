@@ -1,20 +1,24 @@
 import IopLabel, { type IopSource } from './IopLabel';
 
 /**
- * Daily MGT IOP minus the report's IOP for the same month: positive (green)
- * when Daily IOP is higher, negative (red) when it is lower.
+ * Daily MGT IOP minus the report's IOP over the same month-to-date window:
+ * positive (green) when Daily IOP is higher, negative (red) when it is lower.
  */
 export default function IopVariance({
   daily,
   report,
   reportKind,
   monthLabel,
+  endDate,
 }: {
   daily: number;
   report: number;
   reportKind: IopSource;
   monthLabel: string;
+  /** Last day (ISO) the report covers; omitted = the whole month. */
+  endDate?: string;
 }) {
+  const windowLabel = endDate ? `1–${Number(endDate.slice(8, 10))} ${monthLabel}` : monthLabel;
   const diff = daily - report;
   const sign = diff > 0 ? '+' : diff < 0 ? '−' : '';
   const tone = diff > 0 ? 'text-emerald-600' : diff < 0 ? 'text-rose-600' : 'text-slate-500';
@@ -29,7 +33,7 @@ export default function IopVariance({
         </span>
       </div>
       <p className="mt-0.5 text-[10px] text-slate-500">
-        Daily IOP {monthLabel}: TZS {daily.toLocaleString()}
+        Daily IOP {windowLabel}: TZS {daily.toLocaleString()}
       </p>
     </div>
   );

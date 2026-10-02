@@ -519,21 +519,30 @@ export interface WeeklyIopComparison {
 }
 
 /**
- * Compares one week's Daily MGT IOP-bucket total against the same week's
- * uploaded report's own IOP column — both scoped to the week's date range
- * (Daily MGT) or already scoped by the caller (the report figures).
+ * Compares Daily MGT's IOP-bucket total against a weekly report's own IOP
+ * column. The weekly report is month-to-date, so Daily MGT is taken over the
+ * same window: the 1st of the week's month up to the week's end date.
+ * Daily IOP is credited to the owner of the till that sent it (the audit
+ * record's servicing owner) — IOP rows carry no credited owner.
  * classifiedDailyRows is the full, unfiltered classifyServicingRows() output
- * for Daily MGT transactions; this filters it to the week internally.
+ * for Daily MGT transactions; this filters it internally.
  */
 export function computeWeeklyIopComparison(
   reportingWeek: string,
-  classifiedDailyRows: Array<{ row: any; bucket: string; attributedOwnerId: string | null; attributedOwnerName: string | null }>,
+  classifiedDailyRows: Array<{
+    row: any;
+    bucket: string;
+    attributedOwnerId: string | null;
+    attributedOwnerName: string | null;
+    auditRecord?: { ownerId?: string; amount?: number };
+  }>,
   reportedIopTotal: number,
   reportedIopByOwner: WeeklyOwnerBreakdown[],
   reportedCpValueTotal: number = 0
 ): WeeklyIopComparison | null {
-  const range = parseWeekDateRange(reportingWeek);
-  if (!range) return null;
+  const weekRange = parseWeekDateRange(reportingWeek);
+  if (!weekRange) return null;
+  const range = { start: `${weekRange.end.slice(0, 8)}01`, end: weekRange.end };
 
   const getAmount = (row: any): number =>
     Math.abs(Number(row['Amount'] ?? row['Volume (TZS)'] ?? row['volume'] ?? row['servicedVolume'] ?? 0)) || 0;
@@ -548,11 +557,13 @@ export function computeWeeklyIopComparison(
     );
     if (dateStr < range.start || dateStr > range.end) return;
 
-    const amount = getAmount(c.row);
+    const amount = c.auditRecord?.amount ?? getAmount(c.row);
     dailyMgtIop += amount;
 
-    const ownerId = c.attributedOwnerId || UNASSIGNED_ID;
-    const ownerName = c.attributedOwnerName || 'Unassigned';
+    const servicingId = c.auditRecord?.ownerId;
+    const hasOwner = !!servicingId && servicingId !== 'UNASSIGNED';
+    const ownerId = hasOwner ? servicingId : UNASSIGNED_ID;
+    const ownerName = (hasOwner && c.attributedOwnerName) || 'Unassigned';
     const existing = dailyMgtIopByOwner.get(ownerId);
     if (existing) existing.value += amount;
     else dailyMgtIopByOwner.set(ownerId, { ownerName, value: amount });

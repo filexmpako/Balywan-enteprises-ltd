@@ -7,6 +7,7 @@ import {
   latestWeeklyEntryForPeriod,
   latestWeeklyEntryAtOrBefore,
   dailyIopForPeriod,
+  reportEndDate,
 } from '../utils/kpiEngine';
 import { periodsMatch, toIsoPeriod } from '../utils/periodUtils';
 import { fetchMonthlyMonths } from '../lib/monthly.functions';
@@ -229,10 +230,9 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
     };
   }, []);
 
-  // Compares the latest uploaded week's own IOP column against Daily MGT's
-  // own IOP-bucket total for that same week's date range. Positive
-  // iopRemaining: Daily MGT is detecting more externally-serviced volume
-  // than the weekly report captured.
+  // Compares the latest uploaded week's own IOP column (month-to-date) against
+  // Daily MGT's own IOP-bucket total from the 1st of that month to the week's
+  // end date. Positive iopRemaining: Daily MGT IOP is higher than the report.
   const [weeklyIopComparison, setWeeklyIopComparison] = useState<WeeklyIopComparison | null>(null);
   const [isIopRemainingCollapsed, setIsIopRemainingCollapsed] = useState(false);
 
@@ -891,7 +891,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
             const week = hasMonthly ? null : latestWeeklyEntryAtOrBefore(weeklyStats, currentPeriod);
             const isFallback = !!week && !periodsMatch(week.reportingMonth, currentPeriod);
             const settlement = hasMonthly
-              ? { penalty: companyKPIs.totalPenalty || 0, iop: companyKPIs.totalIopVolume || 0, source: 'MONTHLY REPORT', kind: 'monthly' as const, period: currentPeriod, monthLabel: displayPeriod }
+              ? { penalty: companyKPIs.totalPenalty || 0, iop: companyKPIs.totalIopVolume || 0, source: 'MONTHLY REPORT', kind: 'monthly' as const, period: currentPeriod, monthLabel: displayPeriod, endDate: undefined }
               : week
                 ? {
                     penalty: week.penalty || 0,
@@ -900,9 +900,13 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                     kind: 'weekly' as const,
                     period: toIsoPeriod(week.reportingMonth || ''),
                     monthLabel: String(week.reportingMonth),
+                    endDate: reportEndDate(week),
                   }
-                : { penalty: 0, iop: 0, source: 'NO REPORT YET', kind: null, period: null, monthLabel: '' };
-            const dailyIop = settlement.period ? dailyIopForPeriod(classifiedDaily, settlement.period) : 0;
+                : { penalty: 0, iop: 0, source: 'NO REPORT YET', kind: null, period: null, monthLabel: '', endDate: undefined };
+            // Same month-to-date window as the report it is compared with.
+            const dailyIop = settlement.period
+              ? dailyIopForPeriod(classifiedDaily, settlement.period, undefined, settlement.endDate)
+              : 0;
             return (
               <div className="space-y-2">
                 <div className="flex items-center gap-2 px-1">
@@ -925,7 +929,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                     variant="purple"
                   >
                     {settlement.kind && (
-                      <IopVariance daily={dailyIop} report={settlement.iop} reportKind={settlement.kind} monthLabel={settlement.monthLabel} />
+                      <IopVariance daily={dailyIop} report={settlement.iop} reportKind={settlement.kind} monthLabel={settlement.monthLabel} endDate={settlement.endDate} />
                     )}
                   </MetricCard>
                 </div>
@@ -1147,9 +1151,8 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
             )}
 
             {/* Daily MGT IOP (our tills paid a wakala outside our base) and the
-                weekly report's IOP (a base wakala served by an outside SA) are
-                different measures, so they sit side by side and are never
-                subtracted from each other. */}
+                weekly report's IOP (a base wakala served by an outside SA),
+                over the same month-to-date window. */}
             {weeklyIopComparison && (weeklyIopComparison.reportedIop !== 0 || weeklyIopComparison.dailyMgtIop !== 0) && (
               <div className="mt-6 pt-6 border-t border-brand-gray-border">
                 <div
@@ -1177,7 +1180,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                       <MetricCard
                         title={<IopLabel source="daily" />}
                         value={`TZS ${weeklyIopComparison.dailyMgtIop.toLocaleString()}`}
-                        subValue="OUR TILLS → WAKALA NOT IN OUR BASE (THIS WEEK'S DATES)"
+                        subValue="OUR TILLS → WAKALA NOT IN OUR BASE (MONTH TO DATE)"
                         icon={Activity}
                         variant="blue"
                       />

@@ -66,12 +66,32 @@ export function latestWeeklyEntryAtOrBefore(weeklyStats: WeeklyStatsEntry[], per
   return month ? latestWeeklyEntryForPeriod(weeklyStats, month) : null;
 }
 
-/** Daily MGT IOP for `period`: the whole company, or one servicing owner when ownerId is given. */
-export function dailyIopForPeriod(classifiedRows: ClassifiedRow[], period: string, ownerId?: string): number {
+/**
+ * The last day a report covers: its week's end date when that falls in the
+ * report's month (weekly reports are month-to-date), else undefined (the
+ * whole month).
+ */
+export function reportEndDate(entry: WeeklyStatsEntry | null | undefined): string | undefined {
+  if (!entry) return undefined;
+  const end = parseWeekDateRange(entry.reportingWeek)?.end;
+  return end && end.slice(0, 7) === toIsoPeriod(entry.reportingMonth || '') ? end : undefined;
+}
+
+/**
+ * Daily MGT IOP for `period`, month-to-date up to `endDate` (ISO, inclusive)
+ * when given: the whole company, or one servicing owner when ownerId is set.
+ */
+export function dailyIopForPeriod(
+  classifiedRows: ClassifiedRow[],
+  period: string,
+  ownerId?: string,
+  endDate?: string,
+): number {
   let total = 0;
   for (const cr of filterClassifiedRowsToPeriod(classifiedRows, period)) {
     if (cr.bucket !== 'IOP') continue;
     if (ownerId && cr.auditRecord?.ownerId !== ownerId) continue;
+    if (endDate && rowIsoDate(cr) > endDate) continue;
     total += cr.auditRecord?.amount || 0;
   }
   return total;
