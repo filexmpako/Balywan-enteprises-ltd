@@ -20,7 +20,12 @@ import PageHeaderBanner from './PageHeaderBanner';
 import { getServicingRows, getDailyServicingRows } from '../utils/indexedDB';
 import { formatShortDate } from '../utils/dateFormat';
 import { refreshWeeklyStatsHistory, readWeeklyStatsHistory } from '../utils/weeklyHistory';
-import { getServicedStatusFromColumn, mergeServicedStatus } from '../utils/servicingStatus';
+import {
+  getActiveStatusFromColumn,
+  getServicedStatusFromColumn,
+  mergeServicedStatus,
+  preferColumnStatus,
+} from '../utils/servicingStatus';
 import { getActivityRules, isActiveByRule, isServedByRule, extractTxnCounts, type TxnCounts } from '../utils/activityRules';
 import type { WeeklyStatsEntry } from '../utils/weeklyKpiEngine';
 import { calculateCompanyKPIs } from '../utils/mappingEngine';
@@ -291,17 +296,6 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
         return;
       }
 
-      // Active/inactive is read from the wakala_status column the monthly
-      // KPI upload already carries (that status is sourced upstream, not
-      // computed here) — confirmed against the weekly-vs-monthly rule
-      // discrepancy this file used to have before this was clarified.
-      const isRowStatusActive = (row: any): boolean => {
-        if (!row) return false;
-        const val = row.wakala_status ?? row.Wakala_Status ?? row['Wakala Status'] ?? row['wakala status'] ?? row.status ?? row.Status;
-        if (val === undefined || val === null || val === '') return false;
-        return Number(val) === 1;
-      };
-
       const getFieldValue = (row: any, keys: string[]): number => {
         for (const k of keys) {
           if (row[k] !== undefined && row[k] !== null) {
@@ -325,7 +319,7 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
       };
 
       // Company-wide totals for averages and stats
-      const companyWakalaMap = new Map<string, { txns: number; val: number; cashIn: number; cashOut: number; isProductSeller: boolean; isServed: boolean; isActiveStatus: boolean; servedStatus: boolean | null }>();
+      const companyWakalaMap = new Map<string, { txns: number; val: number; cashIn: number; cashOut: number; isProductSeller: boolean; isServed: boolean; activeStatus: boolean | null; servedStatus: boolean | null }>();
       let companyTotalCI = 0;
       let companyTotalCO = 0;
       let companyTotalServicingVal = 0;
@@ -337,10 +331,10 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
         const val = getFieldValue(row, ['SA_Servicing_Val', 'SA Servicing Val', 'sa_servicing_val']);
         const productSellerVal = getFieldValue(row, ['SA_Product_Sellers', 'SA Product Sellers', 'product_sellers', 'product_seller', 'Product_Sales', 'Product Sales']);
         const isProductSeller = productSellerVal > 0 || row.Product_Seller === true || String(row.Product_Seller).toLowerCase() === 'true' || String(row.Product_Seller).toLowerCase() === 'yes';
-        // Active = uploaded status column OR the computed CI+CO transaction
-        // count rule — a reading of "active" from either source wins.
+        // Active = the uploaded wakala_status column when present; the CI+CO
+        // transaction-count rule only fills a wakala with no status reading.
         const rowTxnCounts = extractTxnCounts(row);
-        const rowActive = isRowStatusActive(row) || isActiveByRule(rowTxnCounts, activityRules);
+        const rowActive = getActiveStatusFromColumn(row);
 
         const ci = getFieldValue(row, ['CI_val', 'CI val', 'ci_val', 'Cash In Value', 'Cash-In Value', 'Cash-In', 'Cash In', 'deposit', 'Deposit']);
         const co = getFieldValue(row, ['CO_val', 'CO val', 'co_val', 'Cash Out Value', 'Cash-Out Value', 'Cash-Out', 'Cash Out', 'withdrawal', 'Withdrawal']);
@@ -358,7 +352,7 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
             existing.cashOut += rowTxnCounts.cashOut;
             if (isProductSeller) existing.isProductSeller = true;
             if (txns > 0 || val > 0) existing.isServed = true;
-            if (rowActive) existing.isActiveStatus = true;
+            existing.activeStatus = mergeServicedStatus(existing.activeStatus, rowActive);
             existing.servedStatus = mergeServicedStatus(existing.servedStatus, getServicedStatusFromColumn(row));
           } else {
             companyWakalaMap.set(msisdn, {
@@ -368,7 +362,7 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
               cashOut: rowTxnCounts.cashOut,
               isProductSeller,
               isServed: txns > 0 || val > 0,
-              isActiveStatus: rowActive,
+              activeStatus: rowActive,
               servedStatus: getServicedStatusFromColumn(row)
             });
           }
@@ -387,12 +381,12 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
       let companyNoStatusCount = 0;
       let companyNotServedCount = 0;
 
-      companyWakalaMap.forEach(({ txns, val, cashIn, cashOut, isProductSeller, isActiveStatus, servedStatus }) => {
-        // Served/unserved is the uploaded servicing_status column merged
-        // with the computed amount/transaction rule (isServedByRule) — a
-        // "served" reading from either source wins.
+      companyWakalaMap.forEach(({ txns, val, cashIn, cashOut, isProductSeller, activeStatus, servedStatus }) => {
+        // The uploaded wakala_status / servicing_status columns are final when
+        // present; the system rules only fill a wakala with no status reading.
         const wakalaCounts: TxnCounts = { cashIn, cashOut, total: txns, amount: val };
-        const finalServedStatus = mergeServicedStatus(servedStatus, isServedByRule(wakalaCounts, isActiveStatus, activityRules));
+        const isActiveStatus = preferColumnStatus(activeStatus, isActiveByRule(wakalaCounts, activityRules));
+        const finalServedStatus = preferColumnStatus(servedStatus, isServedByRule(wakalaCounts, isActiveStatus, activityRules));
         const isServedWakala = finalServedStatus === true;
 
         if (isActiveStatus) {
@@ -830,7 +824,7 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
                           Rule Info
                         </span>
                         <div className="absolute right-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-900 text-white text-[11px] rounded-lg p-2.5 shadow-xl z-50 leading-relaxed font-normal">
-                          Served = Active wakala: value &ge;600,000 TZS; Inactive wakala: &ge;6 transactions OR value &ge;600,000 TZS — merged with the uploaded servicing_status column
+                          Served = the uploaded servicing_status column. Only rows without it use the rule: Active wakala: value &ge;600,000 TZS; Inactive wakala: &ge;6 transactions OR value &ge;600,000 TZS
                         </div>
                       </div>
                     </div>

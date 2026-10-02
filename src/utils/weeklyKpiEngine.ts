@@ -3,10 +3,10 @@
  *
  * Pure/derived analysis of uploaded Weekly KPI workbooks (Sheet 2 servicing
  * rows). Mirrors the exact activity rules already used for Monthly data:
- *   - a wakala is ACTIVE once its CI+CO transaction count reaches the
- *     configured threshold (count only — amount plays no part)
- *   - a wakala is SERVED when either the uploaded servicing_status column
- *     or the computed amount/transaction rule says so (see isServedByRule)
+ *   - ACTIVE / SERVED come from the uploaded wakala_status / servicing_status
+ *     columns whenever they carry a value — the file is final
+ *   - only a wakala with no status reading falls back to the system rules
+ *     (CI+CO count threshold for active; isServedByRule for served)
  *
  * Adds a per-owner breakdown by resolving each row's MSISDN through the
  * Base Wakala index / till registry, so weekly results can be shown on the
@@ -18,7 +18,12 @@
 import { BaseWakala, Owner } from '../types';
 import { normalizeMsisdn } from './msisdn';
 import { resolveOwnerMatch } from './ownerMatch';
-import { getServicedStatusFromColumn, mergeServicedStatus } from './servicingStatus';
+import {
+  getActiveStatusFromColumn,
+  getServicedStatusFromColumn,
+  mergeServicedStatus,
+  preferColumnStatus,
+} from './servicingStatus';
 import { formatToISODate } from './mappingEngine';
 import {
   getActivityRules,
@@ -103,19 +108,6 @@ export interface WeeklyStatsEntry extends WeeklyWakalaStats {
 }
 
 const UNASSIGNED_ID = '__unassigned__';
-
-export function isRowStatusActive(row: any): boolean {
-  if (!row) return false;
-  const val =
-    row.wakala_status ??
-    row.Wakala_Status ??
-    row['Wakala Status'] ??
-    row['wakala status'] ??
-    row.status ??
-    row.Status;
-  if (val === undefined || val === null || val === '') return false;
-  return Number(val) === 1;
-}
 
 export function hasRowStatusKey(row: any): boolean {
   if (!row) return false;
@@ -244,7 +236,7 @@ export function computeWeeklyStats(
       countTotal: number;
       hasStatusCol: boolean;
       servedStatus: boolean | null;
-      statusActive: boolean;
+      activeStatus: boolean | null;
       cpValue: number;
       reportedIop: number;
     }
@@ -258,7 +250,7 @@ export function computeWeeklyStats(
     const counts = extractTxnCounts(row);
     const rowHasStatus = hasRowStatusKey(row);
     const rowServed = getServicedStatusFromColumn(row);
-    const rowStatusActive = isRowStatusActive(row);
+    const rowActive = getActiveStatusFromColumn(row);
     const rowCpValue = getFieldValue(row, CP_VAL_KEYS);
     const rowReportedIop = getFieldValue(row, IOP_KEYS);
 
@@ -271,7 +263,7 @@ export function computeWeeklyStats(
       existing.countTotal += counts.total;
       if (rowHasStatus) existing.hasStatusCol = true;
       existing.servedStatus = mergeServicedStatus(existing.servedStatus, rowServed);
-      if (rowStatusActive) existing.statusActive = true;
+      existing.activeStatus = mergeServicedStatus(existing.activeStatus, rowActive);
       existing.cpValue += rowCpValue;
       existing.reportedIop += rowReportedIop;
     } else {
@@ -283,7 +275,7 @@ export function computeWeeklyStats(
         countTotal: counts.total,
         hasStatusCol: rowHasStatus,
         servedStatus: rowServed,
-        statusActive: rowStatusActive,
+        activeStatus: rowActive,
         cpValue: rowCpValue,
         reportedIop: rowReportedIop,
       });
@@ -306,17 +298,14 @@ export function computeWeeklyStats(
   const evaluations: WeeklyWakalaEvaluation[] = [];
 
   wakalaMap.forEach((entry, msisdn) => {
-    const { txns, val, cashIn, cashOut, countTotal, servedStatus, statusActive, cpValue, reportedIop } = entry;
-    // Active / inactive is the uploaded wakala_status column merged with the
-    // configurable system rule (cash-in + cash-out transaction count against
-    // the threshold) — an "active" reading from either source wins, mirroring
-    // the same merge Monthly data already uses (see KPIReportsView.tsx).
-    // Served / unserved is the uploaded servicing_status column merged with
-    // the computed amount/transaction rule — a "served" reading from either
-    // source wins.
+    const { txns, val, cashIn, cashOut, countTotal, servedStatus, activeStatus, cpValue, reportedIop } = entry;
+    // The uploaded wakala_status / servicing_status columns are final whenever
+    // they carry a value. The system rules (transaction-count threshold for
+    // active; amount/transaction rule for served) only fill in a wakala whose
+    // row has no status reading.
     const counts = { cashIn, cashOut, total: countTotal || txns, amount: val };
-    const isActive = statusActive || isActiveByRule(counts, rules);
-    const finalServed = mergeServicedStatus(servedStatus, isServedByRule(counts, isActive, rules));
+    const isActive = preferColumnStatus(activeStatus, isActiveByRule(counts, rules));
+    const finalServed = preferColumnStatus(servedStatus, isServedByRule(counts, isActive, rules));
     if (isActive) activeCount++;
     if (finalServed === true) servedCount++;
     else if (finalServed === false) notServedCount++;

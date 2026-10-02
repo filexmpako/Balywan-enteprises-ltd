@@ -5,6 +5,7 @@ import { formatDate } from '../utils/dateFormat';
 import { buildOwnerWakalaMap } from '../utils/wakalaMapping';
 import { getOwnerPortfolio } from '../utils/ownerPortfolio';
 import { getActivityRules, isActiveByRule } from '../utils/activityRules';
+import { getActiveStatusFromColumn, mergeServicedStatus, preferColumnStatus } from '../utils/servicingStatus';
 import { ownersList } from '../data';
 import WorkLocationSection from './WorkLocationSection';
 import TransactionHistorySection from './TransactionHistorySection';
@@ -582,15 +583,17 @@ export default function OwnerDetailsView({
 
         const totalVal = wRows.reduce((sum, r) => Math.abs(getAmountVal(r)), 0);
 
-        const isActiveRowStatus = wRows.some(r => {
-          const val = r.wakala_status ?? r.Wakala_Status ?? r['Wakala Status'] ?? r['wakala status'] ?? r.status ?? r.Status;
-          if (val === undefined || val === null || val === '') return false;
-          return Number(val) === 1;
-        });
+        const columnActive = wRows.reduce<boolean | null>(
+          (acc, r) => mergeServicedStatus(acc, getActiveStatusFromColumn(r)),
+          null,
+        );
 
-        // Active/Inactive rule — same merge weeklyKpiEngine.ts uses: an "active"
-        // reading from the uploaded status column or the transaction-count rule wins.
-        const isActive = isActiveRowStatus || isActiveByRule({ cashIn: 0, cashOut: 0, total: totalTxns, amount: totalVal }, getActivityRules());
+        // Same as weeklyKpiEngine.ts: the uploaded wakala_status column is final
+        // when present; the transaction-count rule only fills a missing reading.
+        const isActive = preferColumnStatus(
+          columnActive,
+          isActiveByRule({ cashIn: 0, cashOut: 0, total: totalTxns, amount: totalVal }, getActivityRules()),
+        );
         if (isActive) {
           active++;
         }

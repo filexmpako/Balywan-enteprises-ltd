@@ -53,6 +53,30 @@ export function getServicedStatusFromColumn(
   return null;
 }
 
+/**
+ * Active/inactive read from the uploaded data itself (the `wakala_status`
+ * column: 1 = active, 0 = inactive). Returns `null` when the column is
+ * absent or blank. A generic Status column only counts when it holds 0/1.
+ */
+export function getActiveStatusFromColumn(row: Record<string, any> | null | undefined): boolean | null {
+  if (!row) return null;
+  const named = row.wakala_status ?? row.Wakala_Status ?? row['Wakala Status'] ?? row['wakala status'];
+  const val = named !== undefined && named !== null && named !== '' ? named : row.status ?? row.Status;
+  if (val === undefined || val === null || String(val).trim() === '') return null;
+  const num = Number(val);
+  if (num === 1) return true;
+  if (num === 0) return false;
+  return null;
+}
+
+/**
+ * The uploaded column is final whenever it carries a value; the computed
+ * rule only fills in a missing reading.
+ */
+export function preferColumnStatus(column: boolean | null, computed: boolean): boolean {
+  return column === null ? computed : column;
+}
+
 /** Merges two per-wakala status readings (a served reading always wins). */
 export function mergeServicedStatus(a: boolean | null, b: boolean | null): boolean | null {
   if (a === true || b === true) return true;

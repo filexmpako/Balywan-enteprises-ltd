@@ -437,7 +437,7 @@ export default function SettingsView({
           <div className="mt-6 mb-4 border-t border-brand-gray-border pt-5">
             <h4 className="text-xs font-bold uppercase tracking-wider text-brand-text">Served / Unserved Rule</h4>
             <p className="mt-1 text-[11px] leading-5 text-brand-text-variant">
-              Active wakala: served once servicing value reaches the threshold. Inactive wakala: served once either the transaction count or the servicing value reaches its threshold. Merged with any uploaded servicing_status column — a "served" reading from either source wins.
+              An uploaded servicing_status (served) or wakala_status (active) column is final whenever the file has it. These rules only apply to wakala whose row has no status: Active wakala: served once servicing value reaches the threshold. Inactive wakala: served once either the transaction count or the servicing value reaches its threshold.
             </p>
           </div>
 
