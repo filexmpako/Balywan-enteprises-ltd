@@ -47,13 +47,14 @@ import {
 } from 'lucide-react';
 import MetricCard from './MetricCard';
 import IopLabel, { type IopSource } from './IopLabel';
+import IopVariance from './IopVariance';
 import { motion, AnimatePresence } from 'motion/react';
 import FloatManagementPanel from './FloatManagementPanel';
 import { getFloatRequestsForOwner } from '../utils/floatManagement';
 import { getDailyServicingRows } from '../utils/indexedDB';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
-import { calculateOwnerMtdVolume, latestWeeklyEntryForPeriod } from '../utils/kpiEngine';
-import { periodsMatch } from '../utils/periodUtils';
+import { calculateOwnerMtdVolume, latestWeeklyEntryAtOrBefore, dailyIopForPeriod } from '../utils/kpiEngine';
+import { periodsMatch, toIsoPeriod } from '../utils/periodUtils';
 import { fetchMonthlyMonths } from '../lib/monthly.functions';
 import { readWeeklyStatsHistory } from '../utils/weeklyHistory';
 import { resolveOwnerMatch } from '../utils/ownerMatch';
@@ -110,7 +111,7 @@ export default function OwnerDetailsView({
   isStandaloneAgent = false,
   onLogout
 }: OwnerDetailsViewProps) {
-  const { currentPeriod } = useReportingPeriod();
+  const { currentPeriod, displayPeriod } = useReportingPeriod();
   // Try to find selected owner in our list; fallback to first owner
   const owner = (() => {
     const saved = localStorage.getItem('ownersList');
@@ -646,21 +647,53 @@ export default function OwnerDetailsView({
     return () => { cancelled = true; };
   }, []);
 
-  const settlement = useMemo((): { penalty: number; iop: number; source: string; kind: IopSource | null } => {
-    if (!localOwner) return { penalty: 0, iop: 0, source: 'NO REPORT YET', kind: null };
+  const settlement = useMemo((): {
+    penalty: number;
+    iop: number;
+    source: string;
+    kind: IopSource | null;
+    period: string | null;
+    monthLabel: string;
+  } => {
+    const none = { penalty: 0, iop: 0, source: 'NO REPORT YET', kind: null, period: null, monthLabel: '' };
+    if (!localOwner) return none;
     if (monthlyReportMonths.some(m => periodsMatch(m, currentPeriod))) {
-      return { penalty: localOwner.penalty || 0, iop: localOwner.iopVolume || 0, source: 'MONTHLY REPORT', kind: 'monthly' };
+      return { penalty: localOwner.penalty || 0, iop: localOwner.iopVolume || 0, source: 'MONTHLY REPORT', kind: 'monthly', period: currentPeriod, monthLabel: displayPeriod };
     }
-    const week = latestWeeklyEntryForPeriod(readWeeklyStatsHistory(), currentPeriod);
-    if (!week) return { penalty: 0, iop: 0, source: 'NO REPORT YET', kind: null };
+    // The selected month's own report; in the first days of a month (no
+    // report yet) the latest earlier month's weekly report.
+    const week = latestWeeklyEntryAtOrBefore(readWeeklyStatsHistory(), currentPeriod);
+    if (!week) return none;
+    const isFallback = !periodsMatch(week.reportingMonth, currentPeriod);
     const b = (week.byOwner || []).find(o => o.ownerId === localOwner.id);
     return {
       penalty: b?.penalty || 0,
       iop: b?.iopValue || 0,
-      source: `WEEKLY REPORT · ${week.reportingWeek.split(' (')[0].toUpperCase()}`,
+      source: `WEEKLY REPORT · ${week.reportingWeek.split(' (')[0].toUpperCase()}${isFallback ? ` · ${String(week.reportingMonth).toUpperCase()} · LATEST AVAILABLE` : ''}`,
       kind: 'weekly',
+      period: toIsoPeriod(week.reportingMonth || ''),
+      monthLabel: String(week.reportingMonth),
     };
-  }, [localOwner, currentPeriod, monthlyReportMonths]);
+  }, [localOwner, currentPeriod, displayPeriod, monthlyReportMonths]);
+
+  // This owner's Daily MGT IOP for the same month as the settlement report.
+  const settlementDailyIop = useMemo(() => {
+    if (!localOwner || !settlement.period || servicingRows.length === 0) return 0;
+    const owners: Owner[] = JSON.parse(localStorage.getItem('ownersList') || '[]');
+    const classified = getClassifiedRowsCached(
+      servicingRows,
+      JSON.parse(localStorage.getItem('saTillRegistry') || '[]'),
+      JSON.parse(localStorage.getItem('baseWakalaIndex') || '[]'),
+      tillsList,
+      owners,
+    );
+    let iop = dailyIopForPeriod(classified, settlement.period, localOwner.id);
+    if (iop === 0 && localOwner.name) {
+      const matchedId = resolveOwnerMatch(localOwner.name, owners, 'Owner Portal').matchedOwner?.id;
+      if (matchedId && matchedId !== localOwner.id) iop = dailyIopForPeriod(classified, settlement.period, matchedId);
+    }
+    return iop;
+  }, [localOwner, settlement.period, servicingRows, tillsList]);
 
   const [manualTargetsList] = useState<ManualOwnerTarget[]>(() => getSavedManualOwnerTargets());
 
@@ -1146,7 +1179,11 @@ export default function OwnerDetailsView({
                 subValue="BASE WAKALA SERVED BY OUTSIDE SA"
                 icon={Layers}
                 variant="purple"
-              />
+              >
+                {settlement.kind && (
+                  <IopVariance daily={settlementDailyIop} report={settlement.iop} reportKind={settlement.kind} monthLabel={settlement.monthLabel} />
+                )}
+              </MetricCard>
             </div>
           </div>
 

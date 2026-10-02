@@ -2,10 +2,17 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { ViewType, KPIMetric, TopOwner, RecentReport, AuditReport, Owner, ManualOwnerTarget, PriorityWakala, BaseWakala } from '../types';
 import { dashboardKPIs, topOwners, recentReports } from '../data';
 import { calculateCompanyKPIs, CompanyKPIsResult } from '../utils/mappingEngine';
-import { getCompanyTotalKPI1Target, latestWeeklyEntryForPeriod } from '../utils/kpiEngine';
-import { periodsMatch } from '../utils/periodUtils';
+import {
+  getCompanyTotalKPI1Target,
+  latestWeeklyEntryForPeriod,
+  latestWeeklyEntryAtOrBefore,
+  dailyIopForPeriod,
+} from '../utils/kpiEngine';
+import { periodsMatch, toIsoPeriod } from '../utils/periodUtils';
 import { fetchMonthlyMonths } from '../lib/monthly.functions';
 import IopLabel from './IopLabel';
+import IopVariance from './IopVariance';
+import type { ClassifiedRow } from '../utils/classification';
 import { computeLiveKpiTotals } from '../utils/liveKpiTotals';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
 import { getSavedManualOwnerTargets } from '../utils/targetResolution';
@@ -201,6 +208,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
 
   // Weekly KPI progression — appended as each new weekly workbook is uploaded.
   const [weeklyStats, setWeeklyStats] = useState<WeeklyStatsEntry[]>(() => readWeeklyStatsHistory());
+  const [classifiedDaily, setClassifiedDaily] = useState<ClassifiedRow[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -498,6 +506,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
             const manualTargets: ManualOwnerTarget[] = getSavedManualOwnerTargets();
 
             const classified = getClassifiedRowsCached(rows || [], saTillRegistry, baseWakalaIndex, tillsList, owners);
+            if (isMounted) setClassifiedDaily(classified);
 
             const totals = computeLiveKpiTotals(classified, owners, currentPeriod, manualTargets, priorityWakalas, baseWakalaIndex, readWeeklyStatsHistory());
 
@@ -876,13 +885,24 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
 
           {/* Settlement Ledger Row */}
           {(() => {
+            // The selected month's own report; in the first days of a month
+            // (no report yet) the latest earlier month's weekly report.
             const hasMonthly = monthlyReportMonths.some(m => periodsMatch(m, currentPeriod));
-            const week = hasMonthly ? null : latestWeeklyEntryForPeriod(readWeeklyStatsHistory(), currentPeriod);
+            const week = hasMonthly ? null : latestWeeklyEntryAtOrBefore(weeklyStats, currentPeriod);
+            const isFallback = !!week && !periodsMatch(week.reportingMonth, currentPeriod);
             const settlement = hasMonthly
-              ? { penalty: companyKPIs.totalPenalty || 0, iop: companyKPIs.totalIopVolume || 0, source: 'MONTHLY REPORT', kind: 'monthly' as const }
+              ? { penalty: companyKPIs.totalPenalty || 0, iop: companyKPIs.totalIopVolume || 0, source: 'MONTHLY REPORT', kind: 'monthly' as const, period: currentPeriod, monthLabel: displayPeriod }
               : week
-                ? { penalty: week.penalty || 0, iop: week.iopValue || 0, source: `WEEKLY REPORT · ${week.reportingWeek.split(' (')[0].toUpperCase()}`, kind: 'weekly' as const }
-                : { penalty: 0, iop: 0, source: 'NO REPORT YET', kind: null };
+                ? {
+                    penalty: week.penalty || 0,
+                    iop: week.iopValue || 0,
+                    source: `WEEKLY REPORT · ${week.reportingWeek.split(' (')[0].toUpperCase()}${isFallback ? ` · ${String(week.reportingMonth).toUpperCase()} · LATEST AVAILABLE` : ''}`,
+                    kind: 'weekly' as const,
+                    period: toIsoPeriod(week.reportingMonth || ''),
+                    monthLabel: String(week.reportingMonth),
+                  }
+                : { penalty: 0, iop: 0, source: 'NO REPORT YET', kind: null, period: null, monthLabel: '' };
+            const dailyIop = settlement.period ? dailyIopForPeriod(classifiedDaily, settlement.period) : 0;
             return (
               <div className="space-y-2">
                 <div className="flex items-center gap-2 px-1">
@@ -903,7 +923,11 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                     subValue="BASE WAKALA SERVED BY OUTSIDE SA"
                     icon={Layers}
                     variant="purple"
-                  />
+                  >
+                    {settlement.kind && (
+                      <IopVariance daily={dailyIop} report={settlement.iop} reportKind={settlement.kind} monthLabel={settlement.monthLabel} />
+                    )}
+                  </MetricCard>
                 </div>
               </div>
             );

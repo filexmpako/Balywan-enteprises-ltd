@@ -977,8 +977,11 @@ export async function recalculateAllPerformances(providedRows?: any[]): Promise<
     baseWakalaIndex.forEach(w => {
       const msisdnKey = normalizeMsisdn(w.msisdn);
       if (msisdnKey) baseWakalaByMsisdn.set(msisdnKey, w);
+    });
+    // Alternate numbers never take over another wakala's main number.
+    baseWakalaIndex.forEach(w => {
       const altKey = normalizeMsisdn((w as any).altMsisdn || (w as any).alternateNumber);
-      if (altKey) baseWakalaByMsisdn.set(altKey, w);
+      if (altKey && !baseWakalaByMsisdn.has(altKey)) baseWakalaByMsisdn.set(altKey, w);
     });
   }
 
@@ -1387,8 +1390,11 @@ export async function calculateCompanyKPIs(realRows: any[]): Promise<CompanyKPIs
     baseWakalaIndex.forEach(w => {
       const msisdnKey = normalizeMsisdn(w.msisdn);
       if (msisdnKey) baseWakalaByMsisdn.set(msisdnKey, w);
+    });
+    // Alternate numbers never take over another wakala's main number.
+    baseWakalaIndex.forEach(w => {
       const altKey = normalizeMsisdn((w as any).altMsisdn || (w as any).alternateNumber);
-      if (altKey) baseWakalaByMsisdn.set(altKey, w);
+      if (altKey && !baseWakalaByMsisdn.has(altKey)) baseWakalaByMsisdn.set(altKey, w);
     });
   }
 

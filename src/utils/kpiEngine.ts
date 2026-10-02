@@ -51,6 +51,33 @@ export function latestWeeklyEntryForPeriod(weeklyStats: WeeklyStatsEntry[], peri
 }
 
 /**
+ * The weekly report the Settlement Ledger shows for `period`: that month's
+ * own latest entry, else the newest entry of the most recent earlier month
+ * (the first days of a new month have no report yet).
+ */
+export function latestWeeklyEntryAtOrBefore(weeklyStats: WeeklyStatsEntry[], period: string): WeeklyStatsEntry | null {
+  const own = latestWeeklyEntryForPeriod(weeklyStats, period);
+  if (own) return own;
+  const iso = toIsoPeriod(period);
+  const earlier = Array.from(new Set(weeklyStats.map(w => toIsoPeriod(w.reportingMonth || ''))))
+    .filter(m => /^\d{4}-\d{2}$/.test(m) && m < iso)
+    .sort();
+  const month = earlier[earlier.length - 1];
+  return month ? latestWeeklyEntryForPeriod(weeklyStats, month) : null;
+}
+
+/** Daily MGT IOP for `period`: the whole company, or one servicing owner when ownerId is given. */
+export function dailyIopForPeriod(classifiedRows: ClassifiedRow[], period: string, ownerId?: string): number {
+  let total = 0;
+  for (const cr of filterClassifiedRowsToPeriod(classifiedRows, period)) {
+    if (cr.bucket !== 'IOP') continue;
+    if (ownerId && cr.auditRecord?.ownerId !== ownerId) continue;
+    total += cr.auditRecord?.amount || 0;
+  }
+  return total;
+}
+
+/**
  * Per owner: the greater of Daily MGT's month-to-date served volume and the
  * latest weekly report's served value for the month. The telco weekly report
  * is itself month-to-date (its Month column is the whole month and its
