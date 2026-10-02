@@ -1,0 +1,16 @@
+{
+  "name": "Balwyn Wakala Servicing & Float Governance ERP",
+  "short_name": "Balwyn ERP",
+  "description": "Mobile money super-agent operations, float governance and servicing analytics platform for Tanzania.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b2b5b",
+  "theme_color": "#0b2b5b",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
