@@ -53,7 +53,12 @@ import FloatManagementPanel from './FloatManagementPanel';
 import { getFloatRequestsForOwner } from '../utils/floatManagement';
 import { getDailyServicingRows } from '../utils/indexedDB';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
-import { calculateOwnerMtdVolume, latestWeeklyEntryAtOrBefore, dailyIopForPeriod } from '../utils/kpiEngine';
+import {
+  calculateOwnerMtdVolume,
+  latestWeeklyEntryAtOrBefore,
+  dailyIopForPeriod,
+  reportEndDate,
+} from '../utils/kpiEngine';
 import { periodsMatch, toIsoPeriod } from '../utils/periodUtils';
 import { fetchMonthlyMonths } from '../lib/monthly.functions';
 import { readWeeklyStatsHistory } from '../utils/weeklyHistory';
@@ -654,6 +659,7 @@ export default function OwnerDetailsView({
     kind: IopSource | null;
     period: string | null;
     monthLabel: string;
+    endDate?: string;
   } => {
     const none = { penalty: 0, iop: 0, source: 'NO REPORT YET', kind: null, period: null, monthLabel: '' };
     if (!localOwner) return none;
@@ -673,10 +679,11 @@ export default function OwnerDetailsView({
       kind: 'weekly',
       period: toIsoPeriod(week.reportingMonth || ''),
       monthLabel: String(week.reportingMonth),
+      endDate: reportEndDate(week),
     };
   }, [localOwner, currentPeriod, displayPeriod, monthlyReportMonths]);
 
-  // This owner's Daily MGT IOP for the same month as the settlement report.
+  // This owner's Daily MGT IOP over the same month-to-date window as the report.
   const settlementDailyIop = useMemo(() => {
     if (!localOwner || !settlement.period || servicingRows.length === 0) return 0;
     const owners: Owner[] = JSON.parse(localStorage.getItem('ownersList') || '[]');
@@ -687,13 +694,15 @@ export default function OwnerDetailsView({
       tillsList,
       owners,
     );
-    let iop = dailyIopForPeriod(classified, settlement.period, localOwner.id);
+    let iop = dailyIopForPeriod(classified, settlement.period, localOwner.id, settlement.endDate);
     if (iop === 0 && localOwner.name) {
       const matchedId = resolveOwnerMatch(localOwner.name, owners, 'Owner Portal').matchedOwner?.id;
-      if (matchedId && matchedId !== localOwner.id) iop = dailyIopForPeriod(classified, settlement.period, matchedId);
+      if (matchedId && matchedId !== localOwner.id) {
+        iop = dailyIopForPeriod(classified, settlement.period, matchedId, settlement.endDate);
+      }
     }
     return iop;
-  }, [localOwner, settlement.period, servicingRows, tillsList]);
+  }, [localOwner, settlement.period, settlement.endDate, servicingRows, tillsList]);
 
   const [manualTargetsList] = useState<ManualOwnerTarget[]>(() => getSavedManualOwnerTargets());
 
@@ -1181,7 +1190,7 @@ export default function OwnerDetailsView({
                 variant="purple"
               >
                 {settlement.kind && (
-                  <IopVariance daily={settlementDailyIop} report={settlement.iop} reportKind={settlement.kind} monthLabel={settlement.monthLabel} />
+                  <IopVariance daily={settlementDailyIop} report={settlement.iop} reportKind={settlement.kind} monthLabel={settlement.monthLabel} endDate={settlement.endDate} />
                 )}
               </MetricCard>
             </div>
