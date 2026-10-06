@@ -50,35 +50,31 @@ export default function KPIServicingDashboard({
         topDistricts: [] as { name: string; value: number }[],
         duplicates: 0,
         missingValues: 0,
+        noOwner: 0,
+        perWakala: false,
         zones: [] as string[]
       };
     }
 
     const keys = Object.keys(parsedServicing[0]).filter(k => !k.startsWith('_'));
-    let volCol = '';
-    let statusCol = '';
-    let agentIdCol = '';
-    let zoneCol = '';
-    let districtCol = '';
+    // Known report columns first (exact, case/underscore-insensitive), then
+    // the old keyword guess for other layouts. A loose guess picked 'siteid'
+    // as the owner and transaction-id column and found no value column at
+    // all in the telco servicing report.
+    const norm = (k: string) => k.toLowerCase().replace(/[\s_-]+/g, '');
+    const findCol = (exact: string[], guess?: (kLower: string) => boolean) =>
+      keys.find(k => exact.includes(norm(k))) || (guess ? keys.find(k => guess(k.toLowerCase())) : undefined) || '';
 
-    keys.forEach(k => {
-      const kLower = k.toLowerCase();
-      if (!volCol && (kLower.includes('volume') || kLower.includes('amount') || kLower.includes('value') || kLower.includes('tzs'))) {
-        volCol = k;
-      }
-      if (!statusCol && kLower.includes('status')) {
-        statusCol = k;
-      }
-      if (!agentIdCol && (kLower.includes('agent') || kLower.includes('id') || kLower.includes('owner'))) {
-        agentIdCol = k;
-      }
-      if (!zoneCol && (kLower.includes('zone') || kLower.includes('region'))) {
-        zoneCol = k;
-      }
-      if (!districtCol && (kLower.includes('district') || kLower.includes('ward') || kLower.includes('city'))) {
-        districtCol = k;
-      }
-    });
+    const volCol = findCol(
+      ['saservicingval', 'saservicingvalue', 'servicingval', 'volumetzs', 'volume', 'amount', 'value'],
+      k => k.includes('volume') || k.includes('amount') || k.includes('value') || k.includes('tzs'),
+    );
+    const statusCol = findCol(['wakalastatus'], k => k.includes('status'));
+    const msisdnCol = findCol(['msisdn', 'branchmsisdn', 'wakalamsisdn']);
+    const ownerCol = findCol(['owner', 'ownername', 'wakalaowner', 'mastername']);
+    const zoneCol = findCol(['salesregion', 'region', 'zone'], k => k.includes('zone') || k.includes('region'));
+    const districtCol = findCol(['district'], k => k.includes('district') || k.includes('ward') || k.includes('city'));
+    const txIdCol = findCol(['transactionid', 'transid', 'txnid', 'receiptno', 'transactionref']) || msisdnCol;
 
     let totalValue = 0;
     let highestValue = 0;
@@ -88,60 +84,57 @@ export default function KPIServicingDashboard({
     const zonesSet = new Set<string>();
     let activeWakalaCount = 0;
     let inactiveWakalaCount = 0;
+    let noOwnerCount = 0;
 
     const ownerAggregates: Record<string, number> = {};
     const regionAggregates: Record<string, number> = {};
     const districtAggregates: Record<string, number> = {};
 
-    const txIdCol = keys.find(k => k.toLowerCase().includes('transaction') || k.toLowerCase().includes('txn') || k.toLowerCase().includes('id'));
     const txIds = new Set<string>();
     let duplicates = 0;
     let missingValues = 0;
+    const isBlank = (v: unknown) => {
+      const t = String(v ?? '').trim().toLowerCase();
+      return !t || t === 'null' || t === 'none' || t === 'n/a' || t === '#n/a';
+    };
 
     parsedServicing.forEach(row => {
       // 1. Value calculation
-      const valStr = String(row[volCol] || '0').replace(/,/g, '').trim();
-      const val = parseFloat(valStr) || 0;
+      const val = volCol ? parseFloat(String(row[volCol] ?? '0').replace(/,/g, '').trim()) || 0 : 0;
       totalValue += val;
       if (val > highestValue) highestValue = val;
       if (val < lowestValue && val > 0) lowestValue = val;
 
-      // 2. Duplicates check
+      // 2. Duplicates: the same wakala (or transaction) listed twice
       if (txIdCol) {
-        const txId = String(row[txIdCol] || '').trim();
+        const txId = String(row[txIdCol] ?? '').trim();
         if (txId) {
           if (txIds.has(txId)) duplicates++;
           else txIds.add(txId);
         }
       }
 
-      // 3. Missing values check
-      keys.forEach(k => {
-        const cellVal = String(row[k] || '').trim();
-        if (!cellVal || cellVal.toLowerCase() === 'null' || cellVal.toLowerCase() === 'none' || cellVal.toLowerCase() === 'n/a') {
-          missingValues++;
-        }
+      // 3. Missing values in the columns the system relies on
+      [msisdnCol, volCol].filter(Boolean).forEach(k => {
+        if (isBlank(row[k])) missingValues++;
       });
 
-      // 4. Owner & Wakala aggregations
-      const wakalaName = String(row['Wakala Name'] || row['owner_name'] || row['Owner Name'] || row['Owner'] || row['Wakala'] || 'Unknown').trim();
-      if (wakalaName) {
-        uniqueWakala.add(wakalaName);
-        ownerAggregates[wakalaName] = (ownerAggregates[wakalaName] || 0) + val;
-      }
+      // 4. Owner & Wakala aggregations ('0' / '#N/A' = no owner in the file)
+      const rawOwner = ownerCol ? String(row[ownerCol] ?? '').trim() : '';
+      const hasOwner = !!rawOwner && rawOwner !== '0' && !isBlank(rawOwner);
+      const ownerName = hasOwner ? rawOwner : 'No owner';
+      if (hasOwner) uniqueOwners.add(rawOwner.toUpperCase());
+      else noOwnerCount++;
+      ownerAggregates[ownerName] = (ownerAggregates[ownerName] || 0) + val;
+      uniqueWakala.add(msisdnCol ? String(row[msisdnCol] ?? '').trim() : ownerName);
 
-      const agentId = String(row[agentIdCol] || '').trim();
-      if (agentId) {
-        uniqueOwners.add(agentId);
-      }
-
-      // 5. Status checks
-      const status = String(row[statusCol] || 'Active').trim().toLowerCase();
-      if (status.includes('active') || status.includes('completed') || status.includes('success') || status.includes('on')) {
-        activeWakalaCount++;
-      } else {
-        inactiveWakalaCount++;
-      }
+      // 5. Active: a 1/0 status column is read as a number; text otherwise
+      const statusRaw = String(row[statusCol] ?? 'Active').trim().toLowerCase();
+      const active = /^-?\d+(\.\d+)?$/.test(statusRaw)
+        ? Number(statusRaw) === 1
+        : statusRaw.includes('active') || statusRaw.includes('completed') || statusRaw.includes('success') || statusRaw === 'on';
+      if (active) activeWakalaCount++;
+      else inactiveWakalaCount++;
 
       // 6. Region & District breakdown
       if (zoneCol) {
@@ -158,7 +151,7 @@ export default function KPIServicingDashboard({
     if (lowestValue === Infinity) lowestValue = 0;
 
     // Sort and format rankings
-    const sortedOwners = Object.keys(ownerAggregates).map(name => ({
+    const sortedOwners = Object.keys(ownerAggregates).filter(name => name !== 'No owner').map(name => ({
       name,
       value: ownerAggregates[name]
     })).sort((a, b) => b.value - a.value);
@@ -182,8 +175,10 @@ export default function KPIServicingDashboard({
       averageValue: parsedServicing.length > 0 ? totalValue / parsedServicing.length : 0,
       highestValue,
       lowestValue,
-      totalOwners: uniqueOwners.size || 4,
+      totalOwners: uniqueOwners.size,
       totalWakala: uniqueWakala.size || parsedServicing.length,
+      noOwner: noOwnerCount,
+      perWakala: !!msisdnCol,
       activeWakala: activeWakalaCount,
       inactiveWakala: inactiveWakalaCount,
       topOwners,
@@ -279,13 +274,13 @@ export default function KPIServicingDashboard({
 
         {/* Average Transaction Value */}
         <div className="bg-brand-card rounded-2xl border border-brand-gray-border p-5 shadow-sm space-y-1">
-          <span className="text-[10px] font-bold text-brand-text-variant uppercase tracking-wider block">Average Ticket Volume</span>
+          <span className="text-[10px] font-bold text-brand-text-variant uppercase tracking-wider block">{stats.perWakala ? 'Average per Wakala' : 'Average Ticket'}</span>
           <div className="flex items-baseline gap-1">
             <span className="text-xl font-black text-brand-text">
               TZS {stats.averageValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}
             </span>
           </div>
-          <p className="text-[10px] text-brand-text-variant">Across {stats.totalRecords} total records</p>
+          <p className="text-[10px] text-brand-text-variant">{stats.totalRecords} rows</p>
         </div>
 
         {/* Owners & Wakala counts */}
@@ -297,7 +292,7 @@ export default function KPIServicingDashboard({
               {((stats.activeWakala / (stats.totalWakala || 1)) * 100).toFixed(0)}% Active
             </span>
           </div>
-          <p className="text-[10px] text-brand-text-variant">Unique Master Owners: {stats.totalOwners}</p>
+          <p className="text-[10px] text-brand-text-variant">Owners: {stats.totalOwners} · No owner: {stats.noOwner}</p>
         </div>
 
         {/* Data Quality checks */}

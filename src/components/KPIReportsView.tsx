@@ -31,7 +31,7 @@ import type { WeeklyStatsEntry } from '../utils/weeklyKpiEngine';
 import { calculateCompanyKPIs } from '../utils/mappingEngine';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
 import { getSavedManualOwnerTargets } from '../utils/targetResolution';
-import { isKpi1RowName, isKpi2RowName } from '../utils/kpiRowMatch';
+import { isKpi1RowName, isKpi2RowName, withLiveKpiRows } from '../utils/kpiRowMatch';
 import { formatNumberWithAbbreviation } from '../utils/numberFormat';
 import { computeLiveKpiTotals, type LiveKpiTotals } from '../utils/liveKpiTotals';
 import { exportKPIAnalysisToPDF } from '../utils/pdfExport';
@@ -93,7 +93,7 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
   const [liveTotals, setLiveTotals] = useState<LiveKpiTotals>({ kpi1: null, kpi2: null });
 
   const kpis: KPIMetric[] = useMemo(() => {
-    return rawKpis.map(kpi => {
+    return withLiveKpiRows(rawKpis, liveTotals).map(kpi => {
       const applyLive = (targetVal: number, achievedVal: number, isCurrency: boolean): KPIMetric => {
         const realPct = targetVal > 0 ? (achievedVal / targetVal) * 100 : 0;
         const performance = Math.round(Math.min(realPct, 100) * 10) / 10;
@@ -651,9 +651,9 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
             <FileSpreadsheet className="h-8 w-8" />
           </div>
           <div className="space-y-2 max-w-md">
-            <h3 className="font-sans text-lg font-bold text-brand-text">No KPI Data Uploaded Yet</h3>
+            <h3 className="font-sans text-lg font-bold text-brand-text">No KPI targets for {displayPeriod}</h3>
             <p className="font-sans text-xs text-brand-text-variant leading-relaxed">
-              No KPI data uploaded yet — go to Upload Reports to sync this month's KPI Summary
+              KPI 1 / KPI 2 appear once {displayPeriod} has targets (Targets page or a KPI-targets upload).
             </p>
           </div>
           <button

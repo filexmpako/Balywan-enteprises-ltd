@@ -45,14 +45,21 @@ export default function KPIInteractiveCharts({
     ];
   }, [parsedKpis]);
 
+  // Servicing value per row: the telco report's SA_Servicing_Val, else the
+  // Daily MGT / legacy volume columns.
+  const rowValue = (row: any): number =>
+    parseFloat(
+      String(row['SA_Servicing_Val'] ?? row['Volume (TZS)'] ?? row['volume'] ?? row['amount'] ?? '0').replace(/[^0-9.-]/g, ''),
+    ) || 0;
+
   // 2. Process Top Owners for Bar Chart
   const topOwnersStats = useMemo(() => {
     const ownerAggregates: Record<string, number> = {};
     parsedServicing.forEach(row => {
-      const name = String(row['Wakala Name'] || row['owner_name'] || row['Owner Name'] || row['Owner'] || row['Wakala'] || 'Unknown').trim();
-      const valStr = String(row['Volume (TZS)'] || row['volume'] || row['amount'] || '0').replace(/[^0-9.-]/g, '');
-      const val = parseFloat(valStr) || 0;
-      ownerAggregates[name] = (ownerAggregates[name] || 0) + val;
+      const rawName = String(row['OWNER'] || row['Wakala Name'] || row['owner_name'] || row['Owner Name'] || row['Owner'] || row['Wakala'] || '').trim();
+      if (!rawName || rawName === '0' || rawName.toUpperCase() === '#N/A') return; // no owner in the file
+      const val = rowValue(row);
+      ownerAggregates[rawName] = (ownerAggregates[rawName] || 0) + val;
     });
 
     const sorted = Object.keys(ownerAggregates).map(name => ({
@@ -67,16 +74,20 @@ export default function KPIInteractiveCharts({
   const regionStats = useMemo(() => {
     const regionAggregates: Record<string, number> = {};
     parsedServicing.forEach(row => {
-      const zone = String(row['Zone'] || row['region'] || row['Region'] || 'Unassigned').trim();
-      const valStr = String(row['Volume (TZS)'] || row['volume'] || row['amount'] || '0').replace(/[^0-9.-]/g, '');
-      const val = parseFloat(valStr) || 0;
+      const zone = String(row['Sales_region'] || row['Zone'] || row['region'] || row['Region'] || 'Unassigned').trim();
+      const val = rowValue(row);
       regionAggregates[zone] = (regionAggregates[zone] || 0) + val;
     });
 
-    return Object.keys(regionAggregates).map(name => ({
+    const sorted = Object.keys(regionAggregates).map(name => ({
       name,
       value: regionAggregates[name]
     })).sort((a, b) => b.value - a.value);
+
+    // Top 7 regions + "Others", so a report listing dozens of regions fits.
+    if (sorted.length <= 8) return sorted;
+    const others = sorted.slice(7).reduce((sum, r) => sum + r.value, 0);
+    return [...sorted.slice(0, 7), { name: 'Others', value: others }];
   }, [parsedServicing]);
 
   // 4. Servicing Value Distribution (Histogram Buckets)
@@ -87,8 +98,7 @@ export default function KPIInteractiveCharts({
     let over8M = 0;
 
     parsedServicing.forEach(row => {
-      const valStr = String(row['Volume (TZS)'] || row['volume'] || row['amount'] || '0').replace(/[^0-9.-]/g, '');
-      const val = parseFloat(valStr) || 0;
+      const val = rowValue(row);
       if (val < 2000000) under2M++;
       else if (val < 5000000) b2to5M++;
       else if (val < 8000000) b5to8M++;

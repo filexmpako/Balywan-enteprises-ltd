@@ -5,11 +5,11 @@ import { calculateCompanyKPIs, CompanyKPIsResult } from '../utils/mappingEngine'
 import {
   getCompanyTotalKPI1Target,
   latestWeeklyEntryForPeriod,
-  latestWeeklyEntryAtOrBefore,
+  pickSettlementReport,
   dailyIopForPeriod,
   reportEndDate,
 } from '../utils/kpiEngine';
-import { periodsMatch, toIsoPeriod } from '../utils/periodUtils';
+import { loadMonthlyReportStats, type MonthlyReportStats } from '../utils/monthlySettlement';
 import { fetchMonthlyMonths } from '../lib/monthly.functions';
 import IopLabel from './IopLabel';
 import IopVariance, { shortMonth } from './IopVariance';
@@ -18,7 +18,7 @@ import type { ClassifiedRow } from '../utils/classification';
 import { computeLiveKpiTotals } from '../utils/liveKpiTotals';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
 import { getSavedManualOwnerTargets } from '../utils/targetResolution';
-import { isKpi1RowName, isKpi2RowName } from '../utils/kpiRowMatch';
+import { isKpi1RowName, isKpi2RowName, withLiveKpiRows } from '../utils/kpiRowMatch';
 import { formatNumberWithAbbreviation } from '../utils/numberFormat';
 import { getDailyServicingRows } from '../utils/indexedDB';
 import { refreshWeeklyStatsHistory, readWeeklyStatsHistory } from '../utils/weeklyHistory';
@@ -212,6 +212,22 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
   const [weeklyStats, setWeeklyStats] = useState<WeeklyStatsEntry[]>(() => readWeeklyStatsHistory());
   const [classifiedDaily, setClassifiedDaily] = useState<ClassifiedRow[]>([]);
 
+  // Settlement Ledger source, and the chosen Monthly report's own figures.
+  const settlementReport = useMemo(
+    () => pickSettlementReport(currentPeriod, monthlyReportMonths, weeklyStats),
+    [currentPeriod, monthlyReportMonths, weeklyStats],
+  );
+  const [monthlyStats, setMonthlyStats] = useState<{ month: string; stats: MonthlyReportStats | null } | null>(null);
+  const monthlyToLoad = settlementReport?.kind === 'monthly' ? settlementReport.month : '';
+  useEffect(() => {
+    if (!monthlyToLoad) return;
+    let cancelled = false;
+    loadMonthlyReportStats(monthlyToLoad)
+      .then(stats => { if (!cancelled) setMonthlyStats({ month: monthlyToLoad, stats }); })
+      .catch(err => console.error('Monthly settlement load failed:', err));
+    return () => { cancelled = true; };
+  }, [monthlyToLoad]);
+
   useEffect(() => {
     let cancelled = false;
     const load = () => {
@@ -290,7 +306,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
   }>({ kpi1: null, kpi2: null });
 
   const kpis: KPIMetric[] = useMemo(() => {
-    return rawKpis.map(kpi => {
+    return withLiveKpiRows(rawKpis, liveTotals).map(kpi => {
       const applyLive = (targetVal: number, achievedVal: number, isCurrency: boolean): KPIMetric => {
         const realPct = targetVal > 0 ? (achievedVal / targetVal) * 100 : 0;
         const performance = Math.round(Math.min(realPct, 100) * 10) / 10;
@@ -886,24 +902,32 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
 
           {/* Settlement Ledger Row */}
           {(() => {
-            // The selected month's own report; in the first days of a month
-            // (no report yet) the latest earlier month's weekly report.
-            const hasMonthly = monthlyReportMonths.some(m => periodsMatch(m, currentPeriod));
-            const week = hasMonthly ? null : latestWeeklyEntryAtOrBefore(weeklyStats, currentPeriod);
-            const isFallback = !!week && !periodsMatch(week.reportingMonth, currentPeriod);
-            const settlement = hasMonthly
-              ? { penalty: companyKPIs.totalPenalty || 0, iop: companyKPIs.totalIopVolume || 0, source: `Monthly · ${shortMonth(displayPeriod)}`, kind: 'monthly' as const, period: currentPeriod, monthLabel: displayPeriod, endDate: undefined }
-              : week
+            // The selected month's report (Monthly wins over weekly); in the
+            // first days of a month, the latest earlier month's report.
+            const pick = settlementReport;
+            const latest = pick?.isFallback ? ' · Latest' : '';
+            const settlement =
+              pick?.kind === 'monthly'
                 ? {
-                    penalty: week.penalty || 0,
-                    iop: week.iopValue || 0,
-                    source: `${week.reportingWeek.split(' (')[0]} · ${shortMonth(String(week.reportingMonth))}${isFallback ? ' · Latest' : ''}`,
-                    kind: 'weekly' as const,
-                    period: toIsoPeriod(week.reportingMonth || ''),
-                    monthLabel: String(week.reportingMonth),
-                    endDate: reportEndDate(week),
+                    penalty: monthlyStats?.month === pick.month ? monthlyStats.stats?.penalty || 0 : 0,
+                    iop: monthlyStats?.month === pick.month ? monthlyStats.stats?.iopValue || 0 : 0,
+                    source: `Monthly · ${shortMonth(pick.month)}${latest}`,
+                    kind: 'monthly' as const,
+                    period: pick.iso,
+                    monthLabel: pick.month,
+                    endDate: undefined,
                   }
-                : { penalty: 0, iop: 0, source: 'No report yet', kind: null, period: null, monthLabel: '', endDate: undefined };
+                : pick?.kind === 'weekly'
+                  ? {
+                      penalty: pick.entry.penalty || 0,
+                      iop: pick.entry.iopValue || 0,
+                      source: `${pick.entry.reportingWeek.split(' (')[0]} · ${shortMonth(String(pick.entry.reportingMonth))}${latest}`,
+                      kind: 'weekly' as const,
+                      period: pick.iso,
+                      monthLabel: String(pick.entry.reportingMonth),
+                      endDate: reportEndDate(pick.entry),
+                    }
+                  : { penalty: 0, iop: 0, source: 'No report yet', kind: null, period: null, monthLabel: '', endDate: undefined };
             // Same month-to-date window as the report it is compared with.
             const dailyIop = settlement.period
               ? dailyIopForPeriod(classifiedDaily, settlement.period, undefined, settlement.endDate)

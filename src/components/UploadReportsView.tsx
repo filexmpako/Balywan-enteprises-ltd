@@ -2143,7 +2143,9 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
           };
           onAddAuditReport(newReport);
         } else {
-          localStorage.setItem('dashboardKPIs', JSON.stringify(savedKpis));
+          // A servicing report without a KPI-targets sheet must not wipe the
+          // existing KPI list (it would blank KPI Reports).
+          if (savedKpis.length > 0) localStorage.setItem('dashboardKPIs', JSON.stringify(savedKpis));
 
           const activeMonth = uploadMonth;
 
@@ -3549,14 +3551,29 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
                     <span className="text-brand-text-variant">Extracted records:</span>
                     <strong className="text-brand-text font-mono">{syncStats.processed} records</strong>
                   </div>
-                  <div className="flex justify-between border-b border-brand-gray-border/50 pb-2">
-                    <span className="text-brand-text-variant">New Owners Created:</span>
-                    <strong className="text-indigo-600 font-black">+{syncStats.created} registered</strong>
-                  </div>
-                  <div className="flex justify-between border-b border-brand-gray-border/50 pb-2">
-                    <span className="text-brand-text-variant">Existing Profiles Updated:</span>
-                    <strong className="text-amber-600 font-black">+{syncStats.updated} profiles</strong>
-                  </div>
+                  {reportType === 'kpi' || reportType === 'weekly_kpi' ? (
+                    <>
+                      <div className="flex justify-between border-b border-brand-gray-border/50 pb-2">
+                        <span className="text-brand-text-variant">Wakala rows saved:</span>
+                        <strong className="text-amber-600 font-black">{syncStats.updated} rows</strong>
+                      </div>
+                      <div className="flex justify-between border-b border-brand-gray-border/50 pb-2">
+                        <span className="text-brand-text-variant">KPI targets:</span>
+                        <strong className="text-indigo-600 font-black">{syncStats.created || 'None in file'}</strong>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex justify-between border-b border-brand-gray-border/50 pb-2">
+                        <span className="text-brand-text-variant">New Owners Created:</span>
+                        <strong className="text-indigo-600 font-black">+{syncStats.created} registered</strong>
+                      </div>
+                      <div className="flex justify-between border-b border-brand-gray-border/50 pb-2">
+                        <span className="text-brand-text-variant">Existing Profiles Updated:</span>
+                        <strong className="text-amber-600 font-black">+{syncStats.updated} profiles</strong>
+                      </div>
+                    </>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-brand-text-variant">Skipped/Rejected records:</span>
                     <strong className="text-slate-500 font-mono">{syncStats.skipped} skipped</strong>
@@ -3592,8 +3609,8 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
               </div>
             </div>
 
-            {/* TRANSACTION CLASSIFICATION ENGINE SUMMARY */}
-            {(() => {
+            {/* TRANSACTION CLASSIFICATION ENGINE SUMMARY (Daily MGT uploads only) */}
+            {reportType === 'mgt' && (() => {
               const summary = lastClassificationSummary || (() => {
                 try {
                   const saved = localStorage.getItem('lastClassificationSummary');
