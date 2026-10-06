@@ -80,7 +80,8 @@ export default function Header({
     isManuallySet,
     resetToAutoDetect,
     availablePeriods,
-    autoDetectedPeriod
+    autoDetectedPeriod,
+    settingsOverride
   } = useReportingPeriod();
   const [imgSrc, setImgSrc] = useState<string>('');
   const adminName = propAdminName || userEmail.split('@')[0];
@@ -358,6 +359,7 @@ export default function Header({
             currentPeriod={currentPeriod}
             availablePeriods={availablePeriods}
             autoDetectedPeriod={autoDetectedPeriod}
+            autoDetectLabel={settingsOverride ? 'Settings month' : 'Auto-detect'}
             isManuallySet={isManuallySet}
             onSelectPeriod={setCurrentPeriod}
             onAutoDetect={resetToAutoDetect}
@@ -381,6 +383,7 @@ export default function Header({
               currentPeriod={currentPeriod}
               availablePeriods={availablePeriods}
               autoDetectedPeriod={autoDetectedPeriod}
+            autoDetectLabel={settingsOverride ? 'Settings month' : 'Auto-detect'}
               isManuallySet={isManuallySet}
               onSelectPeriod={setCurrentPeriod}
               onAutoDetect={resetToAutoDetect}

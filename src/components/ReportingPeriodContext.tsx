@@ -1,10 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { 
-  deriveAutoReportingPeriod, 
-  getAvailableReportingPeriods, 
+import {
+  deriveAutoReportingPeriod,
+  deriveBusinessReportingPeriod,
+  getAvailableReportingPeriods,
   formatPeriodDisplay,
-  toIsoPeriod 
+  toIsoPeriod
 } from '../utils/periodUtils';
+import { getActivityRules } from '../utils/activityRules';
+import { CLOUD_HYDRATED_EVENT } from '../lib/cloudSyncEvents';
 
 interface ReportingPeriodContextType {
   currentPeriod: string;           // ISO format e.g. "2026-07"
@@ -13,11 +16,32 @@ interface ReportingPeriodContextType {
   isManuallySet: boolean;
   resetToAutoDetect: () => void;
   availablePeriods: string[];      // List of available period ISO strings e.g. ["2026-08", "2026-07"]
-  autoDetectedPeriod: string;     // Currently derived fallback period
+  autoDetectedPeriod: string;     // Default month: the Settings override, else the business rule
+  /** The month the business rule picks from the data (ignores the Settings override). */
+  dataDetectedPeriod: string;
+  /** Month fixed in Settings for everyone, or null when automatic. */
+  settingsOverride: string | null;
 }
 
 const STORAGE_KEY_PERIOD = 'currentReportingPeriod';
 const STORAGE_KEY_MANUAL = 'isReportingPeriodManuallySet';
+const STORAGE_KEY_DATA_PERIOD = 'dataReportingPeriodCache';
+
+const readOverride = (): string | null => getActivityRules().reportingPeriodOverride ?? null;
+const readManual = (): string | null => {
+  if (localStorage.getItem(STORAGE_KEY_MANUAL) !== 'true') return null;
+  const saved = localStorage.getItem(STORAGE_KEY_PERIOD);
+  return saved && saved.trim() !== '' ? toIsoPeriod(saved.trim()) : null;
+};
+const readCachedDataPeriod = (): string => {
+  try {
+    const cached = localStorage.getItem(STORAGE_KEY_DATA_PERIOD);
+    if (cached && /^\d{4}-\d{2}$/.test(cached)) return cached;
+  } catch {
+    /* fall through */
+  }
+  return deriveAutoReportingPeriod();
+};
 
 const ReportingPeriodContext = createContext<ReportingPeriodContextType>({
   currentPeriod: deriveAutoReportingPeriod(),
@@ -26,66 +50,90 @@ const ReportingPeriodContext = createContext<ReportingPeriodContextType>({
   isManuallySet: false,
   resetToAutoDetect: () => {},
   availablePeriods: getAvailableReportingPeriods(),
-  autoDetectedPeriod: deriveAutoReportingPeriod()
+  autoDetectedPeriod: deriveAutoReportingPeriod(),
+  dataDetectedPeriod: deriveAutoReportingPeriod(),
+  settingsOverride: null,
 });
 
+/**
+ * Which month every page reports on, in priority order:
+ *   1. a month picked in the header on this device (browsing; "manual"),
+ *   2. the month fixed in Settings for everyone,
+ *   3. the business rule: stay on a month until its Monthly report is
+ *      uploaded and the next month's Daily MGT exists.
+ */
 export const ReportingPeriodProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isManuallySet, setIsManuallySet] = useState<boolean>(() => {
-    return localStorage.getItem(STORAGE_KEY_MANUAL) === 'true';
-  });
+  const [manualPeriod, setManualPeriod] = useState<string | null>(() => readManual());
+  const [settingsOverride, setSettingsOverride] = useState<string | null>(() => readOverride());
+  const [dataDetectedPeriod, setDataDetectedPeriod] = useState<string>(() => readCachedDataPeriod());
+  const [availablePeriods, setAvailablePeriods] = useState<string[]>(() => getAvailableReportingPeriods());
 
-  const [availablePeriods, setAvailablePeriods] = useState<string[]>(() => {
-    return getAvailableReportingPeriods();
-  });
+  const autoDetectedPeriod = settingsOverride || dataDetectedPeriod;
+  const currentPeriod = manualPeriod || autoDetectedPeriod;
 
-  const [autoDetectedPeriod, setAutoDetectedPeriod] = useState<string>(() => {
-    return deriveAutoReportingPeriod();
-  });
-
-  const [currentPeriod, setCurrentPeriodState] = useState<string>(() => {
-    const isManual = localStorage.getItem(STORAGE_KEY_MANUAL) === 'true';
-    if (isManual) {
-      const saved = localStorage.getItem(STORAGE_KEY_PERIOD);
-      if (saved && saved.trim() !== '') {
-        return toIsoPeriod(saved.trim());
-      }
-    }
-    return deriveAutoReportingPeriod();
-  });
-
-  // Re-evaluates period state whenever storage or custom events trigger
+  // Re-reads the local choices (header pick, Settings override, period list).
   const syncState = useCallback(() => {
-    const isManual = localStorage.getItem(STORAGE_KEY_MANUAL) === 'true';
-    const available = getAvailableReportingPeriods();
-    const autoDerived = deriveAutoReportingPeriod();
+    setManualPeriod(readManual());
+    setSettingsOverride(readOverride());
+    setAvailablePeriods(getAvailableReportingPeriods());
+  }, []);
 
-    setIsManuallySet(isManual);
-    setAvailablePeriods(available);
-    setAutoDetectedPeriod(autoDerived);
-
-    if (isManual) {
-      const saved = localStorage.getItem(STORAGE_KEY_PERIOD);
-      if (saved && saved.trim() !== '') {
-        setCurrentPeriodState(toIsoPeriod(saved.trim()));
-        return;
+  // Evaluates the business rule from the Daily MGT date range and the
+  // months that have a Monthly report.
+  const refreshDataPeriod = useCallback(async () => {
+    try {
+      const [{ getDailyServicingRows }, { fetchMonthlyMonths }] = await Promise.all([
+        import('../utils/indexedDB'),
+        import('../lib/monthly.functions'),
+      ]);
+      // A failed read must not count as "no data" (that would flip the month
+      // back); it throws and the last good value is kept.
+      const [rows, monthly] = await Promise.all([getDailyServicingRows(), fetchMonthlyMonths()]);
+      if (!Array.isArray(monthly?.months)) throw new Error('monthly months unavailable');
+      let earliest: string | null = null;
+      let latest: string | null = null;
+      for (const r of rows || []) {
+        const d = String(r?.['Servicing Date'] ?? '').slice(0, 10);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+        if (!earliest || d < earliest) earliest = d;
+        if (!latest || d > latest) latest = d;
       }
+      const period = deriveBusinessReportingPeriod(earliest, latest, monthly?.months ?? []);
+      setDataDetectedPeriod(period);
+      try {
+        localStorage.setItem(STORAGE_KEY_DATA_PERIOD, period);
+      } catch {
+        /* cache only */
+      }
+    } catch (err) {
+      console.warn('[reporting-period] auto detection failed; keeping last value', err);
     }
-    setCurrentPeriodState(autoDerived);
   }, []);
 
   useEffect(() => {
-    const handlePeriodChange = () => syncState();
+    void refreshDataPeriod();
+    const handleChoice = () => syncState();
+    const handleData = () => {
+      syncState();
+      void refreshDataPeriod();
+    };
 
-    window.addEventListener('reportingPeriodChanged', handlePeriodChange);
-    window.addEventListener('storage', handlePeriodChange);
-    window.addEventListener('servicing-rows-updated', handlePeriodChange);
+    window.addEventListener('reportingPeriodChanged', handleChoice);
+    window.addEventListener('activity-rules-updated', handleChoice);
+    window.addEventListener('storage', handleChoice);
+    window.addEventListener('servicing-rows-updated', handleData);
+    window.addEventListener('weekly-kpi-updated', handleData);
+    window.addEventListener(CLOUD_HYDRATED_EVENT, handleData);
 
     return () => {
-      window.removeEventListener('reportingPeriodChanged', handlePeriodChange);
-      window.removeEventListener('storage', handlePeriodChange);
-      window.removeEventListener('servicing-rows-updated', handlePeriodChange);
+      window.removeEventListener('reportingPeriodChanged', handleChoice);
+      window.removeEventListener('activity-rules-updated', handleChoice);
+      window.removeEventListener('storage', handleChoice);
+      window.removeEventListener('servicing-rows-updated', handleData);
+      window.removeEventListener('weekly-kpi-updated', handleData);
+      window.removeEventListener(CLOUD_HYDRATED_EVENT, handleData);
     };
-  }, [syncState]);
+  }, [syncState, refreshDataPeriod]);
 
   const setCurrentPeriod = useCallback((newPeriod: string) => {
     const trimmed = newPeriod.trim();
@@ -94,9 +142,7 @@ export const ReportingPeriodProvider: React.FC<{ children: React.ReactNode }> = 
 
     localStorage.setItem(STORAGE_KEY_PERIOD, iso);
     localStorage.setItem(STORAGE_KEY_MANUAL, 'true');
-
-    setCurrentPeriodState(iso);
-    setIsManuallySet(true);
+    setManualPeriod(iso);
 
     window.dispatchEvent(new Event('reportingPeriodChanged'));
   }, []);
@@ -104,10 +150,7 @@ export const ReportingPeriodProvider: React.FC<{ children: React.ReactNode }> = 
   const resetToAutoDetect = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY_MANUAL);
     localStorage.removeItem(STORAGE_KEY_PERIOD);
-
-    const autoDerived = deriveAutoReportingPeriod();
-    setCurrentPeriodState(autoDerived);
-    setIsManuallySet(false);
+    setManualPeriod(null);
 
     window.dispatchEvent(new Event('reportingPeriodChanged'));
   }, []);
@@ -120,10 +163,12 @@ export const ReportingPeriodProvider: React.FC<{ children: React.ReactNode }> = 
         currentPeriod,
         displayPeriod,
         setCurrentPeriod,
-        isManuallySet,
+        isManuallySet: manualPeriod !== null,
         resetToAutoDetect,
         availablePeriods,
-        autoDetectedPeriod
+        autoDetectedPeriod,
+        dataDetectedPeriod,
+        settingsOverride,
       }}
     >
       {children}

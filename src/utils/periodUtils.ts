@@ -204,3 +204,32 @@ export function deriveAutoReportingPeriod(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
+
+/** "2026-10" -> "2026-09". */
+export function previousIsoMonth(iso: string): string {
+  const [y, m] = iso.split('-').map(Number);
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+}
+
+/**
+ * Automatic reporting month, following the business cycle instead of the
+ * calendar: it stays on month M until M's Monthly report is uploaded AND
+ * Daily MGT for M+1 exists, then flips to M+1. Days still belong to their
+ * calendar month. With no Daily MGT at all it is the calendar month.
+ *
+ * @param earliestDaily / latestDaily  ISO dates ("YYYY-MM-DD") of the Daily MGT data
+ * @param monthlyMonths  months that have an uploaded Monthly report (any label form)
+ */
+export function deriveBusinessReportingPeriod(
+  earliestDaily: string | null,
+  latestDaily: string | null,
+  monthlyMonths: string[],
+): string {
+  const latest = latestDaily && /^\d{4}-\d{2}/.test(latestDaily) ? latestDaily.slice(0, 7) : null;
+  if (!latest) return deriveAutoReportingPeriod();
+  const previous = previousIsoMonth(latest);
+  const earliest = earliestDaily && /^\d{4}-\d{2}/.test(earliestDaily) ? earliestDaily.slice(0, 7) : latest;
+  const previousHasData = earliest <= previous;
+  const previousClosed = monthlyMonths.some(m => toIsoPeriod(m) === previous);
+  return previousHasData && !previousClosed ? previous : latest;
+}

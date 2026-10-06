@@ -16,7 +16,10 @@ import {
   Mail,
   Palette
 } from 'lucide-react';
-import { getActivityRules, saveActivityRules } from '../utils/activityRules';
+import { getActivityRules, saveActivityRules, saveReportingPeriodOverride } from '../utils/activityRules';
+import { useReportingPeriod } from './ReportingPeriodContext';
+import { deriveAutoReportingPeriod, formatPeriodDisplay, previousIsoMonth } from '../utils/periodUtils';
+import { CalendarDays } from 'lucide-react';
 import { refreshWeeklyStatsHistory } from '../utils/weeklyHistory';
 import { motion } from 'motion/react';
 import PageHeaderBanner from './PageHeaderBanner';
@@ -64,6 +67,26 @@ export default function SettingsView({
     && Number.isFinite(amountThreshold) && amountThreshold > 0
     && Number.isFinite(servedTxnThreshold) && servedTxnThreshold > 0
     && Number.isFinite(penaltyRate) && penaltyRate >= 0;
+
+  // --- Reporting month (Settings override for everyone) ---
+  const { dataDetectedPeriod, settingsOverride, availablePeriods } = useReportingPeriod();
+  const [periodMode, setPeriodMode] = useState<'auto' | 'fixed'>(() => (settingsOverride ? 'fixed' : 'auto'));
+  const [fixedPeriod, setFixedPeriod] = useState<string>(() => settingsOverride || dataDetectedPeriod);
+  const [periodSaved, setPeriodSaved] = useState(false);
+  const periodOptions = React.useMemo(() => {
+    const set = new Set<string>([...availablePeriods, dataDetectedPeriod, fixedPeriod].filter(Boolean));
+    let iso = deriveAutoReportingPeriod();
+    for (let i = 0; i < 12; i++) {
+      set.add(iso);
+      iso = previousIsoMonth(iso);
+    }
+    return Array.from(set).filter(p => /^\d{4}-\d{2}$/.test(p)).sort().reverse();
+  }, [availablePeriods, dataDetectedPeriod, fixedPeriod]);
+  const handleSaveReportingMonth = () => {
+    saveReportingPeriodOverride(periodMode === 'fixed' ? fixedPeriod : null);
+    setPeriodSaved(true);
+    setTimeout(() => setPeriodSaved(false), 3000);
+  };
 
   const handleSaveRules = async () => {
     if (!ruleIsValid) {
@@ -381,8 +404,9 @@ export default function SettingsView({
           </form>
         </div>
 
+        <div className="space-y-6 xl:sticky xl:top-24 xl:self-start">
         {/* Activity rule: what makes a wakala Active for a reporting week */}
-        <div className="rounded-xl border border-brand-gray-border bg-brand-card p-6 shadow-ambient xl:sticky xl:top-24 xl:self-start">
+        <div className="rounded-xl border border-brand-gray-border bg-brand-card p-6 shadow-ambient">
           <div className="flex items-center gap-3 border-b border-brand-gray-border pb-4 mb-4">
             <div className="h-10 w-10 shrink-0 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center">
               <SlidersHorizontal className="h-5 w-5" />
@@ -512,6 +536,76 @@ export default function SettingsView({
               {savingRules ? 'Re-evaluating…' : 'Save Rule'}
             </Button>
           </div>
+        </div>
+
+        {/* Reporting month: business-cycle auto rule, or fixed for everyone */}
+        <div className="rounded-xl border border-brand-gray-border bg-brand-card p-6 shadow-ambient">
+          <div className="flex items-center gap-3 border-b border-brand-gray-border pb-4 mb-4">
+            <div className="h-10 w-10 shrink-0 rounded-xl bg-brand-primary/10 text-brand-primary flex items-center justify-center">
+              <CalendarDays className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold uppercase tracking-wider text-brand-primary">Reporting Month</h3>
+              <p className="text-[11px] text-brand-text-variant mt-0.5">Default month for everyone, including the owner portal</p>
+            </div>
+          </div>
+
+          <div className="space-y-3 text-sm">
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-brand-gray-border p-3 hover:bg-slate-50">
+              <input
+                type="radio"
+                name="reporting-month-mode"
+                className="mt-1"
+                checked={periodMode === 'auto'}
+                onChange={() => setPeriodMode('auto')}
+              />
+              <span>
+                <span className="block font-bold text-brand-text">Auto · {formatPeriodDisplay(dataDetectedPeriod)}</span>
+                <span className="block text-xs text-brand-text-variant">
+                  Moves to the next month once this month's Monthly report is uploaded and next month's Daily MGT is in.
+                </span>
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-brand-gray-border p-3 hover:bg-slate-50">
+              <input
+                type="radio"
+                name="reporting-month-mode"
+                className="mt-1"
+                checked={periodMode === 'fixed'}
+                onChange={() => setPeriodMode('fixed')}
+              />
+              <span className="flex-1">
+                <span className="block font-bold text-brand-text">Fixed month</span>
+                <span className="block text-xs text-brand-text-variant">Overrides Auto until set back.</span>
+                <select
+                  value={fixedPeriod}
+                  onChange={(e) => { setFixedPeriod(e.target.value); setPeriodMode('fixed'); }}
+                  className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-900"
+                  id="settings-reporting-month"
+                >
+                  {periodOptions.map(p => (
+                    <option key={p} value={p}>{formatPeriodDisplay(p)}</option>
+                  ))}
+                </select>
+              </span>
+            </label>
+          </div>
+
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <span className="text-xs text-brand-text-variant">
+              {periodSaved ? 'Saved' : `Now: ${settingsOverride ? `${formatPeriodDisplay(settingsOverride)} (fixed)` : `${formatPeriodDisplay(dataDetectedPeriod)} (auto)`}`}
+            </span>
+            <Button
+              type="button"
+              onClick={handleSaveReportingMonth}
+              className="h-10 rounded-lg bg-brand-primary px-5 text-xs font-bold text-white shadow-ambient hover:bg-brand-primary-light"
+              id="save-reporting-month-btn"
+            >
+              <Save className="h-4 w-4" />
+              Save Month
+            </Button>
+          </div>
+        </div>
         </div>
       </div>
     </motion.div>
