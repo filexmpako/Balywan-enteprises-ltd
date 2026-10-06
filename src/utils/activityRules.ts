@@ -174,5 +174,6 @@ export function isServedByRule(
  */
 export function calculatePenalty(cpServicingValue: number, rules: ActivityRules = getActivityRules()): number {
   const vol = Number(cpServicingValue) || 0;
-  return (vol * (Number(rules.penaltyRate) || 0)) / 100;
+  // Money: rounded to cents (0.05% of 1,923,698,857 is 961,849.43, not .4285).
+  return Math.round(vol * (Number(rules.penaltyRate) || 0)) / 100;
 }

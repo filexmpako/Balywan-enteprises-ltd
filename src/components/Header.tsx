@@ -321,6 +321,7 @@ export default function Header({
           <Menu className="h-5.5 w-5.5" />
         </button>
 
+        <div className="flex min-w-0 flex-col">
         <div className="hidden sm:flex items-center gap-1.5 text-xs font-semibold text-brand-text-variant font-sans">
           {getBreadcrumbs().map((crumb, idx) => (
             <React.Fragment key={idx}>
@@ -342,8 +343,32 @@ export default function Header({
         </div>
 
         {/* Mobile Minimal Title */}
-        <div className="sm:hidden font-sans text-base font-bold text-brand-primary">
-          {currentView === ViewType.OWNER_DETAILS ? 'Owner Profile' : currentView === ViewType.PEOPLE_MGT ? 'People Management' : currentView}
+        <div className="sm:hidden truncate font-sans text-base font-bold text-brand-primary">
+          {currentView === ViewType.OWNER_DETAILS
+            ? 'Owner Profile'
+            : currentView === ViewType.PEOPLE_MGT
+              ? 'People Management'
+              : String(currentView).toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+        </div>
+
+        {/* Phone / tablet month selector (the header one shows from md up) */}
+        {isAdmin && (
+          <PeriodSelector
+            className="relative md:hidden"
+            currentPeriod={currentPeriod}
+            availablePeriods={availablePeriods}
+            autoDetectedPeriod={autoDetectedPeriod}
+            isManuallySet={isManuallySet}
+            onSelectPeriod={setCurrentPeriod}
+            onAutoDetect={resetToAutoDetect}
+            label=""
+            align="left"
+            dropdownTitle="Reporting Month"
+            dropdownSubtitle="Applies across Dashboard, KPI Reports & Audit Logs."
+            buttonClassName="group -ml-1 flex items-center rounded-lg px-1 py-0.5 cursor-pointer hover:bg-slate-100"
+            id="mobile-period-selector"
+          />
+        )}
         </div>
       </div>
 
