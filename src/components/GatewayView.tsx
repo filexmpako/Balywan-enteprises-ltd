@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useCompany } from './CompanyContext';
+import InstallAppButton from './InstallAppButton';
 
 interface GatewayViewProps {
   onSelectPortal: (portal: 'admin' | 'owner' | 'float-manager') => void;
@@ -50,6 +51,9 @@ export default function GatewayView({ onSelectPortal }: GatewayViewProps) {
         >
           {companyName.toUpperCase()} SYSTEM
         </motion.p>
+        <div className="mt-5">
+          <InstallAppButton variant="full" />
+        </div>
       </div>
 
       {/* Center Selectors Grid (Image 4) */}

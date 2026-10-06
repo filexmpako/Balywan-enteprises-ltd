@@ -2,6 +2,7 @@ import React from 'react';
 import { useAuth } from './AuthContext';
 import { useCompany } from './CompanyContext';
 import { Power } from 'lucide-react';
+import InstallAppButton from './InstallAppButton';
 
 interface OwnerLayoutProps {
   ownerName: string;
@@ -38,6 +39,7 @@ export default function OwnerLayout({ ownerName, children }: OwnerLayoutProps) {
           <span className="hidden sm:inline font-sans text-xs font-semibold text-brand-text-variant">
             Agent: <strong className="text-brand-text">{ownerName}</strong>
           </span>
+          <InstallAppButton />
           <button 
             onClick={logout}
             className="flex h-10 w-10 items-center justify-center rounded-xl bg-status-error-text text-white shadow-md hover:opacity-90 active:scale-95 transition-all shrink-0 cursor-pointer"
