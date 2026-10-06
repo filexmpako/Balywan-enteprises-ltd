@@ -124,6 +124,17 @@ export default function KPIExecutiveSummary({ parsedKpis }: KPIExecutiveSummaryP
     return 'Critical';
   };
 
+  if (!parsedKpis || parsedKpis.length === 0) {
+    return (
+      <div className="rounded-2xl border border-brand-gray-border bg-brand-card p-6 text-center font-sans">
+        <p className="text-sm font-bold text-brand-text">No KPI-targets sheet in this file</p>
+        <p className="mt-1 text-xs text-brand-text-variant">
+          Servicing data only. KPI 1 and KPI 2 are calculated live from the data; see Servicing Data for this file.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
 

@@ -116,17 +116,21 @@ export async function saveMonthlyRows(supabase: DB, input: MonthlyRowInput): Pro
     const { data } = await supabase
       .from('base_wakala_index')
       .select('msisdn, alt_msisdn, owner_id')
-      .not('owner_id', 'is', null)
       .range(from, from + 999);
     const page = data ?? [];
     baseRows.push(...page);
     if (page.length < 1000) break;
   }
 
-  const ownerByMsisdn = new Map<string, string>();
+  // Main numbers first (ownerless ones included, so they stay unassigned);
+  // an alternate number only fills a number that is no wakala's main number.
+  const ownerByMsisdn = new Map<string, string | null>();
   for (const b of baseRows) {
-    if (b.msisdn) ownerByMsisdn.set(String(b.msisdn).replace(/\D/g, ''), b.owner_id);
-    if (b.alt_msisdn) ownerByMsisdn.set(String(b.alt_msisdn).replace(/\D/g, ''), b.owner_id);
+    if (b.msisdn) ownerByMsisdn.set(String(b.msisdn).replace(/\D/g, ''), b.owner_id ?? null);
+  }
+  for (const b of baseRows) {
+    const alt = b.alt_msisdn ? String(b.alt_msisdn).replace(/\D/g, '') : '';
+    if (alt && !ownerByMsisdn.has(alt)) ownerByMsisdn.set(alt, b.owner_id ?? null);
   }
   for (const r of records) {
     const key = r.msisdn.replace(/\D/g, '');

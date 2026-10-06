@@ -48,6 +48,7 @@ import {
 import MetricCard from './MetricCard';
 import IopLabel, { type IopSource } from './IopLabel';
 import IopVariance, { shortMonth } from './IopVariance';
+import { loadMonthlyReportStats, type MonthlyReportStats } from '../utils/monthlySettlement';
 import { motion, AnimatePresence } from 'motion/react';
 import FloatManagementPanel from './FloatManagementPanel';
 import { getFloatRequestsForOwner } from '../utils/floatManagement';
@@ -55,11 +56,10 @@ import { getDailyServicingRows } from '../utils/indexedDB';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
 import {
   calculateOwnerMtdVolume,
-  latestWeeklyEntryAtOrBefore,
+  pickSettlementReport,
   dailyIopForPeriod,
   reportEndDate,
 } from '../utils/kpiEngine';
-import { periodsMatch, toIsoPeriod } from '../utils/periodUtils';
 import { fetchMonthlyMonths } from '../lib/monthly.functions';
 import { readWeeklyStatsHistory } from '../utils/weeklyHistory';
 import { resolveOwnerMatch } from '../utils/ownerMatch';
@@ -652,6 +652,23 @@ export default function OwnerDetailsView({
     return () => { cancelled = true; };
   }, []);
 
+  // The selected month's report (Monthly wins over weekly); in the first days
+  // of a month, the latest earlier month's report.
+  const settlementReport = useMemo(
+    () => pickSettlementReport(currentPeriod, monthlyReportMonths, readWeeklyStatsHistory()),
+    [currentPeriod, monthlyReportMonths],
+  );
+  const [monthlyStats, setMonthlyStats] = useState<{ month: string; stats: MonthlyReportStats | null } | null>(null);
+  const monthlyToLoad = settlementReport?.kind === 'monthly' ? settlementReport.month : '';
+  useEffect(() => {
+    if (!monthlyToLoad) return;
+    let cancelled = false;
+    loadMonthlyReportStats(monthlyToLoad)
+      .then(stats => { if (!cancelled) setMonthlyStats({ month: monthlyToLoad, stats }); })
+      .catch(err => console.error('Monthly settlement load failed:', err));
+    return () => { cancelled = true; };
+  }, [monthlyToLoad]);
+
   const settlement = useMemo((): {
     penalty: number;
     iop: number;
@@ -662,26 +679,34 @@ export default function OwnerDetailsView({
     endDate?: string;
   } => {
     const none = { penalty: 0, iop: 0, source: 'No report yet', kind: null, period: null, monthLabel: '' };
-    if (!localOwner) return none;
-    if (monthlyReportMonths.some(m => periodsMatch(m, currentPeriod))) {
-      return { penalty: localOwner.penalty || 0, iop: localOwner.iopVolume || 0, source: `Monthly · ${shortMonth(displayPeriod)}`, kind: 'monthly', period: currentPeriod, monthLabel: displayPeriod };
+    const pick = settlementReport;
+    if (!localOwner || !pick) return none;
+    const latest = pick.isFallback ? ' · Latest' : '';
+    const mine = (byOwner: Array<{ ownerId: string; ownerName: string; penalty?: number; iopValue?: number }> = []) =>
+      byOwner.find(o => o.ownerId === localOwner.id) ||
+      byOwner.find(o => o.ownerName.trim().toLowerCase() === String(localOwner.name || '').trim().toLowerCase());
+    if (pick.kind === 'monthly') {
+      const b = monthlyStats?.month === pick.month ? mine(monthlyStats.stats?.byOwner) : undefined;
+      return {
+        penalty: b?.penalty || 0,
+        iop: b?.iopValue || 0,
+        source: `Monthly · ${shortMonth(pick.month)}${latest}`,
+        kind: 'monthly',
+        period: pick.iso,
+        monthLabel: pick.month,
+      };
     }
-    // The selected month's own report; in the first days of a month (no
-    // report yet) the latest earlier month's weekly report.
-    const week = latestWeeklyEntryAtOrBefore(readWeeklyStatsHistory(), currentPeriod);
-    if (!week) return none;
-    const isFallback = !periodsMatch(week.reportingMonth, currentPeriod);
-    const b = (week.byOwner || []).find(o => o.ownerId === localOwner.id);
+    const b = mine(pick.entry.byOwner);
     return {
       penalty: b?.penalty || 0,
       iop: b?.iopValue || 0,
-      source: `${week.reportingWeek.split(' (')[0]} · ${shortMonth(String(week.reportingMonth))}${isFallback ? ' · Latest' : ''}`,
+      source: `${pick.entry.reportingWeek.split(' (')[0]} · ${shortMonth(String(pick.entry.reportingMonth))}${latest}`,
       kind: 'weekly',
-      period: toIsoPeriod(week.reportingMonth || ''),
-      monthLabel: String(week.reportingMonth),
-      endDate: reportEndDate(week),
+      period: pick.iso,
+      monthLabel: String(pick.entry.reportingMonth),
+      endDate: reportEndDate(pick.entry),
     };
-  }, [localOwner, currentPeriod, displayPeriod, monthlyReportMonths]);
+  }, [localOwner, settlementReport, monthlyStats]);
 
   // This owner's Daily MGT IOP over the same month-to-date window as the report.
   const settlementDailyIop = useMemo(() => {

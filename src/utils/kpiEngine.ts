@@ -50,20 +50,34 @@ export function latestWeeklyEntryForPeriod(weeklyStats: WeeklyStatsEntry[], peri
   return latest;
 }
 
+export type SettlementReport =
+  | { kind: 'monthly'; month: string; iso: string; isFallback: boolean }
+  | { kind: 'weekly'; entry: WeeklyStatsEntry; iso: string; isFallback: boolean };
+
 /**
- * The weekly report the Settlement Ledger shows for `period`: that month's
- * own latest entry, else the newest entry of the most recent earlier month
- * (the first days of a new month have no report yet).
+ * The report the Settlement Ledger shows for `period`: that month's report,
+ * else the most recent earlier month that has one (the first days of a new
+ * month have no report yet). Within the chosen month the Monthly report is
+ * final and wins over the latest weekly report. `month` is the label the
+ * monthly rows are stored under.
  */
-export function latestWeeklyEntryAtOrBefore(weeklyStats: WeeklyStatsEntry[], period: string): WeeklyStatsEntry | null {
-  const own = latestWeeklyEntryForPeriod(weeklyStats, period);
-  if (own) return own;
+export function pickSettlementReport(
+  period: string,
+  monthlyMonths: string[],
+  weeklyStats: WeeklyStatsEntry[],
+): SettlementReport | null {
   const iso = toIsoPeriod(period);
-  const earlier = Array.from(new Set(weeklyStats.map(w => toIsoPeriod(w.reportingMonth || ''))))
-    .filter(m => /^\d{4}-\d{2}$/.test(m) && m < iso)
-    .sort();
-  const month = earlier[earlier.length - 1];
-  return month ? latestWeeklyEntryForPeriod(weeklyStats, month) : null;
+  const valid = (m: string) => /^\d{4}-\d{2}$/.test(m) && m <= iso;
+  const months = new Set(
+    [...monthlyMonths.map(m => toIsoPeriod(m)), ...weeklyStats.map(w => toIsoPeriod(w.reportingMonth || ''))].filter(valid),
+  );
+  const chosen = months.has(iso) ? iso : Array.from(months).sort().pop();
+  if (!chosen) return null;
+  const isFallback = chosen !== iso;
+  const monthly = monthlyMonths.find(m => toIsoPeriod(m) === chosen);
+  if (monthly) return { kind: 'monthly', month: monthly, iso: chosen, isFallback };
+  const entry = latestWeeklyEntryForPeriod(weeklyStats, chosen);
+  return entry ? { kind: 'weekly', entry, iso: chosen, isFallback } : null;
 }
 
 /**
