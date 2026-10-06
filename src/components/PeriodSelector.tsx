@@ -7,6 +7,8 @@ export interface PeriodSelectorProps {
   currentPeriod: string;
   availablePeriods: string[];
   autoDetectedPeriod?: string;
+  /** Name of the default option (e.g. 'Settings month' when an admin fixed it). */
+  autoDetectLabel?: string;
   isManuallySet?: boolean;
   onSelectPeriod: (period: string) => void;
   onAutoDetect?: () => void;
@@ -25,6 +27,7 @@ export default function PeriodSelector({
   currentPeriod,
   availablePeriods,
   autoDetectedPeriod,
+  autoDetectLabel = 'Auto-detect',
   isManuallySet = false,
   onSelectPeriod,
   onAutoDetect,
@@ -125,7 +128,7 @@ export default function PeriodSelector({
                     <div className="flex items-center gap-2">
                       <Sparkles className="h-3.5 w-3.5 text-amber-500 shrink-0" />
                       <div>
-                        <div className="font-bold">Auto-detect</div>
+                        <div className="font-bold">{autoDetectLabel}</div>
                         <div className="text-[10px] opacity-70">
                           Currently: {formatPeriodDisplay(autoDetectedPeriod)}
                         </div>

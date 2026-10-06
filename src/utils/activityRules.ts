@@ -26,6 +26,11 @@ export interface ActivityRules {
   window: 'weekly';
   /** Penalty rate applied to CP_Servicing_Val (cross-partner-serviced volume). */
   penaltyRate: number;
+  /**
+   * Reporting month fixed in Settings (ISO "YYYY-MM"); null = automatic. Kept
+   * with the rules so every user and the owner portal follow the same month.
+   */
+  reportingPeriodOverride?: string | null;
 }
 
 export const DEFAULT_ACTIVITY_RULES: ActivityRules = {
@@ -35,6 +40,7 @@ export const DEFAULT_ACTIVITY_RULES: ActivityRules = {
   mode: 'combined',
   window: 'weekly',
   penaltyRate: 0.05, // percent: 0.05% of CP_Servicing_Val
+  reportingPeriodOverride: null,
 };
 
 export function normalizeActivityRules(raw: any): ActivityRules {
@@ -56,6 +62,9 @@ export function normalizeActivityRules(raw: any): ActivityRules {
     window: 'weekly',
     penaltyRate:
       Number.isFinite(penaltyRate) && penaltyRate >= 0 ? penaltyRate : DEFAULT_ACTIVITY_RULES.penaltyRate,
+    reportingPeriodOverride: /^\d{4}-\d{2}$/.test(String(raw?.reportingPeriodOverride ?? ''))
+      ? String(raw.reportingPeriodOverride)
+      : null,
   };
 }
 
@@ -78,6 +87,13 @@ export function saveActivityRules(rules: Partial<ActivityRules>): ActivityRules 
   } catch {
     /* never break the UI on a cache write */
   }
+  return next;
+}
+
+/** Fixes the reporting month for everyone (ISO "YYYY-MM"), or null for automatic. */
+export function saveReportingPeriodOverride(period: string | null): ActivityRules {
+  const next = saveActivityRules({ reportingPeriodOverride: period });
+  window.dispatchEvent(new Event('reportingPeriodChanged'));
   return next;
 }
 
