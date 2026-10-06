@@ -13,6 +13,7 @@ import { loadMonthlyReportStats, type MonthlyReportStats } from '../utils/monthl
 import { fetchMonthlyMonths } from '../lib/monthly.functions';
 import IopLabel from './IopLabel';
 import IopVariance, { shortMonth } from './IopVariance';
+import { periodsMatch } from '../utils/periodUtils';
 import { getActivityRules } from '../utils/activityRules';
 import type { ClassifiedRow } from '../utils/classification';
 import { computeLiveKpiTotals } from '../utils/liveKpiTotals';
@@ -928,6 +929,13 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                       endDate: reportEndDate(pick.entry),
                     }
                   : { penalty: 0, iop: 0, source: 'No report yet', kind: null, period: null, monthLabel: '', endDate: undefined };
+            // Served / active wakala from the same report as penalty and IOP.
+            const wakala =
+              pick?.kind === 'monthly'
+                ? (monthlyStats?.month === pick.month ? monthlyStats.stats : null)
+                : pick?.kind === 'weekly'
+                  ? pick.entry
+                  : null;
             // Same month-to-date window as the report it is compared with.
             const dailyIop = settlement.period
               ? dailyIopForPeriod(classifiedDaily, settlement.period, undefined, settlement.endDate)
@@ -938,7 +946,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                   <ShieldCheck className="h-4 w-4 text-brand-primary" />
                   <h3 className="font-sans text-xs font-black uppercase tracking-wider text-brand-primary">Settlement · {settlement.source}</h3>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <MetricCard
                     title="Penalty"
                     value={`TZS ${settlement.penalty.toLocaleString()}`}
@@ -955,6 +963,26 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                   >
                     {settlement.kind && (
                       <IopVariance daily={dailyIop} report={settlement.iop} reportKind={settlement.kind} monthLabel={settlement.monthLabel} endDate={settlement.endDate} />
+                    )}
+                  </MetricCard>
+                  <MetricCard
+                    title="Wakala"
+                    value={wakala ? `${wakala.served.toLocaleString()} served` : '—'}
+                    subValue={wakala ? `of ${wakala.total.toLocaleString()}` : 'No report yet'}
+                    icon={Users}
+                    variant="green"
+                  >
+                    {wakala && (
+                      <div className="space-y-1 border-t border-slate-100 pt-2 font-sans text-xs">
+                        <div className="flex justify-between gap-3">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Unserved</span>
+                          <span className="font-black text-brand-text">{wakala.notServed.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Active · Inactive</span>
+                          <span className="font-black text-brand-text">{wakala.active.toLocaleString()} · {wakala.inactive.toLocaleString()}</span>
+                        </div>
+                      </div>
                     )}
                   </MetricCard>
                 </div>
@@ -1032,16 +1060,19 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                 variant="indigo"
               />
               {(() => {
-                // Weekly reports are month-to-date: the month's latest report is the month's figure.
+                // The Monthly report is final for its month; otherwise the
+                // month's latest weekly report (month-to-date) is the figure.
                 const month = (latest as any).reportingMonth;
                 const monthLatest = (month && latestWeeklyEntryForPeriod(series, month)) || latest;
-                const penaltyMtd = (monthLatest as any).penalty || 0;
-                const iopMtd = (monthLatest as any).iopValue || 0;
+                const monthly =
+                  month && monthlyStats?.stats && periodsMatch(monthlyStats.month, month) ? monthlyStats.stats : null;
+                const penaltyMtd = monthly ? monthly.penalty : (monthLatest as any).penalty || 0;
+                const iopMtd = monthly ? monthly.iopValue : (monthLatest as any).iopValue || 0;
                 return (
                   <MetricCard
-                    title="Penalty (Month to date)"
+                    title={monthly ? 'Penalty · Monthly' : 'Penalty (Month to date)'}
                     value={formatNumberWithAbbreviation(penaltyMtd)}
-                    subValue={<><IopLabel source="weekly" /> {formatNumberWithAbbreviation(iopMtd)}</>}
+                    subValue={<><IopLabel source={monthly ? 'monthly' : 'weekly'} /> {formatNumberWithAbbreviation(iopMtd)}</>}
                     icon={AlertTriangle}
                     variant="amber"
                   />
