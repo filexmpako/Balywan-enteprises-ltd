@@ -18,6 +18,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { useReportingPeriod } from './ReportingPeriodContext';
 import PeriodSelector from './PeriodSelector';
+import InstallAppButton from './InstallAppButton';
 import { formatPeriodDisplay } from '../utils/periodUtils';
 import { formatShortDate } from '../utils/dateFormat';
 import { getPhoto, savePhoto, deletePhoto } from '../utils/db';
@@ -375,7 +376,7 @@ export default function Header({
       </div>
 
       {/* Right Stats & Profile Panel */}
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-2 sm:gap-6">
         {/* Reporting Metadata Block */}
         <div className="hidden md:flex items-center gap-5 border-r border-brand-gray-border pr-5 font-sans relative">
           {isAdmin ? (
@@ -406,6 +407,8 @@ export default function Header({
             </div>
           )}
         </div>
+
+        <InstallAppButton />
 
         {/* Notifications Bell */}
         <div className="relative">
