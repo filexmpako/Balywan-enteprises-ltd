@@ -48,7 +48,7 @@ import {
 import MetricCard from './MetricCard';
 import IopLabel, { type IopSource } from './IopLabel';
 import IopVariance, { shortMonth } from './IopVariance';
-import { loadMonthlyReportStats, type MonthlyReportStats } from '../utils/monthlySettlement';
+import { loadMonthlyReportStats, toMonthlyKpiOverride, type MonthlyReportStats } from '../utils/monthlySettlement';
 import { motion, AnimatePresence } from 'motion/react';
 import FloatManagementPanel from './FloatManagementPanel';
 import { getFloatRequestsForOwner } from '../utils/floatManagement';
@@ -731,6 +731,15 @@ export default function OwnerDetailsView({
 
   const [manualTargetsList] = useState<ManualOwnerTarget[]>(() => getSavedManualOwnerTargets());
 
+  // The selected month's own Monthly report, when uploaded, is final for KPI 1.
+  const monthlyKpi = useMemo(
+    () =>
+      settlementReport?.kind === 'monthly' && !settlementReport.isFallback && monthlyStats?.month === settlementReport.month && monthlyStats.stats
+        ? toMonthlyKpiOverride(monthlyStats.month, monthlyStats.stats)
+        : null,
+    [settlementReport, monthlyStats],
+  );
+
   const ownerMtdData = useMemo(() => {
     if (!localOwner || servicingRows.length === 0) {
       return {
@@ -755,15 +764,16 @@ export default function OwnerDetailsView({
     const classified = getClassifiedRowsCached(servicingRows, saTillRegistry, baseWakalaIndex, tillsList, owners);
 
     const weeklyStats = readWeeklyStatsHistory();
+    const monthlyServedValue = monthlyKpi?.servedValueByOwner;
 
     let targetOwnerId = localOwner.id;
-    let vols = calculateOwnerMtdVolume(classified, localOwner.id, weeklyStats, currentPeriod);
+    let vols = calculateOwnerMtdVolume(classified, localOwner.id, weeklyStats, currentPeriod, monthlyServedValue);
 
     if (vols.servedVolume === 0 && localOwner.name) {
       const matched = resolveOwnerMatch(localOwner.name, owners, 'Owner Portal');
       if (matched.matchedOwner?.id) {
         targetOwnerId = matched.matchedOwner.id;
-        vols = calculateOwnerMtdVolume(classified, matched.matchedOwner.id, weeklyStats, currentPeriod);
+        vols = calculateOwnerMtdVolume(classified, matched.matchedOwner.id, weeklyStats, currentPeriod, monthlyServedValue);
       }
     }
 
@@ -827,7 +837,7 @@ export default function OwnerDetailsView({
       status,
       hasTarget: targetRes.source !== 'none' && monthlyTarget > 0
     };
-  }, [localOwner, servicingRows, tillsList, manualTargetsList, currentPeriod]);
+  }, [localOwner, servicingRows, tillsList, manualTargetsList, currentPeriod, monthlyKpi]);
 
   const { user } = useAuth();
   const isAdmin = user?.role === 'Admin';
