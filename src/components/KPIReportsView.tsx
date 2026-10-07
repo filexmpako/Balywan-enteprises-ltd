@@ -34,6 +34,7 @@ import { getSavedManualOwnerTargets } from '../utils/targetResolution';
 import { isKpi1RowName, isKpi2RowName, withLiveKpiRows } from '../utils/kpiRowMatch';
 import { formatNumberWithAbbreviation } from '../utils/numberFormat';
 import { computeLiveKpiTotals, type LiveKpiTotals } from '../utils/liveKpiTotals';
+import { loadMonthlyKpiOverride } from '../utils/monthlySettlement';
 import { exportKPIAnalysisToPDF } from '../utils/pdfExport';
 import { useReportingPeriod } from './ReportingPeriodContext';
 
@@ -135,7 +136,12 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
         const manualTargets: ManualOwnerTarget[] = getSavedManualOwnerTargets();
 
         const classified = getClassifiedRowsCached(rows || [], saTillRegistry, baseWakalaIndex, tillsList, owners);
-        const totals = computeLiveKpiTotals(classified, owners, currentPeriod, manualTargets, priorityWakalas, baseWakalaIndex, readWeeklyStatsHistory());
+        // The month's own Monthly report, when uploaded, is final for KPI 1 / KPI 2.
+        const monthly = await loadMonthlyKpiOverride(currentPeriod).catch((e) => {
+          console.error('Failed to load the Monthly report for KPI totals:', e);
+          return null;
+        });
+        const totals = computeLiveKpiTotals(classified, owners, currentPeriod, manualTargets, priorityWakalas, baseWakalaIndex, readWeeklyStatsHistory(), monthly);
         if (isMounted) setLiveTotals(totals);
       } catch (e) {
         console.error('Failed to compute live KPI1/KPI2 totals in KPIReportsView:', e);

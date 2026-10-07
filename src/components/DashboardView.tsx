@@ -9,14 +9,14 @@ import {
   dailyIopForPeriod,
   reportEndDate,
 } from '../utils/kpiEngine';
-import { loadMonthlyReportStats, type MonthlyReportStats } from '../utils/monthlySettlement';
+import { loadMonthlyReportStats, toMonthlyKpiOverride, type MonthlyReportStats } from '../utils/monthlySettlement';
 import { fetchMonthlyMonths } from '../lib/monthly.functions';
 import IopLabel from './IopLabel';
 import IopVariance, { shortMonth } from './IopVariance';
 import { periodsMatch } from '../utils/periodUtils';
 import { getActivityRules } from '../utils/activityRules';
 import type { ClassifiedRow } from '../utils/classification';
-import { computeLiveKpiTotals } from '../utils/liveKpiTotals';
+import { computeLiveKpiTotals, type LiveKpiTotals } from '../utils/liveKpiTotals';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
 import { getSavedManualOwnerTargets } from '../utils/targetResolution';
 import { isKpi1RowName, isKpi2RowName, withLiveKpiRows } from '../utils/kpiRowMatch';
@@ -301,10 +301,32 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
 
   // Live engine inputs (same set TargetsView loads) so KPI1/KPI2 summary rows
   // recompute from accumulated Daily MGT data instead of the frozen upload.
-  const [liveTotals, setLiveTotals] = useState<{
-    kpi1: { target: number; achieved: number } | null;
-    kpi2: { target: number; achieved: number } | null;
-  }>({ kpi1: null, kpi2: null });
+  const [liveInputs, setLiveInputs] = useState<{
+    classified: ClassifiedRow[];
+    owners: Owner[];
+    manualTargets: ManualOwnerTarget[];
+    priorityWakalas: PriorityWakala[];
+    baseWakalaIndex: BaseWakala[];
+    weekly: WeeklyStatsEntry[];
+  } | null>(null);
+  // The selected month's own Monthly report, when uploaded, is final for KPI 1 / KPI 2.
+  const monthlyKpi = useMemo(
+    () =>
+      settlementReport?.kind === 'monthly' && !settlementReport.isFallback && monthlyStats?.month === settlementReport.month && monthlyStats.stats
+        ? toMonthlyKpiOverride(monthlyStats.month, monthlyStats.stats)
+        : null,
+    [settlementReport, monthlyStats],
+  );
+  const liveTotals: LiveKpiTotals = useMemo(() => {
+    if (!liveInputs) return { kpi1: null, kpi2: null };
+    try {
+      const { classified, owners, manualTargets, priorityWakalas, baseWakalaIndex, weekly } = liveInputs;
+      return computeLiveKpiTotals(classified, owners, currentPeriod, manualTargets, priorityWakalas, baseWakalaIndex, weekly, monthlyKpi);
+    } catch (e) {
+      console.error('Failed to compute live KPI1/KPI2 totals:', e);
+      return { kpi1: null, kpi2: null };
+    }
+  }, [liveInputs, currentPeriod, monthlyKpi]);
 
   const kpis: KPIMetric[] = useMemo(() => {
     return withLiveKpiRows(rawKpis, liveTotals).map(kpi => {
@@ -444,6 +466,8 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
   };
 
   const [companyKPIs, setCompanyKPIs] = useState<CompanyKPIsResult>(defaultCompanyKPIs);
+  // Same figure as KPI 1's achieved total, so the two cards always agree.
+  const goalServed = liveTotals.kpi1?.achieved ?? companyKPIs.mtdFloatServed;
   const [dashboardLoadState, setDashboardLoadState] = useState<'loading' | 'empty' | 'ready' | 'error'>('loading');
   const [topOwnersList, setTopOwnersList] = useState<TopOwner[]>([]);
   const [monthlyGoal, setMonthlyGoal] = useState<{ total: number; hasAny: boolean }>({ total: 0, hasAny: false });
@@ -526,10 +550,8 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
             const classified = getClassifiedRowsCached(rows || [], saTillRegistry, baseWakalaIndex, tillsList, owners);
             if (isMounted) setClassifiedDaily(classified);
 
-            const totals = computeLiveKpiTotals(classified, owners, currentPeriod, manualTargets, priorityWakalas, baseWakalaIndex, readWeeklyStatsHistory());
-
             if (isMounted) {
-              setLiveTotals(totals);
+              setLiveInputs({ classified, owners, manualTargets, priorityWakalas, baseWakalaIndex, weekly: readWeeklyStatsHistory() });
             }
           } catch (e) {
             console.error('Failed to compute live KPI1/KPI2 totals:', e);
@@ -881,20 +903,22 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
                       </span>
                     </div>
                     <div className="text-right">
-                      <span className="block font-sans text-[10px] font-black text-black/60 uppercase tracking-wider">Served (MTD)</span>
+                      <span className="block font-sans text-[10px] font-black text-black/60 uppercase tracking-wider">
+                        {monthlyKpi ? 'Served · Monthly' : 'Served (MTD)'}
+                      </span>
                       <span className="block font-sans text-lg font-extrabold text-black font-mono mt-1">
-                        TZS {companyKPIs.mtdFloatServed.toLocaleString()}
+                        TZS {Math.round(goalServed).toLocaleString()}
                       </span>
                     </div>
                   </div>
                   <div className="w-full h-3 bg-black/15 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-black rounded-full transition-all"
-                      style={{ width: `${Math.min(100, monthlyGoal.total > 0 ? (companyKPIs.mtdFloatServed / monthlyGoal.total) * 100 : 0)}%` }}
+                      style={{ width: `${Math.min(100, monthlyGoal.total > 0 ? (goalServed / monthlyGoal.total) * 100 : 0)}%` }}
                     />
                   </div>
                   <span className="block text-right font-sans text-xs font-black text-black mt-1.5">
-                    {monthlyGoal.total > 0 ? Math.min(100, Math.round((companyKPIs.mtdFloatServed / monthlyGoal.total) * 100)) : 0}% of goal
+                    {monthlyGoal.total > 0 ? Math.round((goalServed / monthlyGoal.total) * 100) : 0}% of goal
                   </span>
                 </>
               )}

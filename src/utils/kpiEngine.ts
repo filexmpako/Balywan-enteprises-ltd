@@ -150,11 +150,14 @@ function calculateServedVolumeWithWeeklyMax(
  * Daily MGT classification. When weeklyStats + period are given, `servedVolume` (the figure
  * KPI1 achievement is measured against) is the greater of Daily MGT and the latest weekly
  * report for the month (see calculateServedVolumeWithWeeklyMax).
+ * When the month's own Monthly report is given (`monthlyServedValue`, owner id ->
+ * servicing value), it is final: `servedVolume` is that report's value.
  */
 export function calculateMtdVolumes(
   allClassifiedRows: ClassifiedRow[],
   weeklyStats?: WeeklyStatsEntry[],
-  period?: string
+  period?: string,
+  monthlyServedValue?: Map<string, number>
 ): Map<string, OwnerMtdVolumeResult> {
   const result = new Map<string, OwnerMtdVolumeResult>();
   const classifiedRows = filterClassifiedRowsToPeriod(allClassifiedRows, period);
@@ -191,6 +194,15 @@ export function calculateMtdVolumes(
     });
   }
 
+  if (monthlyServedValue) {
+    monthlyServedValue.forEach((_, ownerId) => {
+      if (!result.has(ownerId)) result.set(ownerId, { servedVolume: 0, baseVolume: 0, iopVolume: 0 });
+    });
+    result.forEach((vol, ownerId) => {
+      vol.servedVolume = monthlyServedValue.get(ownerId) || 0;
+    });
+  }
+
   return result;
 }
 
@@ -203,7 +215,8 @@ export function calculateOwnerMtdVolume(
   classifiedRows: ClassifiedRow[],
   ownerId?: string,
   weeklyStats?: WeeklyStatsEntry[],
-  period?: string
+  period?: string,
+  monthlyServedValue?: Map<string, number>
 ): OwnerMtdVolumeResult {
   if (!ownerId) {
     let totalServed = 0;
@@ -219,7 +232,7 @@ export function calculateOwnerMtdVolume(
     return { servedVolume: totalServed, baseVolume: totalBase, iopVolume: totalIop };
   }
 
-  const map = calculateMtdVolumes(classifiedRows, weeklyStats, period);
+  const map = calculateMtdVolumes(classifiedRows, weeklyStats, period, monthlyServedValue);
   return map.get(ownerId) || { servedVolume: 0, baseVolume: 0, iopVolume: 0 };
 }
 
@@ -276,7 +289,8 @@ export function getCompanyTotalKPI1Target(
  * in the caller) — this function does no classification itself, only
  * aggregation, so it stays fast and independently testable.
  * Pass weeklyStats (e.g. from readWeeklyStatsHistory()) so an uploaded
- * Weekly Report counts toward the target — see calculateMtdVolumes.
+ * Weekly Report counts toward the target, and monthlyServedValue when the
+ * month's Monthly report is uploaded (final) — see calculateMtdVolumes.
  */
 export function calculateKPI1(
   classifiedRows: ClassifiedRow[],
@@ -284,13 +298,14 @@ export function calculateKPI1(
   owners: Owner[],
   period: string,
   manualTargets?: ManualOwnerTarget[],
-  weeklyStats?: WeeklyStatsEntry[]
+  weeklyStats?: WeeklyStatsEntry[],
+  monthlyServedValue?: Map<string, number>
 ): KPI1Result[] {
   const results: KPI1Result[] = [];
   const actualManualTargets = manualTargets || getSavedManualOwnerTargets();
 
   // Aggregate served volume (BASE + IOP combined) per owner
-  const mtdVolumes = calculateMtdVolumes(classifiedRows, weeklyStats, period);
+  const mtdVolumes = calculateMtdVolumes(classifiedRows, weeklyStats, period, monthlyServedValue);
 
   for (const owner of owners) {
     if (!owner) continue;

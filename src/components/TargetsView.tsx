@@ -10,6 +10,7 @@ import { calculateKPI1, KPI1Result, getCompanyTotalKPI1Target } from '../utils/k
 import { calculateKPI2, KPI2Result } from '../utils/kpi2Engine';
 import { getDailyServicingRows } from '../utils/indexedDB';
 import { loadAllWeeklyRows } from '../utils/weeklyStore';
+import { loadMonthlyKpiOverride, type MonthlyKpiOverride } from '../utils/monthlySettlement';
 import { readWeeklyStatsHistory } from '../utils/weeklyHistory';
 import IopLabel from './IopLabel';
 import {
@@ -173,13 +174,24 @@ export default function TargetsView() {
     return () => { isMounted = false; };
   }, [period]);
 
+  // The month's own Monthly report, when uploaded, is final for KPI 1 / KPI 2.
+  const [monthlyKpi, setMonthlyKpi] = useState<MonthlyKpiOverride | null>(null);
+  useEffect(() => {
+    let isMounted = true;
+    setMonthlyKpi(null);
+    loadMonthlyKpiOverride(period)
+      .then(m => { if (isMounted) setMonthlyKpi(m); })
+      .catch(e => console.error('Failed to load the Monthly report for targets:', e));
+    return () => { isMounted = false; };
+  }, [period]);
+
   const kpi1Results: KPI1Result[] = useMemo(() => {
-    return calculateKPI1(classifiedRows, [], owners, period, manualTargets, readWeeklyStatsHistory());
-  }, [classifiedRows, owners, period, manualTargets]);
+    return calculateKPI1(classifiedRows, [], owners, period, manualTargets, readWeeklyStatsHistory(), monthlyKpi?.servedValueByOwner);
+  }, [classifiedRows, owners, period, manualTargets, monthlyKpi]);
 
   const kpi2Results: KPI2Result[] = useMemo(() => {
-    return calculateKPI2(classifiedRows, owners, period, manualTargets, priorityWakalas, baseWakalaIndex, weeklyServedMap);
-  }, [classifiedRows, owners, period, manualTargets, priorityWakalas, baseWakalaIndex, weeklyServedMap]);
+    return calculateKPI2(classifiedRows, owners, period, manualTargets, priorityWakalas, baseWakalaIndex, monthlyKpi?.servedByMsisdn ?? weeklyServedMap);
+  }, [classifiedRows, owners, period, manualTargets, priorityWakalas, baseWakalaIndex, weeklyServedMap, monthlyKpi]);
 
   const kpi1ByOwner = useMemo(() => {
     const m = new Map<string, KPI1Result>();
@@ -355,7 +367,7 @@ export default function TargetsView() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <span className="block font-sans text-[10px] font-bold text-brand-text-variant uppercase tracking-wider">
-                MTD SERVICED VOLUME (BASE + <IopLabel source="daily" />)
+                {monthlyKpi ? 'SERVICED VOLUME · MONTHLY' : <>MTD SERVICED VOLUME (BASE + <IopLabel source="daily" />)</>}
               </span>
               <div className="mt-1 flex items-baseline gap-2">
                 <span className="font-sans text-2xl sm:text-3xl font-black text-brand-primary font-mono">
