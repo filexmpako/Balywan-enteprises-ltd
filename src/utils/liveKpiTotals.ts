@@ -1,6 +1,6 @@
 import { ClassifiedRow } from './classification';
 import { Owner, PriorityWakala, BaseWakala, ManualOwnerTarget } from '../types';
-import { calculateKPI1 } from './kpiEngine';
+import { calculateKPI1, calculateMtdVolumes } from './kpiEngine';
 import { calculateKPI2 } from './kpi2Engine';
 import type { WeeklyStatsEntry } from './weeklyKpiEngine';
 import type { MonthlyKpiOverride } from './monthlySettlement';
@@ -13,7 +13,8 @@ export interface LiveKpiTotals {
 /**
  * Company-wide KPI1/KPI2 target vs. achieved, recomputed live from Daily MGT
  * classification (+ Weekly Report reconciliation for KPI1), or from the
- * month's Monthly report when it is uploaded (final for both KPIs). Shared by
+ * month's Monthly report when it is uploaded (final for both KPIs). Achieved
+ * counts every wakala, including those with no owner. Shared by
  * DashboardView and KPIReportsView so their "Telecom-Reported KPIs" rows can
  * never independently drift from each other for the same period.
  */
@@ -29,11 +30,17 @@ export function computeLiveKpiTotals(
 ): LiveKpiTotals {
   const kpi1Results = calculateKPI1(classifiedRows, [], owners, period, manualTargets, weeklyStats, monthly?.servedValueByOwner);
   const kpi1Target = kpi1Results.reduce((s, r) => s + (r.hasTarget ? r.monthlyTarget : 0), 0);
-  const kpi1Achieved = kpi1Results.reduce((s, r) => s + r.servedVolume, 0);
+  // Every wakala counts toward the company figure, with or without an owner.
+  let kpi1Achieved = 0;
+  calculateMtdVolumes(classifiedRows, weeklyStats, period, monthly?.servedValueByOwner).forEach(v => {
+    kpi1Achieved += v.servedVolume;
+  });
 
   const kpi2Results = calculateKPI2(classifiedRows, owners, period, manualTargets, priorityWakalas, baseWakalaIndex, monthly?.servedByMsisdn);
   const kpi2Target = kpi2Results.reduce((s, r) => s + (r.hasTarget ? r.normalTarget + r.priorityTarget : 0), 0);
-  const kpi2Achieved = kpi2Results.reduce((s, r) => s + (r.hasTarget ? r.normalServed + r.priorityServed : 0), 0);
+  const kpi2Achieved =
+    kpi2Results.reduce((s, r) => s + (r.hasTarget ? r.normalServed + r.priorityServed : 0), 0) +
+    (monthly?.unassignedServed ?? 0);
 
   return {
     kpi1: kpi1Target > 0 ? { target: kpi1Target, achieved: kpi1Achieved } : null,
