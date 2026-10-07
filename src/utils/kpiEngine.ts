@@ -127,8 +127,7 @@ function calculateServedVolumeWithWeeklyMax(
   const dailyByOwner = new Map<string, number>();
   classifiedRows.forEach(cr => {
     if (cr.bucket !== 'BASE' && cr.bucket !== 'IOP') return;
-    const ownerId = cr.auditRecord?.ownerId;
-    if (!ownerId || ownerId === 'UNASSIGNED') return;
+    const ownerId = mtdOwnerKey(cr);
     dailyByOwner.set(ownerId, (dailyByOwner.get(ownerId) || 0) + (cr.auditRecord?.amount || 0));
   });
 
@@ -144,8 +143,17 @@ function calculateServedVolumeWithWeeklyMax(
   return servedByOwner;
 }
 
+/** Volume with no owner, keyed like the weekly / monthly reports' unassigned bucket. */
+export const UNASSIGNED_OWNER_KEY = '__unassigned__';
+
+function mtdOwnerKey(cr: ClassifiedRow): string {
+  const ownerId = cr.auditRecord?.ownerId;
+  return !ownerId || ownerId === 'UNASSIGNED' ? UNASSIGNED_OWNER_KEY : ownerId;
+}
+
 /**
- * Calculates MTD volume breakdown (served, base, iop) across classified rows for all owners.
+ * Calculates MTD volume breakdown (served, base, iop) across classified rows for all owners,
+ * plus volume with no owner under UNASSIGNED_OWNER_KEY (counted in company totals).
  * Only rows dated in `period` count when a period is given. Base/IOP split always comes from
  * Daily MGT classification. When weeklyStats + period are given, `servedVolume` (the figure
  * KPI1 achievement is measured against) is the greater of Daily MGT and the latest weekly
@@ -164,8 +172,7 @@ export function calculateMtdVolumes(
 
   for (const cr of classifiedRows) {
     if (cr.bucket !== 'BASE' && cr.bucket !== 'IOP') continue;
-    const actingOwnerId = cr.auditRecord?.ownerId;
-    if (!actingOwnerId || actingOwnerId === 'UNASSIGNED') continue;
+    const actingOwnerId = mtdOwnerKey(cr);
     const amount = cr.auditRecord?.amount || 0;
 
     let existing = result.get(actingOwnerId);

@@ -30,25 +30,29 @@ export async function loadMonthlyReportStats(monthLabel: string): Promise<Monthl
 /**
  * A month's Monthly report as the final KPI source: each owner's servicing
  * value (KPI 1) and each wakala's servicing_status (KPI 2). Wakalas the report
- * gives no owner are left out, since owner targets only cover owned wakalas.
+ * gives no owner count toward company totals: their value sits under the
+ * unassigned id and their served count in `unassignedServed`.
  */
 export interface MonthlyKpiOverride {
   month: string;
   servedValueByOwner: Map<string, number>;
   servedByMsisdn: Map<string, boolean>;
+  unassignedServed: number;
 }
 
 export function toMonthlyKpiOverride(month: string, stats: MonthlyReportStats): MonthlyKpiOverride {
   const servedValueByOwner = new Map<string, number>();
   stats.byOwner.forEach(b => {
-    if (b.ownerId && b.ownerId !== '__unassigned__') servedValueByOwner.set(b.ownerId, b.value || 0);
+    if (b.ownerId) servedValueByOwner.set(b.ownerId, b.value || 0);
   });
   const servedByMsisdn = new Map<string, boolean>();
+  let unassignedServed = 0;
   stats.evaluations.forEach(e => {
     const key = normalizeMsisdn(e.msisdn);
     if (key && e.isServed !== null) servedByMsisdn.set(key, e.isServed);
+    if (!e.ownerId && e.isServed) unassignedServed += 1;
   });
-  return { month, servedValueByOwner, servedByMsisdn };
+  return { month, servedValueByOwner, servedByMsisdn, unassignedServed };
 }
 
 /** The override for `period` when that month's own Monthly report is uploaded, else null. */
