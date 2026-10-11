@@ -9,18 +9,10 @@ import {
 import { calculateKPI1, KPI1Result, getCompanyTotalKPI1Target } from '../utils/kpiEngine';
 import { calculateKPI2, KPI2Result } from '../utils/kpi2Engine';
 import { getDailyServicingRows } from '../utils/indexedDB';
-import { loadAllWeeklyRows } from '../utils/weeklyStore';
 import { loadMonthlyKpiOverride, type MonthlyKpiOverride } from '../utils/monthlySettlement';
+import { loadWeeklyServedMap } from '../utils/weeklyServed';
 import { readWeeklyStatsHistory } from '../utils/weeklyHistory';
 import IopLabel from './IopLabel';
-import {
-  getActiveStatusFromColumn,
-  getServicedStatusFromColumn,
-  mergeServicedStatus,
-  preferColumnStatus,
-} from '../utils/servicingStatus';
-import { getActivityRules, isActiveByRule, isServedByRule, extractTxnCounts, type TxnCounts } from '../utils/activityRules';
-import { normalizeMsisdn } from '../utils/msisdn';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
 import { Target, X, ArrowLeft, Loader2, SlidersHorizontal, MoreVertical } from 'lucide-react';
 import PageHeaderBanner from './PageHeaderBanner';
@@ -134,40 +126,8 @@ export default function TargetsView() {
 
   useEffect(() => {
     let isMounted = true;
-    loadAllWeeklyRows()
-      .then(rows => {
-        if (!isMounted) return;
-        const columnServedMap = new Map<string, boolean | null>();
-        const columnActiveMap = new Map<string, boolean | null>();
-        const countsMap = new Map<string, TxnCounts>();
-        (rows || []).forEach((row: any) => {
-          const month = String(row?.reportingMonth || row?.reporting_month || '').trim();
-          if (month && period && month !== period) return;
-          const key = normalizeMsisdn(row?.MSISDN || row?.msisdn);
-          if (!key) return;
-          columnServedMap.set(key, mergeServicedStatus(columnServedMap.get(key) ?? null, getServicedStatusFromColumn(row)));
-          columnActiveMap.set(key, mergeServicedStatus(columnActiveMap.get(key) ?? null, getActiveStatusFromColumn(row)));
-          const rowCounts = extractTxnCounts(row);
-          const existing = countsMap.get(key);
-          countsMap.set(key, existing
-            ? {
-                cashIn: existing.cashIn + rowCounts.cashIn,
-                cashOut: existing.cashOut + rowCounts.cashOut,
-                total: existing.total + rowCounts.total,
-                amount: (existing.amount || 0) + (rowCounts.amount || 0),
-              }
-            : rowCounts);
-        });
-        // The uploaded servicing_status / wakala_status columns are final when
-        // present; the system rules only fill a wakala with no status reading.
-        const rules = getActivityRules();
-        const resolved = new Map<string, boolean>();
-        countsMap.forEach((counts, key) => {
-          const isActive = preferColumnStatus(columnActiveMap.get(key) ?? null, isActiveByRule(counts, rules));
-          resolved.set(key, preferColumnStatus(columnServedMap.get(key) ?? null, isServedByRule(counts, isActive, rules)));
-        });
-        setWeeklyServedMap(resolved);
-      })
+    loadWeeklyServedMap(period)
+      .then(map => { if (isMounted) setWeeklyServedMap(map ?? new Map()); })
       .catch(() => {
         if (isMounted) setWeeklyServedMap(new Map());
       });
