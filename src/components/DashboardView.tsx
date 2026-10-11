@@ -211,6 +211,11 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
 
   // Weekly KPI progression — appended as each new weekly workbook is uploaded.
   const [weeklyStats, setWeeklyStats] = useState<WeeklyStatsEntry[]>(() => readWeeklyStatsHistory());
+  // The weekly sections show only the selected month's weekly reports.
+  const monthWeeklyStats = useMemo(
+    () => weeklyStats.filter(w => periodsMatch(w.reportingMonth || '', currentPeriod)),
+    [weeklyStats, currentPeriod],
+  );
   const [classifiedDaily, setClassifiedDaily] = useState<ClassifiedRow[]>([]);
 
   // Settlement Ledger source, and the chosen Monthly report's own figures.
@@ -256,11 +261,11 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
 
   useEffect(() => {
     let cancelled = false;
-    if (weeklyStats.length === 0) {
+    const latestEntry = latestWeeklyEntryForPeriod(monthWeeklyStats, currentPeriod);
+    if (!latestEntry) {
       setWeeklyIopComparison(null);
       return;
     }
-    const latestEntry = weeklyStats[weeklyStats.length - 1];
     (async () => {
       try {
         const dailyRows = await getDailyServicingRows();
@@ -285,7 +290,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
     return () => {
       cancelled = true;
     };
-  }, [weeklyStats]);
+  }, [monthWeeklyStats, currentPeriod]);
 
   const [rawKpis, setRawKpis] = useState<KPIMetric[]>(() => {
     const saved = localStorage.getItem('dashboardKPIs');
@@ -454,6 +459,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
     mtdFloatReceived: 0,
     mtdFloatServed: 0,
     mtdClosingFloat: 0,
+    mtdDayCount: 0,
     totalPenalty: 0,
     unattributedPenalty: 0,
     penaltyByOwner: {},
@@ -516,7 +522,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
       if (isMounted) {
         let kpis: CompanyKPIsResult;
         try {
-          kpis = await calculateCompanyKPIs(rows);
+          kpis = await calculateCompanyKPIs(rows, currentPeriod);
         } catch (e) {
           console.error('Failed to compute company KPIs in DashboardView:', e);
           if (isMounted) setDashboardLoadState('error');
@@ -875,6 +881,7 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
               <MetricCard
                 title="Total Volume"
                 value={`TZS ${companyKPIs.mtdFloatServed.toLocaleString()}`}
+                subValue={companyKPIs.mtdDayCount === 0 ? `No Daily MGT for ${displayPeriod}` : undefined}
                 icon={Activity}
                 variant="blue"
               />
@@ -1017,8 +1024,15 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
       )}
 
       {/* Weekly KPI Progression — appended per uploaded weekly workbook */}
-      {weeklyStats.length > 0 && (() => {
-        const series = withCumulativeValue(weeklyStats);
+      {monthWeeklyStats.length === 0 && (
+        <div className="rounded-2xl border border-brand-gray-border bg-brand-card p-6 shadow-ambient">
+          <h3 className="font-sans text-lg font-bold text-brand-text">Weekly KPI Progression</h3>
+          <p className="font-sans text-sm text-brand-text-variant mt-1">No weekly reports for {displayPeriod}.</p>
+        </div>
+      )}
+
+      {monthWeeklyStats.length > 0 && (() => {
+        const series = withCumulativeValue(monthWeeklyStats);
         const latest = series[series.length - 1];
         const target = monthlyGoal?.hasAny ? monthlyGoal.total : 0;
         const progress = target > 0 ? (latest.cumulativeValue / target) * 100 : 0;
@@ -1345,9 +1359,9 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
               <UploadCloud className="h-7 w-7" />
             </div>
             <div className="space-y-1 max-w-sm">
-              <h4 className="font-sans text-sm font-bold text-brand-text">No KPI Summary Available</h4>
+              <h4 className="font-sans text-sm font-bold text-brand-text">No KPI data for {displayPeriod}</h4>
               <p className="font-sans text-xs text-brand-text-variant font-medium leading-relaxed">
-                No KPI reports have been processed yet. Go to Upload Reports to ingest a KPI report or workbook.
+                Set this month's targets on the Targets page, or upload its reports.
               </p>
             </div>
             <button
