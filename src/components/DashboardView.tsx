@@ -10,6 +10,7 @@ import {
   reportEndDate,
 } from '../utils/kpiEngine';
 import { loadMonthlyReportStats, toMonthlyKpiOverride, type MonthlyReportStats } from '../utils/monthlySettlement';
+import { loadWeeklyServedMap } from '../utils/weeklyServed';
 import { fetchMonthlyMonths } from '../lib/monthly.functions';
 import IopLabel from './IopLabel';
 import IopVariance, { shortMonth } from './IopVariance';
@@ -322,16 +323,28 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
         : null,
     [settlementReport, monthlyStats],
   );
+  // A month with weekly reports but no Monthly report: its weekly servicing_status is final for KPI 2.
+  const weeklyServedPeriod = settlementReport?.kind === 'weekly' && !settlementReport.isFallback ? currentPeriod : '';
+  const [weeklyServed, setWeeklyServed] = useState<{ period: string; map: Map<string, boolean> | null } | null>(null);
+  useEffect(() => {
+    if (!weeklyServedPeriod) return;
+    let cancelled = false;
+    loadWeeklyServedMap(weeklyServedPeriod)
+      .then(map => { if (!cancelled) setWeeklyServed({ period: weeklyServedPeriod, map }); })
+      .catch(err => console.error('Weekly served status load failed:', err));
+    return () => { cancelled = true; };
+  }, [weeklyServedPeriod]);
+  const weeklyServedMap = weeklyServedPeriod && weeklyServed?.period === weeklyServedPeriod ? weeklyServed.map : null;
   const liveTotals: LiveKpiTotals = useMemo(() => {
     if (!liveInputs) return { kpi1: null, kpi2: null };
     try {
       const { classified, owners, manualTargets, priorityWakalas, baseWakalaIndex, weekly } = liveInputs;
-      return computeLiveKpiTotals(classified, owners, currentPeriod, manualTargets, priorityWakalas, baseWakalaIndex, weekly, monthlyKpi);
+      return computeLiveKpiTotals(classified, owners, currentPeriod, manualTargets, priorityWakalas, baseWakalaIndex, weekly, monthlyKpi, weeklyServedMap);
     } catch (e) {
       console.error('Failed to compute live KPI1/KPI2 totals:', e);
       return { kpi1: null, kpi2: null };
     }
-  }, [liveInputs, currentPeriod, monthlyKpi]);
+  }, [liveInputs, currentPeriod, monthlyKpi, weeklyServedMap]);
 
   const kpis: KPIMetric[] = useMemo(() => {
     return withLiveKpiRows(rawKpis, liveTotals).map(kpi => {
