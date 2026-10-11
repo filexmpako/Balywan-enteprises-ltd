@@ -5,6 +5,7 @@ import { normalizeMsisdn } from './msisdn';
 import { resolveOwnerMatch } from './ownerMatch';
 import { formatDateTime } from './dateFormat';
 import { calculatePenalty, getActivityRules } from './activityRules';
+import { toIsoPeriod } from './periodUtils';
 
 /**
  * Reads a numeric column by name, tolerant of the exact header spelling
@@ -1160,6 +1161,8 @@ export interface CompanyKPIsResult {
   mtdFloatReceived: number;
   mtdFloatServed: number;
   mtdClosingFloat: number;
+  /** Days of Daily MGT in the month-to-date month (0 = no data that month). */
+  mtdDayCount: number;
   totalPenalty: number;
   unattributedPenalty: number;
   penaltyByOwner: Record<string, number>;
@@ -1171,7 +1174,11 @@ export interface CompanyKPIsResult {
   earliestDay: string;
 }
 
-export async function calculateCompanyKPIs(realRows: any[]): Promise<CompanyKPIsResult> {
+/**
+ * `period` (e.g. "2026-10") picks the month the month-to-date figures cover;
+ * without it they cover the latest month that has Daily MGT.
+ */
+export async function calculateCompanyKPIs(realRows: any[], period?: string): Promise<CompanyKPIsResult> {
   const getAmountVal = (row: any) => {
     const val = row['Volume (TZS)'] || row['Volume'] || row['Amount'] || row['value'] || row['volume'] || 0;
     if (typeof val === 'number') return val;
@@ -1205,6 +1212,7 @@ export async function calculateCompanyKPIs(realRows: any[]): Promise<CompanyKPIs
     mtdFloatReceived: 0,
     mtdFloatServed: 0,
     mtdClosingFloat: 0,
+    mtdDayCount: 0,
     totalPenalty: 0,
     unattributedPenalty: 0,
     penaltyByOwner: {},
@@ -1327,8 +1335,10 @@ export async function calculateCompanyKPIs(realRows: any[]): Promise<CompanyKPIs
 
   // 2. MONTH TO DATE (MTD) METRICS:
   const latestDateObj = new Date(todayDateStr);
-  const targetYear = latestDateObj.getFullYear();
-  const targetMonth = latestDateObj.getMonth(); // 0-indexed
+  const periodIso = period ? toIsoPeriod(period) : '';
+  const hasPeriod = /^\d{4}-\d{2}$/.test(periodIso);
+  const targetYear = hasPeriod ? Number(periodIso.slice(0, 4)) : latestDateObj.getFullYear();
+  const targetMonth = hasPeriod ? Number(periodIso.slice(5, 7)) - 1 : latestDateObj.getMonth(); // 0-indexed
 
   const currentMonthBillableRows = billableRealRows.filter(r => {
     const dStr = r['Servicing Date'] || r['date'] || '';
@@ -1347,8 +1357,11 @@ export async function calculateCompanyKPIs(realRows: any[]): Promise<CompanyKPIs
   const monthUniqueDates = Array.from(new Set(currentMonthAllRows.map(r => r['Servicing Date'] || r['date'] || '').filter(Boolean)));
   monthUniqueDates.sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
 
-  const firstDayOfMonthStr = monthUniqueDates[0] || todayDateStr;
-  const mtdOpeningFloat = getDayOpeningFloat(firstDayOfMonthStr);
+  // A month with no Daily MGT has no month-to-date figures.
+  const mtdDayCount = monthUniqueDates.length;
+  const firstDayOfMonthStr = monthUniqueDates[0];
+  const lastDayOfMonthStr = monthUniqueDates[monthUniqueDates.length - 1];
+  const mtdOpeningFloat = firstDayOfMonthStr ? getDayOpeningFloat(firstDayOfMonthStr) : 0;
 
   const mtdFloatReceived = 0;
 
@@ -1356,7 +1369,7 @@ export async function calculateCompanyKPIs(realRows: any[]): Promise<CompanyKPIs
     return acc + Math.abs(getAmountVal(row));
   }, 0);
 
-  const mtdClosingFloat = getDayClosingFloat(todayDateStr);
+  const mtdClosingFloat = lastDayOfMonthStr ? getDayClosingFloat(lastDayOfMonthStr) : 0;
 
   // Format Reporting Month (MMM YYYY) for display, and the full "Month YYYY"
   // form uploads are actually stored under (see UPLOAD_MONTH_NAMES in
@@ -1453,6 +1466,7 @@ export async function calculateCompanyKPIs(realRows: any[]): Promise<CompanyKPIs
     mtdFloatReceived,
     mtdFloatServed,
     mtdClosingFloat,
+    mtdDayCount,
     totalPenalty,
     unattributedPenalty,
     penaltyByOwner,
