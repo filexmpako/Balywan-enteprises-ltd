@@ -6,7 +6,8 @@ import {
   submitFloatReturn, completeFloatRequest, rejectFloatReturn, getPendingDays,
   getResolutionDays, getTotalReturned, approveLoanForShortfall,
   getLoanRecordsForOwner, submitLoanRepayment,
-  startFloatAutoRefresh, uploadReceipt, loadReceiptImage, type FloatResult
+  startFloatAutoRefresh, uploadReceipt, loadReceiptImage, type FloatResult,
+  getShortfall, isLoanPendingApproval
 } from '../utils/floatManagement';
 import { useAuth } from './AuthContext';
 import { Banknote, X, Camera, CheckCircle2, AlertTriangle, Clock, FileText, XCircle, DollarSign, Send, Check } from 'lucide-react';
@@ -121,6 +122,8 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
   const confirmedRequest = requests.find(r => r.status === 'Confirmed');
   const hasActiveRequest = requests.some(r => r.status !== 'Completed' && r.status !== 'Rejected');
   const unpaidLoans = loans.filter(l => l.status !== 'Paid');
+  // Short returns count as this owner's loan, awaiting the Float Manager's approval.
+  const pendingLoanRequests = requests.filter(isLoanPendingApproval);
 
   const handleSubmitRequest = async () => {
     const amt = parseFloat(amountInput);
@@ -262,6 +265,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
     if (r.loanId) return <span className="text-[10px] font-extrabold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full border border-indigo-200">Loan Created</span>;
     if (r.status === 'Rejected') return <span className="text-[10px] font-extrabold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">Rejected</span>;
     if (r.status === 'Completed') return <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">Completed</span>;
+    if (isLoanPendingApproval(r)) return <span className="text-[10px] font-extrabold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">Loan Pending Approval</span>;
     if (r.status === 'Returned') {
       const mismatch = getTotalReturned(r) !== r.requestedAmount;
       return mismatch
@@ -332,9 +336,9 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
               }`}
             >
               Loans
-              {unpaidLoans.length > 0 && (
+              {unpaidLoans.length + pendingLoanRequests.length > 0 && (
                 <span className="px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-100 text-indigo-700 border border-indigo-200 leading-none">
-                  {unpaidLoans.length}
+                  {unpaidLoans.length + pendingLoanRequests.length}
                 </span>
               )}
             </button>
@@ -567,7 +571,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                         </div>
                       )}
 
-                      {r.status === 'Returned' && getTotalReturned(r) !== r.requestedAmount && (
+                      {r.status === 'Returned' && getTotalReturned(r) > r.requestedAmount && (
                         <div className="flex items-center gap-1 text-[11px] text-rose-600 font-bold bg-rose-50 p-2 rounded-lg border border-rose-200">
                           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                           <span>Requested TZS {r.requestedAmount.toLocaleString()} ≠ Returned TZS {getTotalReturned(r).toLocaleString()}</span>
@@ -576,8 +580,10 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
 
                       {r.status === 'Returned' && getTotalReturned(r) < r.requestedAmount && r.shortfallReason && !r.loanId && (
                         <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-2 text-[11px]">
-                          <p className="font-bold text-indigo-800 mb-0.5">Owner's reason for shortfall:</p>
-                          <p className="text-indigo-700 italic">"{r.shortfallReason}"</p>
+                          <p className="font-bold text-indigo-800 mb-0.5">
+                            Loan pending approval: TZS {getShortfall(r).toLocaleString()} (returned TZS {getTotalReturned(r).toLocaleString()} of TZS {r.requestedAmount.toLocaleString()})
+                          </p>
+                          <p className="text-indigo-700 italic">Reason: "{r.shortfallReason}"</p>
                         </div>
                       )}
 
@@ -770,11 +776,29 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
           {/* TAB 3: Outstanding Loans */}
           {activeFloatTab === 'loans' && (
             <div className="space-y-4">
-              {unpaidLoans.length === 0 ? (
-                <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 text-center text-xs text-slate-500 space-y-1">
-                  <p className="font-bold text-slate-700">No outstanding loans</p>
-                  <p className="text-[11px]">All past shortfall loans have been fully repaid and verified.</p>
+              {pendingLoanRequests.length > 0 && (
+                <div className="space-y-2">
+                  <h5 className="font-sans text-xs font-bold text-amber-700 uppercase tracking-wider">
+                    Awaiting Float Manager approval ({pendingLoanRequests.length})
+                  </h5>
+                  {pendingLoanRequests.map(r => (
+                    <div key={r.id} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px]">
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-800">Short return on float of {formatDate(r.requestedAt)}</p>
+                        <p className="text-slate-600">Returned TZS {getTotalReturned(r).toLocaleString()} of TZS {r.requestedAmount.toLocaleString()}</p>
+                      </div>
+                      <p className="font-black text-sm text-amber-700 shrink-0">TZS {getShortfall(r).toLocaleString()}</p>
+                    </div>
+                  ))}
                 </div>
+              )}
+              {unpaidLoans.length === 0 ? (
+                pendingLoanRequests.length === 0 ? (
+                  <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 text-center text-xs text-slate-500 space-y-1">
+                    <p className="font-bold text-slate-700">No outstanding loans</p>
+                    <p className="text-[11px]">All past shortfall loans have been fully repaid and verified.</p>
+                  </div>
+                ) : null
               ) : (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between pb-2 border-b border-slate-200">

@@ -162,6 +162,24 @@ export function getTotalReturned(request: FloatRequest): number {
   return (request.returnEntries || []).reduce((sum, e) => sum + e.amount, 0);
 }
 
+/** Amount still missing after the owner's return (0 when fully returned). */
+export function getShortfall(request: FloatRequest): number {
+  return Math.max(0, request.requestedAmount - getTotalReturned(request));
+}
+
+/**
+ * A short return counts as a loan for the owner; it waits here until the
+ * Float Manager approves it (approveLoanForShortfall creates the loan record).
+ */
+export function isLoanPendingApproval(request: FloatRequest): boolean {
+  return request.status === 'Returned' && !request.loanId && getShortfall(request) > 0;
+}
+
+/** Short returns awaiting the manager's loan approval. */
+export function getPendingLoanRequests(requests: FloatRequest[]): FloatRequest[] {
+  return requests.filter(isLoanPendingApproval);
+}
+
 export function getPendingDays(request: FloatRequest): number {
   if (request.status === 'Completed' || request.status === 'Rejected') return 0;
   const start = new Date(request.requestedAt).getTime();
@@ -199,6 +217,12 @@ export function getStatusBadgeInfo(r: FloatRequest): {
     };
   }
   if (r.status === 'Returned') {
+    if (isLoanPendingApproval(r)) {
+      return {
+        label: 'Loan Pending Approval',
+        badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+      };
+    }
     const mismatch = getTotalReturned(r) !== r.requestedAmount;
     if (mismatch) {
       return {
