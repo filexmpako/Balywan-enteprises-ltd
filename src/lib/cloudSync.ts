@@ -21,13 +21,15 @@ let installed = false;
 let suspended = false;
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
-type QueueEntry = { key: string; kind: 'collection' | 'document'; value: string };
+/** A write that could not be sent yet, and the signed-in user who made it. */
+type QueueEntry = { key: string; kind: 'collection' | 'document'; value: string; userId?: string };
 
 function readQueue(): QueueEntry[] {
   try {
     const queue: QueueEntry[] = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
-    // Drop whole-list writes queued by older versions for per-record collections.
-    return queue.filter((q) => !SERVER_MANAGED_KEYS.has(q.key));
+    // Drop whole-list writes for per-record collections, and writes queued by
+    // older versions without their author (they cannot be replayed safely).
+    return queue.filter((q) => !SERVER_MANAGED_KEYS.has(q.key) && Boolean(q.userId));
   } catch {
     return [];
   }
@@ -41,6 +43,16 @@ function enqueue(entry: QueueEntry) {
   const queue = readQueue().filter((q) => q.key !== entry.key);
   queue.push(entry);
   writeQueue(queue);
+}
+
+async function currentUserId(): Promise<string | null> {
+  try {
+    const { supabase } = await import('@/integrations/supabase/client');
+    const { data } = await supabase.auth.getSession();
+    return data.session?.user?.id ?? null;
+  } catch {
+    return null;
+  }
 }
 
 async function hasSession(): Promise<boolean> {
@@ -78,8 +90,15 @@ async function push(entry: QueueEntry) {
 export async function flushQueue(): Promise<void> {
   const queue = readQueue();
   if (!queue.length) return;
+  const userId = await currentUserId();
+  if (!userId) return;
   const remaining: QueueEntry[] = [];
   for (const entry of queue) {
+    // A write is only ever sent as the user who made it. Another user's queued
+    // write (e.g. an owner's, on a shared device) is dropped: replayed under a
+    // staff login it would be saved with staff rights from that user's partial
+    // copy of the data.
+    if (entry.userId !== userId) continue;
     try {
       await push(entry);
     } catch {
@@ -98,10 +117,11 @@ function schedulePush(key: string, value: string) {
     key,
     setTimeout(async () => {
       timers.delete(key);
+      const userId = await currentUserId();
       try {
         await push(entry);
       } catch {
-        enqueue(entry);
+        if (userId) enqueue({ ...entry, userId });
       }
     }, 600),
   );
