@@ -10,6 +10,8 @@ import { ownersList as initialOwners } from '../data';
 import { getAvatarUrl } from '../utils/avatar';
 import OwnerSyncDashboard from './OwnerSyncDashboard';
 import DailyMgtMappingEngine from './DailyMgtMappingEngine';
+import { useReportingPeriod } from './ReportingPeriodContext';
+import { toIsoPeriod } from '../utils/periodUtils';
 import { 
   UploadCloud, 
   FileText, 
@@ -226,10 +228,13 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
     return localStorage.getItem('priorityWakalaList_lastUpdated') || null;
   });
   const [stagedPriorityWakalas, setStagedPriorityWakalas] = useState<PriorityWakala[] | null>(null);
-  const [priorityWakalaPeriod, setPriorityWakalaPeriod] = useState<string>(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  });
+  // A priority list belongs to a reporting month, which can differ from the
+  // calendar month, so it defaults to (and follows) the reporting month until
+  // a month is picked here.
+  const { currentPeriod } = useReportingPeriod();
+  const [priorityPeriodPicked, setPriorityPeriodPicked] = useState<string | null>(null);
+  const priorityWakalaPeriod = priorityPeriodPicked || toIsoPeriod(currentPeriod);
+  const setPriorityWakalaPeriod = (period: string) => setPriorityPeriodPicked(period || null);
 
   // Base Wakala Index persistence & state
   const [baseWakalas, setBaseWakalas] = useState<BaseWakala[]>(() => {
