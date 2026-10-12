@@ -17,6 +17,8 @@ import {
   getResolutionDays,
   getStatusBadgeInfo,
   getTotalReturned,
+  getShortfall,
+  getPendingLoanRequests,
   refreshFloatData,
   startFloatAutoRefresh,
   getFloatLastRefreshed,
@@ -332,7 +334,8 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
 
   // Stats calculation for Ledger tab (respects date filtering)
   const totalCount = dateFilteredRequests.length;
-  const pendingCount = dateFilteredRequests.filter(r => r.status === 'Pending').length;
+  // Waiting on the manager: new requests to confirm and returns to complete or approve as a loan.
+  const pendingCount = dateFilteredRequests.filter(r => r.status === 'Pending' || (r.status === 'Returned' && !r.loanId)).length;
   const distributedCount = dateFilteredRequests.filter(r => r.status === 'Confirmed').length;
   const completedCount = dateFilteredRequests.filter(r => r.status === 'Completed').length;
 
@@ -352,6 +355,13 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
   const totalLoansOutstandingFinancial = loans
     .filter(l => l.status !== 'Paid')
     .reduce((sum, l) => sum + (l.amount || 0), 0);
+
+  // Short returns: counted as the owner's loan, awaiting the manager's approval.
+  const pendingLoanRequests = getPendingLoanRequests(requests).filter(r => {
+    const ownerName = getOwnerName(r.ownerId).toLowerCase();
+    return ownerName.includes(searchTerm.toLowerCase()) || r.ownerId.toLowerCase().includes(searchTerm.toLowerCase());
+  });
+  const totalPendingLoanAmount = getPendingLoanRequests(requests).reduce((sum, r) => sum + getShortfall(r), 0);
 
   const totalOutstandingLoanAmount = loans
     .filter(l => l.status !== 'Paid')
@@ -443,7 +453,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
             }`}
           >
             <FileText className="h-4 w-4" />
-            Loans ({loans.length})
+            Loans ({loans.length}){getPendingLoanRequests(requests).length > 0 ? ` · ${getPendingLoanRequests(requests).length} awaiting approval` : ''}
           </button>
           <div className="ml-auto flex items-center gap-2">
             {busyId && <span className="text-xs font-semibold text-brand-text-variant">Saving…</span>}
@@ -821,7 +831,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                                       className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-colors cursor-pointer"
                                     >
                                       <Check className="h-4 w-4" />
-                                      Agree — Create Loan
+                                      Approve Loan ({formatCurrency(getShortfall(r))})
                                     </button>
                                   )}
                                   {!readOnly && isMismatch && (
@@ -849,8 +859,10 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                         {/* Secondary Alert Rows: Shortfall Reason Banner */}
                         {r.status === 'Returned' && isShortfall && r.shortfallReason && !r.loanId && (
                           <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 text-xs">
-                            <p className="font-bold text-indigo-900 mb-0.5">Owner's Reason for Shortfall:</p>
-                            <p className="text-indigo-800 italic">"{r.shortfallReason}"</p>
+                            <p className="font-bold text-indigo-900 mb-0.5">
+                              Loan pending approval: {formatCurrency(getShortfall(r))} (returned {formatCurrency(getTotalReturned(r))} of {formatCurrency(r.requestedAmount)})
+                            </p>
+                            <p className="text-indigo-800 italic">Owner's reason: "{r.shortfallReason}"</p>
                           </div>
                         )}
 
@@ -881,8 +893,8 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                           </div>
                         )}
 
-                        {/* Secondary Alert Rows: Mismatch Reconciliation Gate Alert */}
-                        {isMismatch && !r.loanId && (
+                        {/* Secondary Alert Rows: over-return (a short return is a pending loan, shown above) */}
+                        {isMismatch && !isShortfall && !r.loanId && (
                           <div className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-700 bg-rose-50 px-3 py-1.5 rounded-lg border border-rose-200">
                             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                             Amount Mismatch: Returned ({formatCurrency(getTotalReturned(r))}) does not match requested ({formatCurrency(r.requestedAmount)}).
@@ -915,7 +927,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
           /* Loans View */
           <div className="space-y-6">
             {/* Top Financial Summary Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="rounded-2xl border border-brand-gray-border bg-white p-5 shadow-ambient flex items-center justify-between">
                 <div>
                   <p className="text-xs font-bold text-brand-text-variant uppercase tracking-wider">Float Not Yet Returned</p>
@@ -935,7 +947,51 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                   <Banknote className="h-6 w-6" />
                 </div>
               </div>
+
+              <div className="rounded-2xl border border-brand-gray-border bg-white p-5 shadow-ambient flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-brand-text-variant uppercase tracking-wider">Loans Awaiting Approval</p>
+                  <p className="text-2xl font-black text-amber-600 mt-1">TZS {totalPendingLoanAmount.toLocaleString()}</p>
+                </div>
+                <div className="h-12 w-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                  <Clock className="h-6 w-6" />
+                </div>
+              </div>
             </div>
+
+            {/* Short returns: the shortfall is the owner's loan once approved */}
+            {pendingLoanRequests.length > 0 && (
+              <div className="rounded-2xl border border-amber-200 bg-white shadow-ambient p-6 space-y-3">
+                <h3 className="font-bold text-sm text-brand-text">Awaiting Approval ({pendingLoanRequests.length})</h3>
+                <div className="space-y-2">
+                  {pendingLoanRequests.map(r => (
+                    <div key={r.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-amber-50/60 border border-amber-200">
+                      <div className="min-w-0">
+                        <p className="font-bold text-sm text-brand-text">{getOwnerName(r.ownerId)}</p>
+                        <p className="text-[11px] text-slate-600">
+                          Returned {formatCurrency(getTotalReturned(r))} of {formatCurrency(r.requestedAmount)}
+                          {r.returnedAt ? ` on ${formatDate(r.returnedAt)}` : ''}
+                        </p>
+                        {r.shortfallReason && <p className="text-[11px] text-slate-600 italic">"{r.shortfallReason}"</p>}
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <p className="font-black text-sm text-amber-700">{formatCurrency(getShortfall(r))}</p>
+                        {!readOnly && (
+                          <button
+                            onClick={() => handleApproveLoan(r)}
+                            disabled={!!busyId}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white shadow-xs transition-colors cursor-pointer"
+                          >
+                            <Check className="h-4 w-4" />
+                            Approve Loan
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Owner Aggregated Summary Cards */}
             {ownerLoanSummary.length > 0 && (
