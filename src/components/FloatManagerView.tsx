@@ -231,6 +231,15 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
     return true;
   };
 
+  /**
+   * "Returned" lists every request with a return recorded — awaiting the
+   * manager or already completed / turned into a loan — so a return stays
+   * visible after the manager acts on it. Other filters match the status.
+   */
+  const hasReturn = (r: FloatRequest) => Boolean(r.returnedAt || (r.returnEntries && r.returnEntries.length > 0));
+  const matchesStatusFilter = (r: FloatRequest, st: typeof statusFilter) =>
+    st === 'All' || (st === 'Returned' ? hasReturn(r) : r.status === st);
+
   // Requests filtered by active date filter
   const dateFilteredRequests = requests.filter(isWithinDateRange);
 
@@ -239,7 +248,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
     const ownerName = getOwnerName(r.ownerId).toLowerCase();
     const matchesSearch = ownerName.includes(searchTerm.toLowerCase()) || r.ownerId.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesStatus = statusFilter === 'All' || r.status === statusFilter;
+    const matchesStatus = matchesStatusFilter(r, statusFilter);
 
     return matchesSearch && matchesStatus;
   });
@@ -565,7 +574,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                             : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                         }`}
                       >
-                        {st}
+                        {st} ({dateFilteredRequests.filter(r => matchesStatusFilter(r, st)).length})
                       </button>
                     ))}
                   </div>
