@@ -16,9 +16,13 @@ import {
   getPendingDays,
   getResolutionDays,
   getStatusBadgeInfo,
-  getTotalReturned
+  getTotalReturned,
+  refreshFloatData,
+  startFloatAutoRefresh,
+  getFloatLastRefreshed,
+  loadReceiptImage,
+  type FloatResult
 } from '../utils/floatManagement';
-import { getPhoto } from '../utils/db';
 import { ownersList } from '../data';
 import { 
   Banknote, 
@@ -104,6 +108,32 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
       }
     } catch {
       setPersonnelList([]);
+    }
+  };
+
+  // Keep the list current while this screen is open (new requests from owners).
+  useEffect(() => startFloatAutoRefresh(), []);
+
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    const ok = await refreshFloatData();
+    setIsRefreshing(false);
+    if (!ok) alert('Could not refresh float requests. Check your connection and try again.');
+  };
+
+  /** Runs one server-side float change; the list reloads either way. */
+  const act = async (id: string, work: () => Promise<FloatResult>): Promise<boolean> => {
+    if (busyId) return false;
+    setBusyId(id);
+    try {
+      const result = await work();
+      if (!result.ok) alert(result.error);
+      return result.ok;
+    } finally {
+      setBusyId(null);
+      loadData();
     }
   };
 
@@ -224,8 +254,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
     const mId = manager ? manager.id : (user?.email || 'float_manager');
     const mName = manager ? manager.name : (user?.name || 'Float Manager');
 
-    confirmFloatRequest(r.id, mId, mName);
-    loadData();
+    void act(r.id, () => confirmFloatRequest(r.id, mId, mName));
   };
 
   const handleComplete = (r: FloatRequest) => {
@@ -238,8 +267,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
     const mId = manager ? manager.id : (user?.email || 'float_manager');
     const mName = manager ? manager.name : (user?.name || 'Float Manager');
 
-    completeFloatRequest(r.id, mId, mName);
-    loadData();
+    void act(r.id, () => completeFloatRequest(r.id, mId, mName));
   };
 
   const handleReject = (r: FloatRequest) => {
@@ -251,16 +279,17 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
     setConfirmDenyTarget(r);
   };
 
-  const handleConfirmDenyRequest = () => {
+  const handleConfirmDenyRequest = async () => {
     if (!confirmDenyTarget) return;
     const manager = personnelList.find(p => p.id === selectedManagerId);
     const mId = manager ? manager.id : (user?.email || 'float_manager');
     const mName = manager ? manager.name : (user?.name || 'Float Manager');
 
-    rejectFloatRequest(confirmDenyTarget.id, mId, mName, denyReasonInput);
+    const target = confirmDenyTarget;
+    const reason = denyReasonInput;
     setConfirmDenyTarget(null);
     setDenyReasonInput('');
-    loadData();
+    await act(target.id, () => rejectFloatRequest(target.id, mId, mName, reason));
   };
 
   const handleRejectRepayment = (loan: LoanRecord) => {
@@ -268,8 +297,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
     const mId = manager ? manager.id : (user?.email || 'float_manager');
     const mName = manager ? manager.name : (user?.name || 'Float Manager');
 
-    rejectLoanRepayment(loan.id, mId, mName);
-    loadData();
+    void act(loan.id, () => rejectLoanRepayment(loan.id, mId, mName));
   };
 
   const handleApproveLoan = (r: FloatRequest) => {
@@ -277,8 +305,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
     const mId = manager ? manager.id : (user?.email || 'float_manager');
     const mName = manager ? manager.name : (user?.name || 'Float Manager');
 
-    approveLoanForShortfall(r.id, mId, mName);
-    loadData();
+    void act(r.id, () => approveLoanForShortfall(r.id, mId, mName));
   };
 
   const handleMarkLoanPaid = (loan: LoanRecord) => {
@@ -286,18 +313,17 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
     const mId = manager ? manager.id : (user?.email || 'float_manager');
     const mName = manager ? manager.name : (user?.name || 'Float Manager');
 
-    markLoanPaid(loan.id, mId, mName);
-    loadData();
+    void act(loan.id, () => markLoanPaid(loan.id, mId, mName));
   };
 
   // View receipt photo
   const handleViewReceipt = async (receiptPhotoId: string) => {
     try {
-      const photo = await getPhoto(receiptPhotoId);
-      if (photo && photo.imageData) {
-        setPreviewPhoto(photo.imageData);
+      const src = await loadReceiptImage(receiptPhotoId);
+      if (src) {
+        setPreviewPhoto(src);
       } else {
-        alert('Receipt image not found in local storage.');
+        alert('This receipt was saved on the owner\'s phone by an older version of the app and cannot be viewed here.');
       }
     } catch {
       alert('Failed to load receipt photo.');
@@ -354,7 +380,8 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
 
   return (
     <div className="min-h-screen bg-brand-bg font-sans selection:bg-brand-primary selection:text-white">
-      {/* Navigation Header */}
+      {/* Navigation Header (the admin layout has its own, so not when embedded read-only) */}
+      {!readOnly && (
       <header className="sticky top-0 z-40 border-b border-brand-gray-border bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -390,6 +417,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
           </div>
         </div>
       </header>
+      )}
 
       {/* Main Body */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -417,6 +445,21 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
             <FileText className="h-4 w-4" />
             Loans ({loans.length})
           </button>
+          <div className="ml-auto flex items-center gap-2">
+            {busyId && <span className="text-xs font-semibold text-brand-text-variant">Saving…</span>}
+            <span className="hidden sm:inline text-[11px] text-brand-text-variant">
+              {getFloatLastRefreshed() ? `Updated ${getFloatLastRefreshed()!.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
+            </span>
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              title="Refresh float requests"
+              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-white text-slate-600 hover:bg-slate-100 border border-brand-gray-border transition-all cursor-pointer disabled:opacity-60"
+            >
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
         </div>
 
         {activeTab === 'ledger' ? (
@@ -690,7 +733,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                               {((r.status === 'Pending' || r.status === 'Confirmed') && !r.loanId) ? (
                                 <>
                                   <span>•</span>
-                                  <span>Age: <strong className="text-brand-text">{pendingDays} day(s) pending</strong></span>
+                                  <span>Age: <strong className="text-brand-text">{pendingDays} day(s) {r.status === 'Pending' ? 'pending' : 'outstanding'}</strong></span>
                                 </>
                               ) : (
                                 resolutionDays !== null ? (
@@ -875,7 +918,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="rounded-2xl border border-brand-gray-border bg-white p-5 shadow-ambient flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-bold text-brand-text-variant uppercase tracking-wider">Total Outstanding</p>
+                  <p className="text-xs font-bold text-brand-text-variant uppercase tracking-wider">Float Not Yet Returned</p>
                   <p className="text-2xl font-black text-amber-600 mt-1">TZS {totalOutstandingFinancial.toLocaleString()}</p>
                 </div>
                 <div className="h-12 w-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
@@ -1137,9 +1180,9 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                     const manager = personnelList.find(p => p.id === selectedManagerId);
                     const mId = manager ? manager.id : (user?.email || 'float_manager');
                     const mName = manager ? manager.name : (user?.name || 'Float Manager');
-                    rejectFloatReturn(confirmRejectTarget.id, mId, mName);
+                    const target = confirmRejectTarget;
                     setConfirmRejectTarget(null);
-                    loadData();
+                    void act(target.id, () => rejectFloatReturn(target.id, mId, mName));
                   }}
                   className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 font-bold text-xs text-white cursor-pointer"
                 >

@@ -5,9 +5,9 @@ import {
   getFloatRequestsForOwner, createFloatRequest, confirmFloatRequest,
   submitFloatReturn, completeFloatRequest, rejectFloatReturn, getPendingDays,
   getResolutionDays, getTotalReturned, approveLoanForShortfall,
-  getLoanRecordsForOwner, submitLoanRepayment
+  getLoanRecordsForOwner, submitLoanRepayment,
+  startFloatAutoRefresh, uploadReceipt, loadReceiptImage, type FloatResult
 } from '../utils/floatManagement';
-import { savePhoto, getPhoto } from '../utils/db';
 import { useAuth } from './AuthContext';
 import { Banknote, X, Camera, CheckCircle2, AlertTriangle, Clock, FileText, XCircle, DollarSign, Send, Check } from 'lucide-react';
 
@@ -69,9 +69,9 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
       for (const entry of r.returnEntries || []) {
         if (entry.receiptPhotoId && !receiptPreviews[entry.receiptPhotoId]) {
           try {
-            const photo = await getPhoto(entry.receiptPhotoId);
-            if (photo?.imageData) {
-              setReceiptPreviews(prev => ({ ...prev, [entry.receiptPhotoId!]: photo.imageData }));
+            const src = await loadReceiptImage(entry.receiptPhotoId);
+            if (src) {
+              setReceiptPreviews(prev => ({ ...prev, [entry.receiptPhotoId!]: src }));
             }
           } catch (e) {
             console.error('Failed to load receipt photo', e);
@@ -84,6 +84,26 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
   const refresh = () => {
     setRequests(getFloatRequestsForOwner(ownerId));
     setLoans(getLoanRecordsForOwner(ownerId));
+  };
+
+  // Keep this owner's requests and loans current (the manager acts from another device).
+  useEffect(() => startFloatAutoRefresh(), []);
+
+  const [isSaving, setIsSaving] = useState(false);
+  /** Runs one server-side float change; the list reloads either way. */
+  const act = async (work: () => Promise<FloatResult>): Promise<FloatResult> => {
+    setIsSaving(true);
+    try {
+      return await work();
+    } finally {
+      setIsSaving(false);
+      refresh();
+    }
+  };
+  const actOrAlert = async (work: () => Promise<FloatResult>) => {
+    const result = await act(work);
+    if (!result.ok) alert(result.error);
+    return result.ok;
   };
 
   // Pick up a Manager's confirm/reject/loan/repayment actions made in a
@@ -102,12 +122,10 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
   const hasActiveRequest = requests.some(r => r.status !== 'Completed' && r.status !== 'Rejected');
   const unpaidLoans = loans.filter(l => l.status !== 'Paid');
 
-  const handleSubmitRequest = () => {
+  const handleSubmitRequest = async () => {
     const amt = parseFloat(amountInput);
-    if (!amt || amt <= 0) return;
-    createFloatRequest(ownerId, amt);
-    setAmountInput('');
-    refresh();
+    if (!amt || amt <= 0 || isSaving) return;
+    if (await actOrAlert(() => createFloatRequest(ownerId, amt))) setAmountInput('');
   };
 
   const handleRowReceiptFile = (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -132,7 +150,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
   const returnedRequestTargetId = confirmedRequest?.id;
 
   const handleSubmitReturn = async () => {
-    if (!returnedRequestTargetId) return;
+    if (!returnedRequestTargetId || isSaving) return;
 
     for (const row of returnRows) {
       const amt = parseFloat(row.amount);
@@ -151,49 +169,56 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
       return;
     }
 
-    const entries: FloatReturnEntry[] = [];
-    for (const row of returnRows) {
-      let receiptPhotoId: string | undefined;
-      if (row.receiptFile) {
-        receiptPhotoId = await savePhoto(ownerId, row.receiptFile, undefined, 'receipt');
+    const result = await act(async () => {
+      // Receipts go to cloud storage so the Float Manager can see them on any device.
+      const entries: FloatReturnEntry[] = [];
+      for (const row of returnRows) {
+        let receiptPhotoId: string | undefined;
+        if (row.receiptFile) {
+          try {
+            receiptPhotoId = await uploadReceipt(returnedRequestTargetId, row.receiptFile);
+          } catch (e) {
+            return { ok: false as const, error: (e instanceof Error && e.message) || 'The receipt photo could not be uploaded. Please try again.' };
+          }
+        }
+        entries.push({
+          id: `entry_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          channel: row.channel,
+          channelOther: row.channel === 'Other' ? row.channelOther.trim() : undefined,
+          amount: parseFloat(row.amount),
+          receiptPhotoId,
+        });
       }
-      entries.push({
-        id: `entry_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        channel: row.channel,
-        channelOther: row.channel === 'Other' ? row.channelOther.trim() : undefined,
-        amount: parseFloat(row.amount),
-        receiptPhotoId,
-      });
+      return submitFloatReturn(
+        returnedRequestTargetId,
+        entries,
+        returnRowsTotal < (confirmedRequest?.requestedAmount || 0) ? shortfallReasonInput.trim() : undefined
+      );
+    });
+    if (!result.ok) {
+      setReturnValidationError(result.error);
+      return;
     }
-
-    submitFloatReturn(
-      returnedRequestTargetId,
-      entries,
-      returnRowsTotal < (confirmedRequest?.requestedAmount || 0) ? shortfallReasonInput.trim() : undefined
-    );
     setReturnRows([emptyRow()]);
     setShortfallReasonInput('');
     setReturnValidationError('');
-    refresh();
   };
 
   const handleConfirm = (requestId: string) => {
     setActiveConfirmRequestId(requestId);
   };
 
-  const handleFinalizeConfirm = (asReturn: boolean) => {
-    if (!activeConfirmRequestId) return;
+  const handleFinalizeConfirm = async (asReturn: boolean) => {
+    if (!activeConfirmRequestId || isSaving) return;
+    const requestId = activeConfirmRequestId;
     const manager = managers.find(m => m.id === confirmManagerId);
     const mId = manager ? manager.id : (currentUser?.username || 'admin');
     const mName = manager ? manager.name : (currentUser?.name || 'System Admin');
-    if (asReturn) {
-      completeFloatRequest(activeConfirmRequestId, mId, mName);
-    } else {
-      confirmFloatRequest(activeConfirmRequestId, mId, mName);
-    }
     setActiveConfirmRequestId(null);
     setConfirmManagerId('');
-    refresh();
+    await actOrAlert(() =>
+      asReturn ? completeFloatRequest(requestId, mId, mName) : confirmFloatRequest(requestId, mId, mName)
+    );
   };
 
   const handleOpenRepayModal = (loan: LoanRecord) => {
@@ -210,8 +235,8 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
     setRepaymentError('');
   };
 
-  const handleSubmitRepaymentAction = () => {
-    if (!repayingLoan) return;
+  const handleSubmitRepaymentAction = async () => {
+    if (!repayingLoan || isSaving) return;
     const amt = parseFloat(repaymentAmountInput);
     if (!amt || amt <= 0) {
       setRepaymentError('Please enter a valid repayment amount greater than 0.');
@@ -223,14 +248,14 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
       return;
     }
 
-    const result = submitLoanRepayment(repayingLoan.id, amt, repaymentDescriptionInput);
-    if (!result.success) {
-      setRepaymentError(result.error || 'Failed to submit loan repayment.');
+    const loanId = repayingLoan.id;
+    const result = await act(() => submitLoanRepayment(loanId, amt, repaymentDescriptionInput));
+    if (!result.ok) {
+      setRepaymentError(result.error);
       return;
     }
 
     handleCloseRepayModal();
-    refresh();
   };
 
   const statusBadge = (r: FloatRequest) => {
@@ -342,7 +367,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                     )}
                     <button
                       onClick={handleSubmitRequest}
-                      disabled={!amountInput || parseFloat(amountInput) <= 0}
+                      disabled={isSaving || !amountInput || parseFloat(amountInput) <= 0}
                       className="flex-1 rounded-lg bg-brand-primary hover:bg-brand-primary-light disabled:opacity-50 text-white text-xs font-bold py-2 transition-all cursor-pointer shadow-xs"
                     >
                       Submit Request
@@ -466,8 +491,8 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                     <p className="text-xs text-rose-600 font-bold">{returnValidationError}</p>
                   )}
                   <div className="flex gap-2 pt-1">
-                    <button onClick={handleSubmitReturn} className="w-full rounded-lg bg-brand-primary hover:bg-brand-primary-light text-white text-xs font-bold py-2.5 transition-all cursor-pointer shadow-xs">
-                      Submit Return
+                    <button onClick={handleSubmitReturn} disabled={isSaving} className="w-full rounded-lg bg-brand-primary hover:bg-brand-primary-light disabled:opacity-50 text-white text-xs font-bold py-2.5 transition-all cursor-pointer shadow-xs">
+                      {isSaving ? 'Submitting…' : 'Submit Return'}
                     </button>
                   </div>
                 </div>
@@ -505,7 +530,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                           <>
                             <span>•</span>
                             <span className="flex items-center gap-1 text-slate-700 font-bold">
-                              <Clock className="h-3 w-3 text-amber-500" /> {getPendingDays(r)} day(s) pending
+                              <Clock className="h-3 w-3 text-amber-500" /> {getPendingDays(r)} day(s) {r.status === 'Pending' ? 'pending' : 'outstanding'}
                             </span>
                           </>
                         ) : (
@@ -664,10 +689,9 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                                   const manager = managers.find(m => m.id === confirmManagerId);
                                   const mId = manager ? manager.id : (currentUser?.username || 'admin');
                                   const mName = manager ? manager.name : (currentUser?.name || 'System Admin');
-                                  approveLoanForShortfall(r.id, mId, mName);
                                   setActiveConfirmRequestId(null);
                                   setConfirmManagerId('');
-                                  refresh();
+                                  void actOrAlert(() => approveLoanForShortfall(r.id, mId, mName));
                                 }}
                                 className="text-[11px] font-bold text-white bg-indigo-600 disabled:opacity-40 px-3 py-1 rounded-lg cursor-pointer transition-all"
                               >
@@ -700,8 +724,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                               {getTotalReturned(r) < r.requestedAmount && r.shortfallReason && (
                                 <button
                                   onClick={() => {
-                                    approveLoanForShortfall(r.id, currentUser?.username || 'admin', currentUser?.name || 'System Admin');
-                                    refresh();
+                                    void actOrAlert(() => approveLoanForShortfall(r.id, currentUser?.username || 'admin', currentUser?.name || 'System Admin'));
                                   }}
                                   className="text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg border border-indigo-200 transition-all cursor-pointer inline-flex items-center gap-1"
                                 >
@@ -860,15 +883,11 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
               </button>
               <button
                 onClick={() => {
-                  rejectFloatReturn(
-                    confirmRejectTarget.request.id,
-                    confirmRejectTarget.managerId,
-                    confirmRejectTarget.managerName
-                  );
+                  const target = confirmRejectTarget;
                   setConfirmRejectTarget(null);
                   setActiveConfirmRequestId(null);
                   setConfirmManagerId('');
-                  refresh();
+                  void actOrAlert(() => rejectFloatReturn(target.request.id, target.managerId, target.managerName));
                 }}
                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 font-bold text-xs text-white cursor-pointer"
               >
@@ -987,9 +1006,10 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
               <button
                 type="button"
                 onClick={handleSubmitRepaymentAction}
-                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 font-bold text-xs text-white cursor-pointer shadow-xs"
+                disabled={isSaving}
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 font-bold text-xs text-white cursor-pointer shadow-xs"
               >
-                Submit Repayment
+                {isSaving ? 'Submitting…' : 'Submit Repayment'}
               </button>
             </div>
           </div>
