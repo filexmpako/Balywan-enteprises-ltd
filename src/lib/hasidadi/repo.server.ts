@@ -4,6 +4,7 @@ import {
   DOCUMENT_KEYS,
   fromRow,
   getMapper,
+  SERVER_MANAGED_KEYS,
   toRow,
   type CollectionMapper,
 } from './collections';
@@ -146,6 +147,7 @@ async function clearUnresolvedBaseWakalaOwners(
 export async function saveCollection(supabase: DB, key: string, items: any[]): Promise<number> {
   const mapper = getMapper(key);
   if (!mapper) throw new Error(`Unknown collection: ${key}`);
+  if (SERVER_MANAGED_KEYS.has(key)) throw new Error(`${key} is saved per record, not as a whole list`);
 
   const rows = items.map((item, index) => toRow(mapper, item, index)).filter((r) => r[mapper.pk]);
 

@@ -6,12 +6,16 @@
  * transactions have no local cache at all and are always read live from the
  * server.
  */
-import { COLLECTION_KEYS, DOCUMENT_KEYS } from './hasidadi/collections';
+import { COLLECTION_KEYS, DOCUMENT_KEYS, SERVER_MANAGED_KEYS } from './hasidadi/collections';
 import { fetchWorkspace, saveCollection, saveDocument } from './hasidadi.functions';
 import { CLOUD_HYDRATED_EVENT } from './cloudSyncEvents';
 
 const QUEUE_KEY = 'hasidadi_sync_queue';
-const SYNCED = new Set<string>([...COLLECTION_KEYS, ...(DOCUMENT_KEYS as readonly string[])]);
+// Float requests and loans are saved per record through their own server
+// functions, never pushed from the cache.
+const SYNCED = new Set<string>(
+  [...COLLECTION_KEYS, ...(DOCUMENT_KEYS as readonly string[])].filter((k) => !SERVER_MANAGED_KEYS.has(k)),
+);
 
 let installed = false;
 let suspended = false;
@@ -21,7 +25,9 @@ type QueueEntry = { key: string; kind: 'collection' | 'document'; value: string 
 
 function readQueue(): QueueEntry[] {
   try {
-    return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
+    const queue: QueueEntry[] = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
+    // Drop whole-list writes queued by older versions for per-record collections.
+    return queue.filter((q) => !SERVER_MANAGED_KEYS.has(q.key));
   } catch {
     return [];
   }

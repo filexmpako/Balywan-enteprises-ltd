@@ -283,6 +283,14 @@ export const DOCUMENT_KEYS = [
 
 export type DocumentKey = (typeof DOCUMENT_KEYS)[number];
 
+/**
+ * Collections the server changes one record at a time (src/lib/float.server.ts).
+ * They are downloaded with the workspace but never saved as a whole list: a
+ * full-list replace from a device with an out-of-date copy would delete or
+ * overwrite other people's requests.
+ */
+export const SERVER_MANAGED_KEYS = new Set<string>(['floatRequests', 'loanRecords']);
+
 /** All keys the client cache hydrates from the server. */
 export const SYNCED_KEYS: string[] = [...COLLECTION_KEYS, ...DOCUMENT_KEYS];
 
