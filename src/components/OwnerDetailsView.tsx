@@ -46,6 +46,8 @@ import {
   ArrowRight
 } from 'lucide-react';
 import MetricCard from './MetricCard';
+import DailyMgtSummary from './DailyMgtSummary';
+import type { ClassifiedRow } from '../utils/classification';
 import IopLabel, { type IopSource } from './IopLabel';
 import IopVariance, { shortMonth } from './IopVariance';
 import { loadMonthlyReportStats, toMonthlyKpiOverride, type MonthlyReportStats } from '../utils/monthlySettlement';
@@ -750,7 +752,9 @@ export default function OwnerDetailsView({
         paDayTarget: 0,
         achievementPercentage: 0,
         status: 'Red' as const,
-        hasTarget: false
+        hasTarget: false,
+        ownerId: localOwner?.id || '',
+        classified: [] as ClassifiedRow[],
       };
     }
 
@@ -835,7 +839,9 @@ export default function OwnerDetailsView({
       paDayTarget,
       achievementPercentage: Math.round(achievementPercentage * 10) / 10,
       status,
-      hasTarget: targetRes.source !== 'none' && monthlyTarget > 0
+      hasTarget: targetRes.source !== 'none' && monthlyTarget > 0,
+      ownerId: effectiveOwnerId,
+      classified,
     };
   }, [localOwner, servicingRows, tillsList, manualTargetsList, currentPeriod, monthlyKpi]);
 
@@ -1203,6 +1209,8 @@ export default function OwnerDetailsView({
               />
             </div>
           </div>
+
+          <DailyMgtSummary classified={ownerMtdData.classified} period={currentPeriod} ownerId={ownerMtdData.ownerId} />
 
           {/* Settlement Section — report figures (Monthly report once uploaded, else the latest weekly report), kept apart from Daily MGT so the source is never ambiguous */}
           <div className="space-y-2">
