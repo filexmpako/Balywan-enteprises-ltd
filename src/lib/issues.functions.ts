@@ -100,15 +100,20 @@ export const postIssueMessage = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data, context }) => {
     const supabase = context.supabase as any;
-    const { error } = await supabase.from('wakala_issue_messages').insert({
-      issue_id: data.issueId,
-      sender_user_id: context.userId,
-      sender_name: data.senderName || 'User',
-      sender_role: data.senderRole === 'admin' ? 'admin' : 'owner',
-      body: data.body.trim(),
-    });
+    const { data: row, error } = await supabase
+      .from('wakala_issue_messages')
+      .insert({
+        issue_id: data.issueId,
+        sender_user_id: context.userId,
+        sender_name: data.senderName || 'User',
+        sender_role: data.senderRole === 'admin' ? 'admin' : 'owner',
+        body: data.body.trim(),
+      })
+      .select('id')
+      .single();
     if (error) throw new Error(`wakala_issue_messages insert: ${error.message}`);
-    return { ok: true };
+    // The id lets photos be attached to this reply (see uploadIssuePhoto).
+    return { ok: true, id: String(row?.id ?? '') };
   });
 
 /** Staff-only: move an issue through Open -> In Progress -> Resolved. */
@@ -134,3 +139,47 @@ export const updateIssueStatus = createServerFn({ method: 'POST' })
     if (error) throw new Error(`wakala_issues update: ${error.message}`);
     return { ok: true };
   });
+
+const getAdminDb = async () => (await import('@/integrations/supabase/client.server')).supabaseAdmin as any;
+
+/** Expected refusals reach the user as-is; anything else is logged with a generic message. */
+async function photoErrors<T>(work: () => Promise<T>): Promise<T> {
+  const { IssuePhotoError } = await import('./issuePhotos.server');
+  const { ImageUploadError } = await import('./storageImages.server');
+  try {
+    return await work();
+  } catch (err) {
+    if (err instanceof IssuePhotoError || err instanceof ImageUploadError) throw new Error(err.message);
+    console.error('[issue photos]', err);
+    throw new Error('The photo could not be saved. Please try again.');
+  }
+}
+
+/** Adds a photo to an issue (messageKey 'issue') or to one of its replies (the message id). */
+export const uploadIssuePhoto = createServerFn({ method: 'POST' })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { issueId: string; messageKey: string; dataUrl: string }) => {
+    if (!input?.issueId || !input?.messageKey || typeof input.dataUrl !== 'string') throw new Error('Invalid photo upload');
+    return input;
+  })
+  .handler(async ({ data, context }) =>
+    photoErrors(async () => {
+      const { storeIssuePhoto } = await import('./issuePhotos.server');
+      await storeIssuePhoto(context.supabase as any, await getAdminDb(), data.issueId, data.messageKey, data.dataUrl);
+      return { ok: true as const };
+    }),
+  );
+
+/** Short-lived links to an issue's photos, grouped by message key ('issue' or a reply id). */
+export const listIssuePhotos = createServerFn({ method: 'GET' })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { issueId: string }) => {
+    if (!input?.issueId) throw new Error('issueId is required');
+    return input;
+  })
+  .handler(async ({ data, context }) =>
+    photoErrors(async () => {
+      const { listIssuePhotoLinks } = await import('./issuePhotos.server');
+      return { photos: await listIssuePhotoLinks(context.supabase as any, await getAdminDb(), data.issueId) };
+    }),
+  );
