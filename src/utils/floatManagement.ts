@@ -84,8 +84,8 @@ export const createFloatRequest = (ownerId: string, amount: number) => run({ typ
 export const rejectFloatRequest = (requestId: string, managerId: string, managerName: string, reason?: string) =>
   run({ type: 'rejectRequest', requestId, managerId, managerName, reason });
 
-export const confirmFloatRequest = (requestId: string, managerId: string, managerName: string) =>
-  run({ type: 'confirm', requestId, managerId, managerName });
+export const confirmFloatRequest = (requestId: string, managerId: string, managerName: string, sentAmount?: number) =>
+  run({ type: 'confirm', requestId, managerId, managerName, sentAmount });
 
 export const submitFloatReturn = (requestId: string, entries: FloatReturnEntry[], shortfallReason?: string) =>
   run({ type: 'submitReturn', requestId, entries, shortfallReason });
@@ -162,9 +162,14 @@ export function getTotalReturned(request: FloatRequest): number {
   return (request.returnEntries || []).reduce((sum, e) => sum + e.amount, 0);
 }
 
+/** What the owner owes back: the amount the Float Manager sent, else the amount requested. */
+export function getFloatAmount(request: FloatRequest): number {
+  return Number(request.sentAmount) > 0 ? Number(request.sentAmount) : request.requestedAmount;
+}
+
 /** Amount still missing after the owner's return (0 when fully returned). */
 export function getShortfall(request: FloatRequest): number {
-  return Math.max(0, request.requestedAmount - getTotalReturned(request));
+  return Math.max(0, getFloatAmount(request) - getTotalReturned(request));
 }
 
 /**
@@ -223,7 +228,7 @@ export function getStatusBadgeInfo(r: FloatRequest): {
         badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200',
       };
     }
-    const mismatch = getTotalReturned(r) !== r.requestedAmount;
+    const mismatch = getTotalReturned(r) !== getFloatAmount(r);
     if (mismatch) {
       return {
         label: 'Amount Mismatch',

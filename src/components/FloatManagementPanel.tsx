@@ -7,7 +7,7 @@ import {
   getResolutionDays, getTotalReturned, approveLoanForShortfall,
   getLoanRecordsForOwner, submitLoanRepayment,
   startFloatAutoRefresh, uploadReceipt, loadReceiptImage, type FloatResult,
-  getShortfall, isLoanPendingApproval
+  getShortfall, isLoanPendingApproval, getFloatAmount
 } from '../utils/floatManagement';
 import { useAuth } from './AuthContext';
 import { Banknote, X, Camera, CheckCircle2, AlertTriangle, Clock, FileText, XCircle, DollarSign, Send, Check } from 'lucide-react';
@@ -46,6 +46,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
   const [returnValidationError, setReturnValidationError] = useState('');
 
   const [confirmManagerId, setConfirmManagerId] = useState('');
+  const [confirmSentInput, setConfirmSentInput] = useState('');
   const [activeConfirmRequestId, setActiveConfirmRequestId] = useState<string | null>(null);
   const [confirmRejectTarget, setConfirmRejectTarget] = useState<{ request: FloatRequest; managerId: string; managerName: string } | null>(null);
   const [receiptPreviews, setReceiptPreviews] = useState<Record<string, string>>({});
@@ -167,7 +168,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
       }
     }
 
-    if (returnRowsTotal < (confirmedRequest?.requestedAmount || 0) && shortfallReasonInput.trim() === '') {
+    if (returnRowsTotal < (confirmedRequest ? getFloatAmount(confirmedRequest) : 0) && shortfallReasonInput.trim() === '') {
       setReturnValidationError('Please explain why this return is short before submitting.');
       return;
     }
@@ -195,7 +196,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
       return submitFloatReturn(
         returnedRequestTargetId,
         entries,
-        returnRowsTotal < (confirmedRequest?.requestedAmount || 0) ? shortfallReasonInput.trim() : undefined
+        returnRowsTotal < (confirmedRequest ? getFloatAmount(confirmedRequest) : 0) ? shortfallReasonInput.trim() : undefined
       );
     });
     if (!result.ok) {
@@ -217,10 +218,16 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
     const manager = managers.find(m => m.id === confirmManagerId);
     const mId = manager ? manager.id : (currentUser?.username || 'admin');
     const mName = manager ? manager.name : (currentUser?.name || 'System Admin');
+    const sent = confirmSentInput.trim() ? Number(confirmSentInput) : undefined;
+    if (!asReturn && sent !== undefined && !(sent > 0)) {
+      alert('Enter the amount sent (greater than 0).');
+      return;
+    }
     setActiveConfirmRequestId(null);
     setConfirmManagerId('');
+    setConfirmSentInput('');
     await actOrAlert(() =>
-      asReturn ? completeFloatRequest(requestId, mId, mName) : confirmFloatRequest(requestId, mId, mName)
+      asReturn ? completeFloatRequest(requestId, mId, mName) : confirmFloatRequest(requestId, mId, mName, sent)
     );
   };
 
@@ -267,7 +274,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
     if (r.status === 'Completed') return <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">Completed</span>;
     if (isLoanPendingApproval(r)) return <span className="text-[10px] font-extrabold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">Loan Pending Approval</span>;
     if (r.status === 'Returned') {
-      const mismatch = getTotalReturned(r) !== r.requestedAmount;
+      const mismatch = getTotalReturned(r) !== getFloatAmount(r);
       return mismatch
         ? <span className="text-[10px] font-extrabold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200">Amount Mismatch</span>
         : <span className="text-[10px] font-extrabold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">Awaiting Final Confirm</span>;
@@ -387,7 +394,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                         {pendingRequest
                           ? `You have a pending float request of TZS ${pendingRequest.requestedAmount.toLocaleString()} awaiting manager confirmation.`
                           : confirmedRequest
-                          ? `You have an active confirmed float of TZS ${confirmedRequest.requestedAmount.toLocaleString()} currently in use.`
+                          ? `You have an active confirmed float of TZS ${getFloatAmount(confirmedRequest).toLocaleString()} currently in use.`
                           : `You have an active float request in progress.`}
                       </p>
                       <p className="text-[11px] text-amber-800 mt-1">
@@ -425,7 +432,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                   <div className="flex items-center justify-between pb-2 border-b border-slate-200">
                     <span className="text-xs font-bold text-slate-700">Active Float Return Form</span>
                     <span className="font-mono font-bold text-xs text-brand-primary">
-                      Float: TZS {confirmedRequest.requestedAmount.toLocaleString()}
+                      Float: TZS {getFloatAmount(confirmedRequest).toLocaleString()}
                     </span>
                   </div>
 
@@ -471,15 +478,15 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                   <button onClick={addReturnRow} className="text-xs font-bold text-brand-primary cursor-pointer">+ Add Another Channel</button>
                   <div className="flex items-center justify-between text-xs font-bold pt-1 border-t border-slate-200">
                     <span className="text-slate-600">Total across channels:</span>
-                    <span className={returnRowsTotal === confirmedRequest.requestedAmount ? 'text-emerald-700' : 'text-slate-800'}>
+                    <span className={returnRowsTotal === getFloatAmount(confirmedRequest) ? 'text-emerald-700' : 'text-slate-800'}>
                       TZS {returnRowsTotal.toLocaleString()}
                     </span>
                   </div>
 
-                  {returnRowsTotal < confirmedRequest.requestedAmount && returnRowsTotal > 0 && (
+                  {returnRowsTotal < getFloatAmount(confirmedRequest) && returnRowsTotal > 0 && (
                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mt-2">
                       <label className="block text-[11px] font-bold text-amber-800 mb-1">
-                        This return is short by TZS {(confirmedRequest.requestedAmount - returnRowsTotal).toLocaleString()}. Please explain why:
+                        This return is short by TZS {(getFloatAmount(confirmedRequest) - returnRowsTotal).toLocaleString()}. Please explain why:
                       </label>
                       <textarea
                         value={shortfallReasonInput}
@@ -518,7 +525,12 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                   {requests.map(r => (
                     <div key={r.id} className="text-xs bg-slate-50 rounded-xl p-3 space-y-2 border border-slate-200">
                       <div className="flex items-center justify-between">
-                        <span className="font-mono font-bold text-brand-text text-sm">TZS {r.requestedAmount.toLocaleString()}</span>
+                        <span className="font-mono font-bold text-brand-text text-sm">
+                          TZS {r.requestedAmount.toLocaleString()}
+                          {r.sentAmount !== undefined && r.sentAmount !== r.requestedAmount && (
+                            <span className="ml-1.5 text-[11px] font-bold text-indigo-700">· Sent TZS {r.sentAmount.toLocaleString()}</span>
+                          )}
+                        </span>
                         {statusBadge(r)}
                       </div>
 
@@ -571,17 +583,17 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                         </div>
                       )}
 
-                      {r.status === 'Returned' && getTotalReturned(r) > r.requestedAmount && (
+                      {r.status === 'Returned' && getTotalReturned(r) > getFloatAmount(r) && (
                         <div className="flex items-center gap-1 text-[11px] text-rose-600 font-bold bg-rose-50 p-2 rounded-lg border border-rose-200">
                           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                          <span>Requested TZS {r.requestedAmount.toLocaleString()} ≠ Returned TZS {getTotalReturned(r).toLocaleString()}</span>
+                          <span>Sent TZS {getFloatAmount(r).toLocaleString()} ≠ Returned TZS {getTotalReturned(r).toLocaleString()}</span>
                         </div>
                       )}
 
-                      {r.status === 'Returned' && getTotalReturned(r) < r.requestedAmount && r.shortfallReason && !r.loanId && (
+                      {r.status === 'Returned' && getTotalReturned(r) < getFloatAmount(r) && r.shortfallReason && !r.loanId && (
                         <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-2 text-[11px]">
                           <p className="font-bold text-indigo-800 mb-0.5">
-                            Loan pending approval: TZS {getShortfall(r).toLocaleString()} (returned TZS {getTotalReturned(r).toLocaleString()} of TZS {r.requestedAmount.toLocaleString()})
+                            Loan pending approval: TZS {getShortfall(r).toLocaleString()} (returned TZS {getTotalReturned(r).toLocaleString()} of TZS {getFloatAmount(r).toLocaleString()})
                           </p>
                           <p className="text-indigo-700 italic">Reason: "{r.shortfallReason}"</p>
                         </div>
@@ -621,6 +633,15 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                               <option value="">{currentUser?.name || 'Me (Admin)'}</option>
                               {managers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                             </select>
+                            <input
+                              type="number"
+                              min="1"
+                              placeholder={`Sent (${r.requestedAmount.toLocaleString()})`}
+                              title="Amount actually sent, if different from the request"
+                              value={confirmSentInput}
+                              onChange={e => setConfirmSentInput(e.target.value)}
+                              className="w-28 text-[11px] rounded-lg border border-slate-300 px-2 py-1 font-mono"
+                            />
                             <button
                               onClick={() => handleFinalizeConfirm(false)}
                               className="text-[11px] font-bold text-white bg-brand-primary disabled:opacity-40 px-3 py-1 rounded-lg cursor-pointer transition-all"
@@ -644,7 +665,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                         )
                       )}
 
-                      {isAdmin && r.status === 'Returned' && !r.loanId && getTotalReturned(r) === r.requestedAmount && (
+                      {isAdmin && r.status === 'Returned' && !r.loanId && getTotalReturned(r) === getFloatAmount(r) && (
                         activeConfirmRequestId === r.id ? (
                           <div className="flex items-center gap-1.5 mt-2 bg-white p-2 rounded-lg border border-slate-200">
                             <select
@@ -678,7 +699,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                         )
                       )}
 
-                      {isAdmin && r.status === 'Returned' && !r.loanId && getTotalReturned(r) !== r.requestedAmount && (
+                      {isAdmin && r.status === 'Returned' && !r.loanId && getTotalReturned(r) !== getFloatAmount(r) && (
                         activeConfirmRequestId === r.id ? (
                           <div className="flex flex-wrap items-center gap-1.5 mt-2 bg-white p-2 rounded-lg border border-slate-200">
                             <select
@@ -689,7 +710,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                               <option value="">{currentUser?.name || 'Me (Admin)'}</option>
                               {managers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                             </select>
-                            {getTotalReturned(r) < r.requestedAmount && r.shortfallReason && (
+                            {getTotalReturned(r) < getFloatAmount(r) && r.shortfallReason && (
                               <button
                                 onClick={() => {
                                   const manager = managers.find(m => m.id === confirmManagerId);
@@ -727,7 +748,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                               >
                                 <XCircle className="h-3.5 w-3.5" /> Reject & Request Resubmission
                               </button>
-                              {getTotalReturned(r) < r.requestedAmount && r.shortfallReason && (
+                              {getTotalReturned(r) < getFloatAmount(r) && r.shortfallReason && (
                                 <button
                                   onClick={() => {
                                     void actOrAlert(() => approveLoanForShortfall(r.id, currentUser?.username || 'admin', currentUser?.name || 'System Admin'));
@@ -746,7 +767,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                               >
                                 <XCircle className="h-3.5 w-3.5" /> Reject & Request Resubmission
                               </button>
-                              {getTotalReturned(r) < r.requestedAmount && r.shortfallReason && (
+                              {getTotalReturned(r) < getFloatAmount(r) && r.shortfallReason && (
                                 <button
                                   onClick={() => handleConfirm(r.id)}
                                   className="text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg border border-indigo-200 transition-all cursor-pointer inline-flex items-center gap-1"
@@ -785,7 +806,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                     <div key={r.id} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-amber-50 border border-amber-200 text-[11px]">
                       <div className="min-w-0">
                         <p className="font-bold text-slate-800">Short return on float of {formatDate(r.requestedAt)}</p>
-                        <p className="text-slate-600">Returned TZS {getTotalReturned(r).toLocaleString()} of TZS {r.requestedAmount.toLocaleString()}</p>
+                        <p className="text-slate-600">Returned TZS {getTotalReturned(r).toLocaleString()} of TZS {getFloatAmount(r).toLocaleString()}</p>
                       </div>
                       <p className="font-black text-sm text-amber-700 shrink-0">TZS {getShortfall(r).toLocaleString()}</p>
                     </div>
