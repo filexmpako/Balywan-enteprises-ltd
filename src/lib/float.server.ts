@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { FloatRequest, FloatReturnEntry, LoanRecord } from '../types';
 import { fromRow, getMapper, toRow, type CollectionMapper } from './hasidadi/collections';
 import { loadCollection } from './hasidadi/repo.server';
+import { ensurePrivateBucket, ImageUploadError, parseImageDataUrl } from './storageImages.server';
 
 /**
  * Float requests and loans, written one record at a time.
@@ -21,7 +22,6 @@ const LOANS = getMapper('loanRecords') as CollectionMapper;
 
 export const RECEIPT_BUCKET = 'float-receipts';
 const RECEIPT_PREFIX = 'cloud:';
-const MAX_RECEIPT_BYTES = 8 * 1024 * 1024;
 
 export class FloatActionError extends Error {}
 
@@ -302,23 +302,6 @@ export async function runFloatAction(
   }
 }
 
-const IMAGE_TYPES: Record<string, string> = {
-  'image/jpeg': 'jpg',
-  'image/jpg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
-  'image/gif': 'gif',
-  'image/heic': 'heic',
-  'image/heif': 'heif',
-};
-
-async function ensureReceiptBucket(adminDb: DB): Promise<void> {
-  const { data } = await adminDb.storage.getBucket(RECEIPT_BUCKET);
-  if (data) return;
-  const { error } = await adminDb.storage.createBucket(RECEIPT_BUCKET, { public: false });
-  if (error && !/already exists/i.test(error.message)) throw new Error(`receipt bucket: ${error.message}`);
-}
-
 /** Stores a return receipt in private cloud storage; returns its receipt id. */
 export async function storeReceipt(
   adminDb: DB,
@@ -330,18 +313,18 @@ export async function storeReceipt(
   if (!(actor.isStaff || (!!actor.ownerId && actor.ownerId === r.ownerId))) {
     throw new FloatActionError('You can only add receipts to your own float request.');
   }
-  const match = /^data:([a-z]+\/[a-z0-9.+-]+);base64,(.+)$/i.exec(String(dataUrl || ''));
-  const ext = match ? IMAGE_TYPES[match[1].toLowerCase()] : undefined;
-  if (!match || !ext) throw new FloatActionError('The receipt must be a photo (JPG, PNG, WEBP, GIF or HEIC).');
-  const binary = atob(match[2]);
-  if (binary.length > MAX_RECEIPT_BYTES) throw new FloatActionError('The receipt photo is too large (max 8 MB).');
-  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+  let image: ReturnType<typeof parseImageDataUrl>;
+  try {
+    image = parseImageDataUrl(dataUrl);
+  } catch (e) {
+    throw new FloatActionError(e instanceof ImageUploadError ? e.message.replace('The file', 'The receipt') : 'Invalid receipt photo.');
+  }
 
-  await ensureReceiptBucket(adminDb);
-  const path = `${r.ownerId}/${r.id}/${crypto.randomUUID()}.${ext}`;
+  await ensurePrivateBucket(adminDb, RECEIPT_BUCKET);
+  const path = `${r.ownerId}/${r.id}/${crypto.randomUUID()}.${image.ext}`;
   const { error } = await adminDb.storage
     .from(RECEIPT_BUCKET)
-    .upload(path, bytes, { contentType: match[1].toLowerCase(), upsert: false });
+    .upload(path, image.bytes, { contentType: image.contentType, upsert: false });
   if (error) throw new Error(`receipt upload: ${error.message}`);
   return `${RECEIPT_PREFIX}${path}`;
 }

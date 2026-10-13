@@ -1,13 +1,100 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { MessageSquare, Send, Plus, CheckCircle2, Clock, AlertCircle, X, Loader2 } from 'lucide-react';
+import { MessageSquare, Send, Plus, CheckCircle2, Clock, AlertCircle, X, Loader2, Camera } from 'lucide-react';
 import {
   createWakalaIssue,
   listWakalaIssues,
   listIssueMessages,
   postIssueMessage,
   updateIssueStatus,
+  uploadIssuePhoto,
+  listIssuePhotos,
   type WakalaIssue,
 } from '../lib/issues.functions';
+
+const MAX_PHOTOS = 3;
+
+/** Shrinks a phone photo (max 1600px, JPEG) so it uploads quickly on mobile data. */
+function shrinkImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read the photo.'));
+    reader.onload = () => {
+      const src = String(reader.result || '');
+      const img = new Image();
+      img.onerror = () => resolve(src); // a format the browser cannot draw: send as is
+      img.onload = () => {
+        const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(src);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.src = src;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Up to MAX_PHOTOS photos chosen before sending, with remove buttons. */
+function PhotoPicker({ photos, onChange, disabled }: { photos: string[]; onChange: (p: string[]) => void; disabled?: boolean }) {
+  const add = async (files: FileList | null) => {
+    if (!files) return;
+    const room = MAX_PHOTOS - photos.length;
+    const picked = Array.from(files).filter(f => f.type.startsWith('image/')).slice(0, room);
+    const shrunk = await Promise.all(picked.map(shrinkImage));
+    onChange([...photos, ...shrunk]);
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {photos.map((p, i) => (
+        <div key={i} className="relative">
+          <img src={p} alt="" className="h-14 w-14 rounded-lg border border-slate-200 object-cover" />
+          <button
+            type="button"
+            onClick={() => onChange(photos.filter((_, j) => j !== i))}
+            className="absolute -right-1.5 -top-1.5 rounded-full bg-white p-0.5 text-rose-600 shadow cursor-pointer"
+            aria-label="Remove photo"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      ))}
+      {photos.length < MAX_PHOTOS && (
+        <label className={`inline-flex items-center gap-1.5 rounded-xl border border-dashed border-slate-300 px-3 py-2 text-[11px] font-bold text-slate-600 ${disabled ? 'opacity-50' : 'cursor-pointer hover:bg-slate-50'}`}>
+          <Camera className="h-3.5 w-3.5" />
+          {photos.length ? 'Add photo' : `Attach photos (up to ${MAX_PHOTOS})`}
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            disabled={disabled}
+            className="hidden"
+            onChange={e => {
+              void add(e.target.files);
+              e.target.value = '';
+            }}
+          />
+        </label>
+      )}
+    </div>
+  );
+}
+
+function PhotoStrip({ urls }: { urls?: string[] }) {
+  if (!urls?.length) return null;
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-2">
+      {urls.map(u => (
+        <a key={u} href={u} target="_blank" rel="noreferrer">
+          <img src={u} alt="Attached photo" className="h-16 w-16 rounded-lg border border-slate-200 object-cover" />
+        </a>
+      ))}
+    </div>
+  );
+}
 
 interface Props {
   /** 'owner' shows the report form and only that owner's issues. */
@@ -37,6 +124,23 @@ export default function WakalaIssuesPanel({ mode, ownerId, ownerName, senderName
   const [messages, setMessages] = useState<any[]>([]);
   const [reply, setReply] = useState('');
   const [busy, setBusy] = useState(false);
+  const [formPhotos, setFormPhotos] = useState<string[]>([]);
+  const [replyPhotos, setReplyPhotos] = useState<string[]>([]);
+  // Photo links of the open issue, by message key ('issue' = the report itself).
+  const [photosByKey, setPhotosByKey] = useState<Record<string, string[]>>({});
+
+  /** Uploads photos to an issue message; returns how many failed. */
+  const uploadPhotos = async (issueId: string, messageKey: string, photos: string[]) => {
+    let failed = 0;
+    for (const dataUrl of photos) {
+      try {
+        await uploadIssuePhoto({ data: { issueId, messageKey, dataUrl } });
+      } catch {
+        failed += 1;
+      }
+    }
+    return failed;
+  };
 
   const [form, setForm] = useState({
     wakalaMsisdn: '',
@@ -67,9 +171,15 @@ export default function WakalaIssuesPanel({ mode, ownerId, ownerName, senderName
   const openMessages = async (issueId: string) => {
     setOpenIssueId(issueId);
     setMessages([]);
+    setPhotosByKey({});
+    if (issueId !== openIssueId) setReplyPhotos([]);
     try {
-      const res = await listIssueMessages({ data: { issueId } });
+      const [res, photos] = await Promise.all([
+        listIssueMessages({ data: { issueId } }),
+        listIssuePhotos({ data: { issueId } }).catch(() => ({ photos: {} as Record<string, string[]> })),
+      ]);
       setMessages(res.messages || []);
+      setPhotosByKey(photos.photos || {});
     } catch (err: any) {
       setError(err?.message || 'Could not load the conversation.');
     }
@@ -84,7 +194,7 @@ export default function WakalaIssuesPanel({ mode, ownerId, ownerName, senderName
     setBusy(true);
     setError('');
     try {
-      await createWakalaIssue({
+      const created = await createWakalaIssue({
         data: {
           ownerId,
           ownerName: ownerName || senderName,
@@ -96,7 +206,10 @@ export default function WakalaIssuesPanel({ mode, ownerId, ownerName, senderName
           priority: form.priority,
         },
       });
+      const failed = formPhotos.length ? await uploadPhotos(created.issue.id, 'issue', formPhotos) : 0;
+      if (failed) setError(`The issue was sent, but ${failed} photo(s) could not be uploaded. Open the conversation to add them again.`);
       setShowForm(false);
+      setFormPhotos([]);
       setForm({ wakalaMsisdn: '', wakalaName: '', category: CATEGORIES[0], subject: '', description: '', priority: 'Normal' });
       await load();
     } catch (err: any) {
@@ -107,13 +220,21 @@ export default function WakalaIssuesPanel({ mode, ownerId, ownerName, senderName
   };
 
   const sendReply = async () => {
-    if (!openIssueId || !reply.trim()) return;
+    if (!openIssueId || (!reply.trim() && replyPhotos.length === 0)) return;
     setBusy(true);
     try {
-      await postIssueMessage({
-        data: { issueId: openIssueId, body: reply.trim(), senderName, senderRole: mode === 'admin' ? 'admin' : 'owner' },
+      const sent = await postIssueMessage({
+        data: {
+          issueId: openIssueId,
+          body: reply.trim() || 'Photo attached',
+          senderName,
+          senderRole: mode === 'admin' ? 'admin' : 'owner',
+        },
       });
+      const failed = replyPhotos.length && sent.id ? await uploadPhotos(openIssueId, sent.id, replyPhotos) : 0;
+      if (failed) setError(`The reply was sent, but ${failed} photo(s) could not be uploaded.`);
       setReply('');
+      setReplyPhotos([]);
       await openMessages(openIssueId);
     } catch (err: any) {
       setError(err?.message || 'Could not send the reply.');
@@ -267,6 +388,7 @@ export default function WakalaIssuesPanel({ mode, ownerId, ownerName, senderName
               className="w-full text-xs rounded-xl border border-slate-200 px-3 py-2 bg-white"
             />
           </div>
+          <PhotoPicker photos={formPhotos} onChange={setFormPhotos} disabled={busy} />
           <div className="flex justify-end gap-2">
             <button onClick={() => setShowForm(false)} className="text-xs font-bold px-3 py-2 rounded-xl border border-slate-200 cursor-pointer">
               Cancel
@@ -322,9 +444,11 @@ export default function WakalaIssuesPanel({ mode, ownerId, ownerName, senderName
               </div>
               <p className="text-[11px] text-slate-600 mt-1">{issue.description}</p>
 
+              {openIssueId === issue.id && <PhotoStrip urls={photosByKey.issue} />}
+
               {openIssueId === issue.id && (
                 <div className="mt-3 rounded-xl bg-slate-50 border border-slate-200 p-3">
-                  <div className="space-y-2 max-h-56 overflow-y-auto">
+                  <div className="space-y-2 max-h-80 overflow-y-auto">
                     {messages.length === 0 ? (
                       <p className="text-[11px] text-slate-500">No replies yet.</p>
                     ) : (
@@ -333,6 +457,7 @@ export default function WakalaIssuesPanel({ mode, ownerId, ownerName, senderName
                           <span className="font-bold text-slate-800">{m.sender_name}</span>
                           <span className="text-slate-400"> · {new Date(m.created_at).toLocaleString()}</span>
                           <p className="text-slate-700">{m.body}</p>
+                          <PhotoStrip urls={photosByKey[String(m.id)]} />
                         </div>
                       ))
                     )}
@@ -346,11 +471,14 @@ export default function WakalaIssuesPanel({ mode, ownerId, ownerName, senderName
                     />
                     <button
                       onClick={sendReply}
-                      disabled={busy || !reply.trim()}
+                      disabled={busy || (!reply.trim() && replyPhotos.length === 0)}
                       className="text-xs font-bold px-3 py-2 rounded-xl bg-brand-primary text-white cursor-pointer disabled:opacity-60"
                     >
                       <Send className="h-3.5 w-3.5" />
                     </button>
+                  </div>
+                  <div className="mt-2">
+                    <PhotoPicker photos={replyPhotos} onChange={setReplyPhotos} disabled={busy} />
                   </div>
                 </div>
               )}
