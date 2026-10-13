@@ -15,7 +15,7 @@ import { fetchMonthlyMonths } from '../lib/monthly.functions';
 import IopLabel from './IopLabel';
 import IopVariance, { shortMonth } from './IopVariance';
 import { periodsMatch } from '../utils/periodUtils';
-import { getActivityRules } from '../utils/activityRules';
+import { calculatePenalty, getActivityRules } from '../utils/activityRules';
 import type { ClassifiedRow } from '../utils/classification';
 import { computeLiveKpiTotals, type LiveKpiTotals } from '../utils/liveKpiTotals';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
@@ -984,20 +984,35 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
             const dailyIop = settlement.period
               ? dailyIopForPeriod(classifiedDaily, settlement.period, undefined, settlement.endDate)
               : 0;
+            // IOP (volume serviced outside our SA) carries the same penalty rate as CP.
+            const iopPenalty = calculatePenalty(settlement.iop);
+            const totalPenalty = Math.round((settlement.penalty + iopPenalty) * 100) / 100;
             return (
               <div className="space-y-2">
                 <div className="flex items-center gap-2 px-1">
                   <ShieldCheck className="h-4 w-4 text-brand-primary" />
                   <h3 className="font-sans text-xs font-black uppercase tracking-wider text-brand-primary">Settlement · {settlement.source}</h3>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                   <MetricCard
-                    title="Penalty"
+                    title="CP Penalty"
                     value={`TZS ${settlement.penalty.toLocaleString()}`}
                     subValue={`CP × ${getActivityRules().penaltyRate}%`}
                     icon={AlertTriangle}
                     variant="red"
                   />
+                  <MetricCard
+                    title="IOP Penalty"
+                    value={`TZS ${iopPenalty.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    subValue={`IOP × ${getActivityRules().penaltyRate}%`}
+                    icon={AlertTriangle}
+                    variant="red"
+                  >
+                    <div className="flex justify-between gap-3 border-t border-slate-100 pt-2 font-sans text-xs">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Total (CP + IOP)</span>
+                      <span className="font-black text-brand-text">TZS {totalPenalty.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                  </MetricCard>
                   <MetricCard
                     title={settlement.kind ? <IopLabel source={settlement.kind} /> : 'IOP'}
                     value={`TZS ${settlement.iop.toLocaleString()}`}

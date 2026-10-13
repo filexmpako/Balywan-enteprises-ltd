@@ -4,7 +4,7 @@ import { normalizeMsisdn } from '../utils/msisdn';
 import { formatDate } from '../utils/dateFormat';
 import { buildOwnerWakalaMap } from '../utils/wakalaMapping';
 import { getOwnerPortfolio } from '../utils/ownerPortfolio';
-import { getActivityRules, isActiveByRule } from '../utils/activityRules';
+import { calculatePenalty, getActivityRules, isActiveByRule } from '../utils/activityRules';
 import { getActiveStatusFromColumn, mergeServicedStatus, preferColumnStatus } from '../utils/servicingStatus';
 import { ownersList } from '../data';
 import WorkLocationSection from './WorkLocationSection';
@@ -1209,14 +1209,33 @@ export default function OwnerDetailsView({
             <h3 className="font-sans text-xs font-black uppercase text-brand-primary tracking-wider font-mono">
               Settlement · {settlement.source}
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <MetricCard
-                title="Penalty"
+                title="CP Penalty"
                 value={`TZS ${settlement.penalty.toLocaleString()}`}
                 subValue={`CP × ${getActivityRules().penaltyRate}%`}
                 icon={AlertTriangle}
                 variant="red"
               />
+              {(() => {
+                // IOP (volume serviced outside our SA) carries the same penalty rate as CP.
+                const iopPenalty = calculatePenalty(settlement.iop);
+                const totalPenalty = Math.round((settlement.penalty + iopPenalty) * 100) / 100;
+                return (
+                  <MetricCard
+                    title="IOP Penalty"
+                    value={`TZS ${iopPenalty.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                    subValue={`IOP × ${getActivityRules().penaltyRate}%`}
+                    icon={AlertTriangle}
+                    variant="red"
+                  >
+                    <div className="flex justify-between gap-3 border-t border-slate-100 pt-2 font-sans text-xs">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Total (CP + IOP)</span>
+                      <span className="font-black text-brand-text">TZS {totalPenalty.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                  </MetricCard>
+                );
+              })()}
               <MetricCard
                 title={settlement.kind ? <IopLabel source={settlement.kind} /> : 'IOP'}
                 value={`TZS ${settlement.iop.toLocaleString()}`}
