@@ -18,6 +18,7 @@ import {
   getStatusBadgeInfo,
   getTotalReturned,
   getShortfall,
+  getFloatAmount,
   getPendingLoanRequests,
   refreshFloatData,
   startFloatAutoRefresh,
@@ -117,6 +118,8 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
   useEffect(() => startFloatAutoRefresh(), []);
 
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Amount actually sent per pending request (defaults to the requested amount).
+  const [sentInputs, setSentInputs] = useState<Record<string, string>>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -265,12 +268,17 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
     const mId = manager ? manager.id : (user?.email || 'float_manager');
     const mName = manager ? manager.name : (user?.name || 'Float Manager');
 
-    void act(r.id, () => confirmFloatRequest(r.id, mId, mName));
+    const sent = sentInputs[r.id] !== undefined ? Number(sentInputs[r.id]) : r.requestedAmount;
+    if (!(sent > 0)) {
+      alert('Enter the amount you are sending (greater than 0).');
+      return;
+    }
+    void act(r.id, () => confirmFloatRequest(r.id, mId, mName, sent));
   };
 
   const handleComplete = (r: FloatRequest) => {
-    if (getTotalReturned(r) !== r.requestedAmount) {
-      alert(`Cannot complete float request: Returned amount (${formatCurrency(getTotalReturned(r))}) does not match requested amount (${formatCurrency(r.requestedAmount)}).`);
+    if (getTotalReturned(r) !== getFloatAmount(r)) {
+      alert(`Cannot complete float request: Returned amount (${formatCurrency(getTotalReturned(r))}) does not match the amount sent (${formatCurrency(getFloatAmount(r))}).`);
       return;
     }
 
@@ -360,7 +368,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
   // Loans tab financial metrics (all-time)
   const totalOutstandingFinancial = requests
     .filter(r => r.status === 'Pending' || r.status === 'Confirmed')
-    .reduce((sum, r) => sum + (r.requestedAmount || 0), 0);
+    .reduce((sum, r) => sum + (getFloatAmount(r) || 0), 0);
   const totalLoansOutstandingFinancial = loans
     .filter(l => l.status !== 'Paid')
     .reduce((sum, l) => sum + (l.amount || 0), 0);
@@ -716,8 +724,8 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                     const badge = getStatusBadgeInfo(r);
                     const pendingDays = getPendingDays(r);
                     const resolutionDays = getResolutionDays(r);
-                    const isMismatch = r.status === 'Returned' && getTotalReturned(r) !== r.requestedAmount;
-                    const isShortfall = r.status === 'Returned' && getTotalReturned(r) < r.requestedAmount;
+                    const isMismatch = r.status === 'Returned' && getTotalReturned(r) !== getFloatAmount(r);
+                    const isShortfall = r.status === 'Returned' && getTotalReturned(r) < getFloatAmount(r);
 
                     return (
                       <div
@@ -774,6 +782,13 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                                 <p className="text-lg font-black text-brand-primary">{formatCurrency(r.requestedAmount)}</p>
                               </div>
 
+                              {r.sentAmount !== undefined && r.sentAmount !== r.requestedAmount && (
+                                <div className="text-left md:text-right pl-4 border-l border-brand-gray-border">
+                                  <p className="text-[11px] font-bold text-brand-text-variant uppercase tracking-wider">Sent</p>
+                                  <p className="text-lg font-black text-indigo-700">{formatCurrency(r.sentAmount)}</p>
+                                </div>
+                              )}
+
                               {r.returnedAt && (
                                 <div className="text-left md:text-right pl-4 border-l border-brand-gray-border">
                                   <p className="text-[11px] font-bold text-brand-text-variant uppercase tracking-wider">Returned</p>
@@ -804,6 +819,16 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                             <div className="flex flex-wrap items-center justify-start md:justify-end gap-2 mt-0.5">
                               {!readOnly && r.status === 'Pending' && (
                                 <>
+                                  <label className="inline-flex items-center gap-1.5 text-[11px] font-bold text-brand-text-variant">
+                                    Amount sent (TZS)
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      value={sentInputs[r.id] ?? String(r.requestedAmount)}
+                                      onChange={(e) => setSentInputs(prev => ({ ...prev, [r.id]: e.target.value }))}
+                                      className="w-32 rounded-lg border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs text-brand-text focus:outline-none focus:border-brand-primary"
+                                    />
+                                  </label>
                                   <button
                                     onClick={() => handleConfirm(r)}
                                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-colors cursor-pointer"
@@ -869,7 +894,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                         {r.status === 'Returned' && isShortfall && r.shortfallReason && !r.loanId && (
                           <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 text-xs">
                             <p className="font-bold text-indigo-900 mb-0.5">
-                              Loan pending approval: {formatCurrency(getShortfall(r))} (returned {formatCurrency(getTotalReturned(r))} of {formatCurrency(r.requestedAmount)})
+                              Loan pending approval: {formatCurrency(getShortfall(r))} (returned {formatCurrency(getTotalReturned(r))} of {formatCurrency(getFloatAmount(r))})
                             </p>
                             <p className="text-indigo-800 italic">Owner's reason: "{r.shortfallReason}"</p>
                           </div>
@@ -906,7 +931,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                         {isMismatch && !isShortfall && !r.loanId && (
                           <div className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-700 bg-rose-50 px-3 py-1.5 rounded-lg border border-rose-200">
                             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                            Amount Mismatch: Returned ({formatCurrency(getTotalReturned(r))}) does not match requested ({formatCurrency(r.requestedAmount)}).
+                            Amount Mismatch: Returned ({formatCurrency(getTotalReturned(r))}) does not match the amount sent ({formatCurrency(getFloatAmount(r))}).
                           </div>
                         )}
 
@@ -978,7 +1003,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                       <div className="min-w-0">
                         <p className="font-bold text-sm text-brand-text">{getOwnerName(r.ownerId)}</p>
                         <p className="text-[11px] text-slate-600">
-                          Returned {formatCurrency(getTotalReturned(r))} of {formatCurrency(r.requestedAmount)}
+                          Returned {formatCurrency(getTotalReturned(r))} of {formatCurrency(getFloatAmount(r))}
                           {r.returnedAt ? ` on ${formatDate(r.returnedAt)}` : ''}
                         </p>
                         {r.shortfallReason && <p className="text-[11px] text-slate-600 italic">"{r.shortfallReason}"</p>}
@@ -1121,7 +1146,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                             <td className="px-6 py-4 whitespace-nowrap text-[11px] text-slate-500">
                               {originalReq ? (
                                 <div>
-                                  <span className="font-mono text-slate-700">Req: {formatCurrency(originalReq.requestedAmount)}</span>
+                                  <span className="font-mono text-slate-700">{originalReq.sentAmount ? 'Sent' : 'Req'}: {formatCurrency(getFloatAmount(originalReq))}</span>
                                   <span className="mx-1.5">•</span>
                                   <span className="font-mono text-emerald-700">Ret: {formatCurrency(getTotalReturned(originalReq))}</span>
                                 </div>

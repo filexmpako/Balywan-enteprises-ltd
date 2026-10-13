@@ -143,6 +143,8 @@ export interface FloatRequest {
   id: string;
   ownerId: string;
   requestedAmount: number;
+  /** What the Float Manager actually sent, when it differs from the request; the owner returns this. */
+  sentAmount?: number;
   requestedAt: string;
   status: 'Pending' | 'Confirmed' | 'Returned' | 'Completed' | 'Rejected';
   confirmedByManagerId?: string;

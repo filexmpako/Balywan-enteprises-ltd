@@ -33,7 +33,7 @@ export interface FloatActor {
 
 export type FloatAction =
   | { type: 'create'; ownerId: string; amount: number }
-  | { type: 'confirm'; requestId: string; managerId: string; managerName: string }
+  | { type: 'confirm'; requestId: string; managerId: string; managerName: string; sentAmount?: number }
   | { type: 'rejectRequest'; requestId: string; managerId: string; managerName: string; reason?: string }
   | { type: 'submitReturn'; requestId: string; entries: FloatReturnEntry[]; shortfallReason?: string }
   | { type: 'complete'; requestId: string; managerId: string; managerName: string }
@@ -96,6 +96,8 @@ function expectStatus(current: string, allowed: string[], what: string) {
 }
 
 const totalReturned = (r: FloatRequest) => (r.returnEntries || []).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+/** The amount the owner owes back: what was sent, else what was requested. */
+const owedAmount = (r: FloatRequest) => (Number(r.sentAmount) > 0 ? Number(r.sentAmount) : r.requestedAmount);
 
 const CHANNELS = new Set(['CRDB', 'YAS', 'NBC', 'Other']);
 
@@ -151,8 +153,11 @@ export async function runFloatAction(
     case 'confirm': {
       const r = await readOne<FloatRequest>(userDb, FLOAT, action.requestId);
       expectStatus(r.status, ['Pending'], 'request');
+      const sent = action.sentAmount === undefined ? r.requestedAmount : Number(action.sentAmount);
+      if (!(sent > 0)) throw new FloatActionError('Enter the amount sent (greater than 0).');
       await writeOne(userDb, FLOAT, {
         ...r,
+        sentAmount: sent !== r.requestedAmount ? sent : undefined,
         status: 'Confirmed',
         confirmedByManagerId: action.managerId,
         confirmedByManagerName: action.managerName,
@@ -182,7 +187,7 @@ export async function runFloatAction(
       expectStatus(r.status, ['Confirmed'], 'request');
       const entries = cleanEntries(action.entries);
       const returned = entries.reduce((s, e) => s + e.amount, 0);
-      const shortfallReason = returned < r.requestedAmount ? action.shortfallReason?.trim() || '' : undefined;
+      const shortfallReason = returned < owedAmount(r) ? action.shortfallReason?.trim() || '' : undefined;
       if (shortfallReason === '') throw new FloatActionError('Please explain why this return is short.');
       await writeOne(db, FLOAT, { ...r, status: 'Returned', returnEntries: entries, returnedAt: at, shortfallReason });
       return;
@@ -191,8 +196,8 @@ export async function runFloatAction(
     case 'complete': {
       const r = await readOne<FloatRequest>(userDb, FLOAT, action.requestId);
       expectStatus(r.status, ['Returned'], 'request');
-      if (totalReturned(r) !== r.requestedAmount) {
-        throw new FloatActionError('The returned amount does not match the requested amount.');
+      if (totalReturned(r) !== owedAmount(r)) {
+        throw new FloatActionError('The returned amount does not match the amount sent.');
       }
       await writeOne(userDb, FLOAT, {
         ...r,
@@ -223,7 +228,7 @@ export async function runFloatAction(
       const r = await readOne<FloatRequest>(userDb, FLOAT, action.requestId);
       expectStatus(r.status, ['Returned'], 'request');
       if (r.loanId) throw new FloatActionError('A loan already exists for this request.');
-      const shortfall = r.requestedAmount - totalReturned(r);
+      const shortfall = owedAmount(r) - totalReturned(r);
       if (shortfall <= 0) throw new FloatActionError('This return is not short, so no loan is needed.');
       const loan: LoanRecord = {
         id: newId('loan'),
