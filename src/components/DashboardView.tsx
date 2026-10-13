@@ -56,6 +56,7 @@ import {
   Loader2
 } from 'lucide-react';
 import MetricCard from './MetricCard';
+import DailyMgtSummary from './DailyMgtSummary';
 import WakalaStatusDetailModal from './WakalaStatusDetailModal';
 import {
   ResponsiveContainer,
@@ -900,6 +901,8 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
               />
             </div>
           </div>
+
+          <DailyMgtSummary classified={classifiedDaily} period={currentPeriod} periodLabel={displayPeriod} />
 
           {/* Monthly Goal Progress Card */}
           <div className="space-y-2">
