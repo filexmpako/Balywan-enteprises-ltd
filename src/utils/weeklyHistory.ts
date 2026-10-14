@@ -20,7 +20,7 @@ import {
 import { getActivityRules } from './activityRules';
 import { saveWakalaStatusHistory } from '../lib/wakalaStatus.functions';
 
-export const WEEKLY_STATS_KEY = 'weeklyWakalaStatsHistory';
+const WEEKLY_STATS_KEY = 'weeklyWakalaStatsHistory';
 
 const MONTH_NAMES = [
   'january', 'february', 'march', 'april', 'may', 'june',

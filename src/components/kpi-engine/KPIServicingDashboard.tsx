@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { 
   FileSpreadsheet, 
   Search, 
@@ -7,12 +7,8 @@ import {
   ChevronRight, 
   AlertTriangle, 
   ShieldCheck, 
-  User, 
   Award, 
-  TrendingDown, 
-  MapPin, 
-  Activity 
-} from 'lucide-react';
+  MapPin} from 'lucide-react';
 
 interface KPIServicingDashboardProps {
   parsedServicing: any[];
@@ -28,7 +24,7 @@ export default function KPIServicingDashboard({
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortAsc, setSortAsc] = useState(true);
   const [currentPage, setCurrentPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const rowsPerPage = 10;
   const [activeZoneFilter, setActiveZoneFilter] = useState<string>('all');
 
   // Compute dynamic stats from Worksheet 2 (Servicing Data)

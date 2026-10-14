@@ -25,11 +25,3 @@ export function getAvatarUrl(_name: string): string {
   return GENERIC_AVATAR_DATA_URI;
 }
 
-/**
- * Returns a dynamic initials SVG fallback avatar if the user prefers.
- */
-export function getInitialsAvatarUrl(name: string): string {
-  const cleanName = (name || '').trim() || 'User';
-  return `https://ui-avatars.com/api/?name=${encodeURIComponent(cleanName)}&background=random&color=fff&size=150&bold=true`;
-}
-

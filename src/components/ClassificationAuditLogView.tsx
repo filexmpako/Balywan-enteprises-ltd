@@ -1,29 +1,21 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { 
   ShieldCheck, 
   Search, 
-  Filter, 
   Download, 
   RefreshCw, 
-  Layers, 
-  ArrowUpRight, 
-  CheckCircle2, 
-  AlertCircle, 
-  HelpCircle, 
   Building2, 
-  Phone, 
   Tag,
-  Clock,
   FileText,
   Calendar,
   RotateCcw
 } from 'lucide-react';
-import { ClassificationAuditRecord, ClassificationBucket } from '../types/classificationAudit';
+import { ClassificationAuditRecord } from '../types/classificationAudit';
 import PageHeaderBanner from './PageHeaderBanner';
 import { useCompany } from './CompanyContext';
 import { useReportingPeriod } from './ReportingPeriodContext';
-import { getClassificationAuditLogs, clearClassificationAuditLogs, saveClassificationAuditRecords } from '../utils/indexedDB';
+import { getClassificationAuditLogs } from '../utils/indexedDB';
 import IopLabel from './IopLabel';
 
 const PAGE_SIZE = 25;
@@ -74,21 +66,6 @@ export default function ClassificationAuditLogView() {
   // Sync / Refresh
   const handleRefresh = () => {
     loadAuditLogs();
-  };
-
-  // Clear logs
-  const handleClearLogs = async () => {
-    if (confirm('Clear stored classification audit log history?')) {
-      await clearClassificationAuditLogs();
-      setAuditLogs([]);
-    }
-  };
-
-  // Seed sample logs if empty
-  const handleSeedSample = async () => {
-    const sample = getMockAuditLogs();
-    await saveClassificationAuditRecords(sample);
-    setAuditLogs(sample);
   };
 
   // Export CSV
@@ -486,87 +463,10 @@ export default function ClassificationAuditLogView() {
           <p className="text-xs text-slate-400">
             Classification audit records will be automatically logged when daily MGT reports are processed.
           </p>
-          <div className="flex justify-center gap-3 pt-2">
-            <button
-              onClick={handleSeedSample}
-              className="px-4 py-2 text-xs font-bold text-brand-primary bg-brand-primary/10 hover:bg-brand-primary/20 rounded-xl cursor-pointer"
-            >
-              Generate Demo Audit Trail
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* FOOTER CONTROL */}
-      {auditLogs.length > 0 && (
-        <div className="flex justify-end pt-2">
-          <button
-            onClick={handleClearLogs}
-            className="text-xs font-bold text-rose-600 hover:text-rose-800 hover:bg-rose-50 px-3 py-1.5 rounded-lg cursor-pointer transition-all"
-          >
-            Clear Audit Trail History
-          </button>
         </div>
       )}
         </>
       )}
     </div>
   );
-}
-
-// Generate realistic mock audit records for demo / initial state
-function getMockAuditLogs(): ClassificationAuditRecord[] {
-  return [
-    {
-      id: 'audit-tx-1001',
-      transactionId: 'TXN-884912',
-      timestamp: '2026-08-04 09:15:22',
-      rawMsisdn: '0755123456',
-      normalizedMsisdn: '255755123456',
-      amount: 1500000,
-      ownerId: 'OWNER-BALWYN',
-      matchedEntityId: '255755123456',
-      matchedEntityType: 'SA_TILL',
-      classificationBucket: 'SA_INTERNAL',
-      ruleTriggered: 'Matched SA Till (Owner Match)'
-    },
-    {
-      id: 'audit-tx-1002',
-      transactionId: 'TXN-884913',
-      timestamp: '2026-08-04 09:18:45',
-      rawMsisdn: '0754987654',
-      normalizedMsisdn: '255754987654',
-      amount: 450000,
-      ownerId: 'OWNER-BALWYN',
-      matchedEntityId: 'TERM-104523',
-      matchedEntityType: 'BASE_WAKALA',
-      classificationBucket: 'BASE',
-      ruleTriggered: 'Matched Base Wakala (Owner Match)'
-    },
-    {
-      id: 'audit-tx-1003',
-      transactionId: 'TXN-884914',
-      timestamp: '2026-08-04 09:22:10',
-      rawMsisdn: '0755333222',
-      normalizedMsisdn: '255755333222',
-      amount: 800000,
-      ownerId: 'OWNER-BALWYN',
-      matchedEntityId: 'TERM-994821',
-      matchedEntityType: 'BASE_WAKALA',
-      classificationBucket: 'BASE',
-      ruleTriggered: 'Matched Base Wakala (Serviced By Different Owner — Credited To Servicer)'
-    },
-    {
-      id: 'audit-tx-1004',
-      transactionId: 'TXN-884915',
-      timestamp: '2026-08-04 09:30:00',
-      rawMsisdn: '0767111000',
-      normalizedMsisdn: '255767111000',
-      amount: 250000,
-      ownerId: 'OWNER-BALWYN',
-      matchedEntityType: 'NONE',
-      classificationBucket: 'IOP',
-      ruleTriggered: 'Unmatched Destination MSISDN (IOP Fallback)'
-    }
-  ];
 }

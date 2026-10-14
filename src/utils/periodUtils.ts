@@ -1,4 +1,4 @@
-import { kvGet, kvSet } from '../lib/hasidadi/kv';
+import { kvGet } from '../lib/hasidadi/kv';
 /**
  * Utility functions for parsing, formatting, matching, and auto-deriving reporting periods.
  * Supports ISO format ("YYYY-MM"), full month names ("July 2026"), and short month names ("Jul 2026").
@@ -25,7 +25,7 @@ export interface ParsedPeriod {
 /**
  * Parses any period string into a structured ParsedPeriod object.
  */
-export function parsePeriod(periodStr: string | null | undefined): ParsedPeriod | null {
+function parsePeriod(periodStr: string | null | undefined): ParsedPeriod | null {
   if (!periodStr || periodStr.trim() === '' || periodStr === '—') return null;
 
   const clean = periodStr.trim();

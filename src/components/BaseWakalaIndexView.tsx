@@ -7,10 +7,9 @@ import {
 } from '../types/baseWakala';
 import { Owner } from '../types';
 import { formatDate, formatDateTime } from '../utils/dateFormat';
-import { normalizeMsisdn, isValidTanzanianMsisdn } from '../utils/msisdn';
+import { normalizeMsisdn } from '../utils/msisdn';
 import { resolveOwnerMatch, addNameAlias } from '../utils/ownerMatch';
 import { useCompany } from './CompanyContext';
-import { getActivityRules } from '../utils/activityRules';
 import { fetchWakalaStatusHistory } from '../lib/wakalaStatus.functions';
 import PageHeaderBanner from './PageHeaderBanner';
 import { 
@@ -29,11 +28,7 @@ import {
   ChevronRight, 
   X, 
   ShieldCheck, 
-  Filter, 
-  Check, 
-  Slash,
   MapPin,
-  UserCheck,
   Loader2,
   Navigation,
   AlertCircle
@@ -72,7 +67,6 @@ export default function BaseWakalaIndexView() {
 
   // --- Live Active/Inactive status, recorded weekly by the system rule ---
   const [statusRows, setStatusRows] = useState<any[]>([]);
-  const [rules, setRules] = useState(() => getActivityRules());
 
   useEffect(() => {
     let cancelled = false;
@@ -85,12 +79,11 @@ export default function BaseWakalaIndexView() {
       }
     };
     load();
-    const onRules = () => { setRules(getActivityRules()); load(); };
-    window.addEventListener('activity-rules-updated', onRules);
+    window.addEventListener('activity-rules-updated', load);
     window.addEventListener('weekly-kpi-updated', load);
     return () => {
       cancelled = true;
-      window.removeEventListener('activity-rules-updated', onRules);
+      window.removeEventListener('activity-rules-updated', load);
       window.removeEventListener('weekly-kpi-updated', load);
     };
   }, []);
@@ -331,7 +324,6 @@ export default function BaseWakalaIndexView() {
 
         const rawAltMsisdn = pick(row, ['Alt MSISDN', 'AltMSISDN', 'Alternate Number', 'ALTERN NO', 'Alt Phone', 'ALTER no', 'Alternative Number']);
 
-
         const normalizedMsisdn = normalizeMsisdn(rawMsisdn);
         if (!normalizedMsisdn && !rawCode) return; // Skip invalid rows lacking both code & msisdn
 
@@ -453,16 +445,6 @@ export default function BaseWakalaIndexView() {
   };
 
   // Individual Actions
-  const toggleEntityStatus = (id: string) => {
-    const updated = entities.map(e => {
-      if (e.id === id) {
-        const nextStatus: 'ACTIVE' | 'INACTIVE' = e.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
-        return { ...e, status: nextStatus, updatedAt: new Date().toISOString() };
-      }
-      return e;
-    });
-    saveEntities(updated);
-  };
 
   const handleDeleteEntity = (id: string) => {
     if (confirm('Are you sure you want to delete this Wakala terminal record from the Base Index?')) {
@@ -1059,7 +1041,7 @@ export default function BaseWakalaIndexView() {
 
             {/* Staging Rows List */}
             <div className="flex-1 overflow-y-auto p-5 space-y-3">
-              {stagedItems.map((stage, idx) => {
+              {stagedItems.map((stage) => {
                 const rec = stage.rawRecord;
                 const existing = stage.existingRecord;
 

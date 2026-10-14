@@ -1,5 +1,5 @@
-export const DEFAULT_COMPANY_NAME = "BALYWAN ENTEPRISES";
-export const COMPANY_NAME_KEY = "companyName";
+const DEFAULT_COMPANY_NAME = "BALYWAN ENTEPRISES";
+const COMPANY_NAME_KEY = "companyName";
 
 export function getCompanyName(): string {
   if (typeof window === "undefined") return DEFAULT_COMPANY_NAME;

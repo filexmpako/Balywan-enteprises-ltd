@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AlertTriangle, Trash2, X, ShieldAlert, CheckCircle2, Lock, Smartphone, Signal, Camera, UserX } from 'lucide-react';
+import { AlertTriangle, Trash2, X, ShieldAlert, Lock, Smartphone, Signal, Camera, UserX } from 'lucide-react';
 import { getOwnerDeletionImpact, deleteOwnerCascade, OwnerDeletionImpact } from '../utils/ownerDeletion';
 
 export interface DeleteOwnerModalProps {

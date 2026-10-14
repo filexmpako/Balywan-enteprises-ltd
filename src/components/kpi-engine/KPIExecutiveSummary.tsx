@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { Target, TrendingUp, TrendingDown, Minus, ArrowUpRight, Award, ShieldAlert, Sparkles } from 'lucide-react';
+import { useMemo } from 'react';
+import { Target, TrendingUp, TrendingDown, Minus, Award } from 'lucide-react';
 
 interface KPI {
   id: string;
@@ -137,7 +137,6 @@ export default function KPIExecutiveSummary({ parsedKpis }: KPIExecutiveSummaryP
 
   return (
     <div className="space-y-6">
-
 
       {/* 2. EXECUTIVE SUMMARY STATS CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

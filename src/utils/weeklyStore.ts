@@ -7,14 +7,12 @@ import {
   saveWeeklyServicingRows,
   fetchWeeklyServicingRows,
   fetchWeeklyWeeks,
-  deleteWeeklyServicingRows,
 } from '../lib/weekly.functions';
 
 export async function persistWeeklyServicing(
   reportingWeek: string,
   reportingMonth: string,
   rows: any[],
-  columns: string[]
 ): Promise<{ saved: number; cloud: boolean }> {
   const res = await saveWeeklyServicingRows({
     data: { reportingWeek, reportingMonth, rows },
@@ -46,6 +44,3 @@ export async function listStoredWeeks(): Promise<string[]> {
   }
 }
 
-export async function removeWeek(reportingWeek: string): Promise<void> {
-  await deleteWeeklyServicingRows({ data: { reportingWeek } });
-}

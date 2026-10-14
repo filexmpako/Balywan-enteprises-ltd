@@ -16,7 +16,7 @@ import {
  * reading. Weekly rows are stored under a month label ("September 2026"),
  * matched to `period` in any format ("2026-09").
  */
-export function buildWeeklyServedMap(rows: any[], period: string): Map<string, boolean> {
+function buildWeeklyServedMap(rows: any[], period: string): Map<string, boolean> {
   const columnServedMap = new Map<string, boolean | null>();
   const columnActiveMap = new Map<string, boolean | null>();
   const countsMap = new Map<string, TxnCounts>();

@@ -20,7 +20,7 @@ export function formatDate(value: Date | string | number): string {
 }
 
 /** "14:30" */
-export function formatTime(value: Date | string | number): string {
+function formatTime(value: Date | string | number): string {
   const d = toDate(value);
   if (isNaN(d.getTime())) return '—';
   return d.toLocaleTimeString('en-GB', TIME_OPTS);

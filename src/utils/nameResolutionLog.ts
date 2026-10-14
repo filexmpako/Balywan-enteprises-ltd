@@ -47,14 +47,3 @@ export function logNameResolution(entry: NameResolutionLogEntry): void {
   }
 }
 
-export function getNameResolutionLog(): NameResolutionLogEntry[] {
-  try {
-    const existing = localStorage.getItem(LOG_KEY);
-    const stored: NameResolutionLogEntry[] = existing ? JSON.parse(existing) : [];
-    // Include anything still buffered but not yet flushed, so a read
-    // immediately after a bulk operation doesn't appear to be missing data
-    return [...stored, ...pendingEntries];
-  } catch (e) {
-    return [...pendingEntries];
-  }
-}

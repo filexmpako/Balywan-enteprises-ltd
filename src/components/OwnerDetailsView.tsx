@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { ViewType, Owner, WakalaEntry, BaseWakala, PriorityWakala } from '../types';
-import { normalizeMsisdn } from '../utils/msisdn';
+import { ViewType, Owner, WakalaEntry, BaseWakala } from '../types';
 import { formatDate } from '../utils/dateFormat';
 import { buildOwnerWakalaMap } from '../utils/wakalaMapping';
 import { getOwnerPortfolio } from '../utils/ownerPortfolio';
@@ -20,19 +19,14 @@ import {
   Users,
   MapPin, 
   Calendar, 
-  TrendingUp, 
   Briefcase, 
   Activity, 
-  MoreVertical, 
   Edit, 
-  ExternalLink,
-  ChevronRight,
   ChevronDown,
   UserCheck,
   UserX,
   CheckCircle,
   AlertTriangle,
-  Clock,
   CheckCircle2,
   Camera,
   Trash2,
@@ -40,7 +34,6 @@ import {
   Loader2,
   Navigation,
   AlertCircle,
-  Info,
   Layers,
   Smartphone,
   ArrowRight
@@ -65,7 +58,7 @@ import {
 import { fetchMonthlyMonths } from '../lib/monthly.functions';
 import { readWeeklyStatsHistory } from '../utils/weeklyHistory';
 import { resolveOwnerMatch } from '../utils/ownerMatch';
-import { AgentTarget, ManualOwnerTarget } from '../types';
+import { ManualOwnerTarget } from '../types';
 import { useAuth } from './AuthContext';
 import { useReportingPeriod } from './ReportingPeriodContext';
 import DeleteOwnerModal from './DeleteOwnerModal';
@@ -115,10 +108,8 @@ interface OwnerDetailsViewProps {
 export default function OwnerDetailsView({ 
   onNavigate, 
   selectedOwnerName,
-  isStandaloneAgent = false,
-  onLogout
-}: OwnerDetailsViewProps) {
-  const { currentPeriod, displayPeriod } = useReportingPeriod();
+  isStandaloneAgent = false}: OwnerDetailsViewProps) {
+  const { currentPeriod } = useReportingPeriod();
   // Try to find selected owner in our list; fallback to first owner
   const owner = (() => {
     const saved = localStorage.getItem('ownersList');
@@ -255,7 +246,6 @@ export default function OwnerDetailsView({
     };
   }, [loadData]);
 
-  const [showEditSuccess, setShowEditSuccess] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({
     name: '',
@@ -527,7 +517,6 @@ export default function OwnerDetailsView({
 
   // Derive metrics
   const { 
-    totalVolumeServed, 
     activeWakalaCount, 
     inactiveWakalaCount, 
     isSynced
@@ -799,8 +788,6 @@ export default function OwnerDetailsView({
     console.log('Volume per bucket:', bucketVolumes);
     console.log('Sample IOP rows (first 5):', ownerRows.filter(cr => cr.bucket === 'IOP').slice(0, 5));
 
-    const savedTargets = localStorage.getItem('agentTargets');
-    const agentTargets: AgentTarget[] = savedTargets ? JSON.parse(savedTargets) : [];
     const manualTargets = manualTargetsList;
 
     const period = currentPeriod;

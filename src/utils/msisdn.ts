@@ -26,7 +26,3 @@ export function normalizeMsisdn(input: string | number | null | undefined): stri
   return cleaned;
 }
 
-export function isValidTanzanianMsisdn(msisdn: string): boolean {
-  return /^255[67]\d{8}$/.test(msisdn);
-}
-

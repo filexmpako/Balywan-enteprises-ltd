@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronDown, Sparkles, Check } from 'lucide-react';
 import { formatPeriodDisplay, periodsMatch } from '../utils/periodUtils';

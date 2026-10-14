@@ -1,6 +1,5 @@
 import { ClassifiedRow } from './classification';
-import { AgentTarget, Owner, ManualOwnerTarget } from '../types';
-import { resolveOwnerMatch } from './ownerMatch';
+import { Owner, ManualOwnerTarget } from '../types';
 import { resolveOwnerTarget, getSavedManualOwnerTargets } from './targetResolution';
 import { formatToISODate } from './mappingEngine';
 import { parseWeekDateRange, type WeeklyStatsEntry } from './weeklyKpiEngine';
@@ -301,7 +300,6 @@ export function getCompanyTotalKPI1Target(
  */
 export function calculateKPI1(
   classifiedRows: ClassifiedRow[],
-  agentTargets: AgentTarget[],
   owners: Owner[],
   period: string,
   manualTargets?: ManualOwnerTarget[],

@@ -1,5 +1,4 @@
-import React from 'react';
-import { ShieldAlert, ArrowLeft, Home, Building } from 'lucide-react';
+import { ShieldAlert, Home } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from './AuthContext';
 import { useCompany } from './CompanyContext';

@@ -1,9 +1,5 @@
-import React from 'react';
-import { ViewType } from '../types';
 import { 
   Building, 
-  ShieldAlert, 
-  UserCheck, 
   Lock, 
   Globe, 
   ShieldCheck, 

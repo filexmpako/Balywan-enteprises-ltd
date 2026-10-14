@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { ViewType } from '../types';
 import { getPhoto } from '../utils/db';
 import { 

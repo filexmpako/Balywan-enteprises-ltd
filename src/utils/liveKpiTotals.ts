@@ -31,7 +31,7 @@ export function computeLiveKpiTotals(
   monthly?: MonthlyKpiOverride | null,
   weeklyServed?: Map<string, boolean> | null
 ): LiveKpiTotals {
-  const kpi1Results = calculateKPI1(classifiedRows, [], owners, period, manualTargets, weeklyStats, monthly?.servedValueByOwner);
+  const kpi1Results = calculateKPI1(classifiedRows, owners, period, manualTargets, weeklyStats, monthly?.servedValueByOwner);
   const kpi1Target = kpi1Results.reduce((s, r) => s + (r.hasTarget ? r.monthlyTarget : 0), 0);
   // Every wakala counts toward the company figure, with or without an owner.
   let kpi1Achieved = 0;

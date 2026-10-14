@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { ViewType, AuditReport } from '../types';
 import { getAvatarUrl } from '../utils/avatar';
 import { 
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import PageHeaderBanner from './PageHeaderBanner';
+import ReportResyncPanel from './ReportResyncPanel';
 import { getCompanyName } from '../utils/company';
 
 interface ReportHistoryViewProps {
@@ -30,7 +31,6 @@ interface ReportHistoryViewProps {
 export default function ReportHistoryView({
   onNavigate,
   reports,
-  onAddAuditReport,
   onDeleteReport
 }: ReportHistoryViewProps) {
   const [pendingDelete, setPendingDelete] = useState<AuditReport | null>(null);
@@ -181,6 +181,8 @@ export default function ReportHistoryView({
           </button>
         </div>
       </div>
+
+      <ReportResyncPanel />
 
       {/* Filter Options block (Image 3 design) */}
       <div className="rounded-2xl border border-brand-gray-border bg-brand-card p-4 shadow-ambient">

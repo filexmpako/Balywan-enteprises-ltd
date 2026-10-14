@@ -19,27 +19,3 @@ export function formatNumberWithAbbreviation(num: number): string {
   return num.toLocaleString('en-US');
 }
 
-export function abbreviateNumberString(valStr: string): string {
-  if (!valStr) return '';
-  
-  // Regular expression to match numeric sequences with optional commas or periods.
-  // We match word boundaries, allowing numbers like 6,340,000 or 3400000000 to be converted.
-  return valStr.replace(/\b\d[\d,]+(?:\.\d+)?\b/g, (match) => {
-    const plain = match.replace(/,/g, '');
-    const num = parseFloat(plain);
-    if (isNaN(num)) return match;
-    
-    if (num >= 1e9) {
-      const val = num / 1e9;
-      const formatted = Number(val.toFixed(2));
-      return `${formatted}B`;
-    } else if (num >= 1e6) {
-      const val = num / 1e6;
-      const formatted = Number(val.toFixed(2));
-      return `${formatted}M`;
-    }
-    
-    // Otherwise return with commas for clean reading
-    return num.toLocaleString('en-US');
-  });
-}

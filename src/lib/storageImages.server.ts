@@ -19,7 +19,7 @@ const IMAGE_TYPES: Record<string, string> = {
   'image/heif': 'heif',
 };
 
-export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
 export function parseImageDataUrl(dataUrl: string): { bytes: Uint8Array; contentType: string; ext: string } {
   const match = /^data:([a-z]+\/[a-z0-9.+-]+);base64,(.+)$/i.exec(String(dataUrl || ''));

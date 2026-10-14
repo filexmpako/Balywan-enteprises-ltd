@@ -14,3 +14,12 @@ For every amendment/change request given for this project, follow these steps in
 
 If verification shows the claim doesn't hold (no bug found, feature already exists,
 etc.), say so plainly instead of implementing something unnecessary.
+
+## Dead code
+
+After every fix or feature, delete the dead code it leaves behind and any
+dead code found in the files it touched: unused files and components,
+unused exports, functions, variables and imports, no-op shims, and
+dependencies nothing imports any more. Check with the import graph and
+`npx tsc --noEmit -p . --noUnusedLocals` (and `npx knip` when available),
+then report what was deleted.

@@ -48,7 +48,7 @@ export async function loadCollection(supabase: DB, mapper: CollectionMapper): Pr
  * resolve tills and wakala to owners, so these may be read with a separate
  * (read-only, server-side) client instead of the owner-scoped one.
  */
-export const REFERENCE_KEYS = new Set(['saTillRegistry', 'tillsList', 'baseWakalaIndex']);
+const REFERENCE_KEYS = new Set(['saTillRegistry', 'tillsList', 'baseWakalaIndex']);
 
 export async function loadWorkspace(supabase: DB, referenceClient?: DB): Promise<Workspace> {
   const collections: Record<string, any[]> = {};
@@ -222,12 +222,21 @@ function periodOf(dateStr: string): string {
   return iso.length >= 7 ? iso.slice(0, 7) : new Date().toISOString().slice(0, 7);
 }
 
-/** Persists classified servicing rows plus their immutable audit trail. */
-export async function persistClassifiedRows(
-  supabase: DB,
-  uploadId: string,
-  classified: Array<{ row: any; bucket: string; attributedOwnerId: string | null; attributedOwnerName: string | null; matchedVia: string; auditRecord: any }>,
-) {
+export interface ClassifiedForStore {
+  row: any;
+  bucket: string;
+  attributedOwnerId: string | null;
+  attributedOwnerName: string | null;
+  matchedVia: string;
+  auditRecord: any;
+}
+
+/**
+ * The daily_transaction_records rows for classified servicing rows.
+ * `uploadId` is one id for a fresh upload, or one per row when existing rows
+ * are re-stamped (each keeps the upload it came from).
+ */
+export async function buildTransactionRows(supabase: DB, uploadId: string | string[], classified: ClassifiedForStore[]) {
   // owner_id only drives RLS visibility: an owner must see every transaction
   // sent from their own tills (BASE, IOP and SA transfers alike), while
   // attributed_owner_id keeps who the volume is credited to. The servicing
@@ -250,10 +259,10 @@ export async function persistClassifiedRows(
     return knownOwnerIds.has(servicingId) ? servicingId : attributedOwnerId;
   };
 
-  const txRows = classified.map(({ row, bucket, attributedOwnerId, attributedOwnerName, matchedVia, auditRecord }) => {
+  return classified.map(({ row, bucket, attributedOwnerId, attributedOwnerName, matchedVia, auditRecord }, i) => {
     const date = String(row['Servicing Date'] || '').slice(0, 10) || null;
     return {
-      upload_id: uploadId,
+      upload_id: Array.isArray(uploadId) ? uploadId[i] : uploadId,
       owner_id: visibleOwnerId(auditRecord, attributedOwnerId),
       wakala_id: null,
       transaction_ref: String(row['Transaction ID'] ?? ''),
@@ -270,16 +279,21 @@ export async function persistClassifiedRows(
       raw: row,
     };
   });
+}
 
+export async function upsertTransactionRows(supabase: DB, txRows: Record<string, any>[]) {
   for (const batch of chunk(txRows, 500)) {
     const { error } = await supabase
       .from('daily_transaction_records')
       .upsert(batch, { onConflict: 'transaction_ref,branch_msisdn' });
     if (error) throw new Error(`daily_transaction_records: ${error.message}`);
   }
+}
 
-  const auditRows = classified.map(({ row, bucket, matchedVia, auditRecord, attributedOwnerId, attributedOwnerName }) => ({
-    upload_id: uploadId,
+/** Writes each transaction's audit record, replacing any earlier one for the same transaction. */
+export async function replaceAuditRecords(supabase: DB, uploadId: string | string[], classified: ClassifiedForStore[]) {
+  const auditRows = classified.map(({ row, bucket, matchedVia, auditRecord, attributedOwnerId, attributedOwnerName }, i) => ({
+    upload_id: Array.isArray(uploadId) ? uploadId[i] : uploadId,
     reporting_period: periodOf(String(row['Servicing Date'] || '')),
     owner_id: attributedOwnerId,
     owner_name: attributedOwnerName,
@@ -318,8 +332,15 @@ export async function persistClassifiedRows(
     const { error } = await supabase.from('classification_audit_records').insert(batch);
     if (error) throw new Error(`classification_audit_records: ${error.message}`);
   }
+  return auditRows.length;
+}
 
-  return { transactions: txRows.length, auditRecords: auditRows.length };
+/** Persists classified servicing rows plus their immutable audit trail. */
+export async function persistClassifiedRows(supabase: DB, uploadId: string, classified: ClassifiedForStore[]) {
+  const txRows = await buildTransactionRows(supabase, uploadId, classified);
+  await upsertTransactionRows(supabase, txRows);
+  const auditRecords = await replaceAuditRecords(supabase, uploadId, classified);
+  return { transactions: txRows.length, auditRecords };
 }
 
 export async function recordUpload(

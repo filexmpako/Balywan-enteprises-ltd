@@ -20,7 +20,7 @@ type DB = SupabaseClient<any, any, any>;
 const FLOAT = getMapper('floatRequests') as CollectionMapper;
 const LOANS = getMapper('loanRecords') as CollectionMapper;
 
-export const RECEIPT_BUCKET = 'float-receipts';
+const RECEIPT_BUCKET = 'float-receipts';
 const RECEIPT_PREFIX = 'cloud:';
 
 export class FloatActionError extends Error {}
