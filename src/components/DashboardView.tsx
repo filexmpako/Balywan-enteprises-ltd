@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { ViewType, KPIMetric, TopOwner, RecentReport, AuditReport, Owner, ManualOwnerTarget, PriorityWakala, BaseWakala } from '../types';
-import { dashboardKPIs, topOwners, recentReports } from '../data';
+import { useState, useEffect, useMemo } from 'react';
+import { ViewType, KPIMetric, Owner, ManualOwnerTarget, PriorityWakala, BaseWakala } from '../types';
 import { calculateCompanyKPIs, CompanyKPIsResult } from '../utils/mappingEngine';
 import {
   getCompanyTotalKPI1Target,
@@ -36,9 +35,7 @@ import {
 import { 
   Users, 
   UploadCloud, 
-  History, 
   ExternalLink, 
-  ChevronRight, 
   AlertCircle,
   AlertTriangle,
   CheckCircle2,
@@ -47,7 +44,6 @@ import {
   Calendar,
   Layers,
   ShieldCheck,
-  Sparkles,
   UserCog,
   Target,
   UserCheck,
@@ -70,14 +66,12 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ReferenceLine,
 } from 'recharts';
 import { motion } from 'motion/react';
 import PageHeaderBanner from './PageHeaderBanner';
 import { useCompany } from './CompanyContext';
 import { useReportingPeriod } from './ReportingPeriodContext';
-import { exportKPIReportToPDF } from '../utils/pdfExport';
 
 interface DashboardViewProps {
   onNavigate: (view: ViewType) => void;
@@ -169,7 +163,7 @@ function CoverageDonut({
   );
 }
 
-export default function DashboardView({ onNavigate, onSelectOwner }: DashboardViewProps) {
+export default function DashboardView({ onNavigate }: DashboardViewProps) {
   const { companyName } = useCompany();
   const { displayPeriod, currentPeriod } = useReportingPeriod();
   // Settlement Ledger: the Monthly report is final for its month; until one
@@ -182,35 +176,6 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
       .catch(() => { if (!cancelled) setMonthlyReportMonths([]); });
     return () => { cancelled = true; };
   }, []);
-  const [validationWarnings, setValidationWarnings] = useState<any[]>(() => {
-    const saved = localStorage.getItem('kpiValidationWarnings');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {}
-    }
-    return [];
-  });
-
-  useEffect(() => {
-    const reloadWarnings = () => {
-      const saved = localStorage.getItem('kpiValidationWarnings');
-      if (saved) {
-        try {
-          setValidationWarnings(JSON.parse(saved));
-        } catch (e) {}
-      } else {
-        setValidationWarnings([]);
-      }
-    };
-    window.addEventListener('people-reclassified', reloadWarnings);
-    window.addEventListener('storage', reloadWarnings);
-    return () => {
-      window.removeEventListener('people-reclassified', reloadWarnings);
-      window.removeEventListener('storage', reloadWarnings);
-    };
-  }, []);
-
   // Weekly KPI progression — appended as each new weekly workbook is uploaded.
   const [weeklyStats, setWeeklyStats] = useState<WeeklyStatsEntry[]>(() => readWeeklyStatsHistory());
   // The weekly sections show only the selected month's weekly reports.
@@ -385,85 +350,6 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
     return m;
   }, [rawKpis, liveTotals]);
 
-
-  const computeTopOwnersList = (rows: any[]): TopOwner[] => {
-    if (rows && rows.length > 0) {
-      const firstRow = rows[0];
-      let volCol = '';
-      for (const key of Object.keys(firstRow)) {
-        const kLower = key.toLowerCase();
-        if (kLower.includes('volume') || kLower.includes('amount') || kLower.includes('value')) {
-          volCol = key;
-          break;
-        }
-      }
-
-      if (volCol) {
-        const agentSums: { [agentId: string]: number } = {};
-        const agentZones: { [agentId: string]: string } = {};
-        const agentNames: { [agentId: string]: string } = {};
-
-        rows.forEach(row => {
-          const agentId = row['Agent ID'] || row['AgentID'] || row['masterAgentId'] || '';
-          const zone = row['Zone'] || row['Region'] || 'Master';
-          const name = row['Wakala Name'] || row['Name'] || '';
-          
-          let volStr = String(row[volCol] || '0').replace(/,/g, '').trim();
-          const val = parseFloat(volStr) || 0;
-
-          if (agentId) {
-            agentSums[agentId] = (agentSums[agentId] || 0) + val;
-            if (zone) agentZones[agentId] = zone;
-            if (name && !agentNames[agentId]) agentNames[agentId] = name;
-          }
-        });
-
-        const savedOwnersRaw = localStorage.getItem('ownersList');
-        const activeOwnersList: any[] = savedOwnersRaw ? JSON.parse(savedOwnersRaw) : [];
-
-        const mappedOwners = Object.keys(agentSums).map(agentId => {
-          const matchedOwner = activeOwnersList.find((o: any) => o.masterAgentId === agentId);
-          const name = matchedOwner ? matchedOwner.name : (agentNames[agentId] || `Agent ${agentId}`);
-          const zone = matchedOwner ? matchedOwner.region : (agentZones[agentId] || 'Master');
-          const totalVal = agentSums[agentId];
-
-          return {
-            name,
-            zone,
-            totalVal,
-            agentId
-          };
-        });
-
-        mappedOwners.sort((a, b) => b.totalVal - a.totalVal);
-
-        const maxVal = mappedOwners[0]?.totalVal || 1;
-        
-        return mappedOwners.slice(0, 4).map((item, idx) => {
-          const pct = maxVal > 0 ? Math.round((item.totalVal / maxVal) * 1000) / 10 : 0;
-          let formattedAmt = '';
-          const val = item.totalVal;
-          if (val >= 1000000) {
-            formattedAmt = `TZS ${(val / 1000000).toFixed(1)}M`;
-          } else if (val >= 1000) {
-            formattedAmt = `TZS ${(val / 1000).toFixed(0)}K`;
-          } else {
-            formattedAmt = `TZS ${val}`;
-          }
-
-          return {
-            rank: idx + 1,
-            name: item.name,
-            zone: item.zone,
-            percentage: pct,
-            amount: formattedAmt
-          };
-        });
-      }
-    }
-    return [];
-  };
-
   const defaultCompanyKPIs: CompanyKPIsResult = {
     openingFloat: 0,
     floatReceived: 0,
@@ -489,38 +375,11 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
   // Same figure as KPI 1's achieved total, so the two cards always agree.
   const goalServed = liveTotals.kpi1?.achieved ?? companyKPIs.mtdFloatServed;
   const [dashboardLoadState, setDashboardLoadState] = useState<'loading' | 'empty' | 'ready' | 'error'>('loading');
-  const [topOwnersList, setTopOwnersList] = useState<TopOwner[]>([]);
   const [monthlyGoal, setMonthlyGoal] = useState<{ total: number; hasAny: boolean }>({ total: 0, hasAny: false });
 
   // Company-wide Served/Unserved wakala drill-down, opened from the
   // Weekly KPI Progression cards below.
   const [wakalaStatusModal, setWakalaStatusModal] = useState<'served' | 'unserved' | null>(null);
-
-  // Dynamic Recent Reports list derived from the persisted audit history logs
-  const [recentReportsList, setRecentReportsList] = useState<RecentReport[]>(() => {
-    const savedReports = localStorage.getItem('auditHistoryReports');
-    if (savedReports) {
-      try {
-        const reports = JSON.parse(savedReports);
-        if (Array.isArray(reports) && reports.length > 0) {
-          return reports.slice(0, 4).map((r: AuditReport) => {
-            let statusVal: 'success' | 'warning' | 'error' = 'success';
-            if (r.status === 'Failed') statusVal = 'error';
-            else if (r.status === 'Processing') statusVal = 'warning';
-            return {
-              name: r.fileName,
-              time: r.date.toUpperCase(),
-              zone: r.type.toUpperCase(),
-              status: statusVal
-            };
-          });
-        }
-      } catch (e) {
-        console.error("Failed to load dynamic reports list:", e);
-      }
-    }
-    return [];
-  });
 
   useEffect(() => {
     let isMounted = true;
@@ -546,7 +405,6 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
           // calculateCompanyKPIs reports "—" as its month only when there is no Daily MGT data.
           setDashboardLoadState(kpis.reportingMonth === '—' ? 'empty' : 'ready');
           setCompanyKPIs({ ...kpis, reportingMonth: displayPeriod });
-          setTopOwnersList(computeTopOwnersList(rows));
 
           // Monthly Goal Progress card data
           try {
@@ -596,32 +454,6 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
         setRawKpis([]);
       }
 
-
-      const savedReports = localStorage.getItem('auditHistoryReports');
-      if (savedReports) {
-        try {
-          const reports = JSON.parse(savedReports);
-          if (Array.isArray(reports)) {
-            setRecentReportsList(reports.slice(0, 4).map((r: AuditReport) => {
-              let statusVal: 'success' | 'warning' | 'error' = 'success';
-              if (r.status === 'Failed') statusVal = 'error';
-              else if (r.status === 'Processing') statusVal = 'warning';
-              return {
-                name: r.fileName,
-                time: r.date.toUpperCase(),
-                zone: r.type.toUpperCase(),
-                status: statusVal
-              };
-            }));
-          } else {
-            setRecentReportsList([]);
-          }
-        } catch (e) {
-          setRecentReportsList([]);
-        }
-      } else {
-        setRecentReportsList([]);
-      }
     };
 
     window.addEventListener('servicing-rows-updated', handleUpdate);
@@ -633,75 +465,6 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
       window.removeEventListener('storage', handleUpdate);
     };
   }, [displayPeriod, currentPeriod]);
-
-  // Dynamic metrics calculation based on uploaded KPI report
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth(); // 0-indexed
-  const day = now.getDate();
-  const totalDays = new Date(year, month + 1, 0).getDate();
-  const daysRemaining = totalDays - day;
-  const elapsedDays = Math.max(day, 1);
-
-  const monthNames = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
-  const currentMonthName = monthNames[month];
-  const nextUploadDate = `${totalDays} ${currentMonthName}`;
-
-  // Filter financial KPIs
-  const financialKPIs = kpis.filter(k => 
-    k.target.toUpperCase().includes('TZS') || 
-    k.name.toLowerCase().includes('value') || 
-    k.name.toLowerCase().includes('float') || 
-    k.name.toLowerCase().includes('liquidity')
-  );
-
-  const activeFinancialKPIs = financialKPIs.length > 0 ? financialKPIs : kpis;
-
-  const totalTargetVal = activeFinancialKPIs.reduce((sum, k) => sum + (k.targetVal || 0), 0);
-  const totalAchievedVal = activeFinancialKPIs.reduce((sum, k) => sum + (k.achievedVal || 0), 0);
-
-  // Set currency prefix to TZS exclusively
-  const currencyPrefix = 'TZS ';
-
-  const formatValue = (val: number, prefix: string) => {
-    if (val >= 1000000) {
-      return `${prefix}${(val / 1000000).toFixed(1)}M`;
-    }
-    if (val >= 1000) {
-      return `${prefix}${(val / 1000).toFixed(1)}K`;
-    }
-    return `${prefix}${val}`;
-  };
-
-  const displayTarget = formatValue(totalTargetVal, currencyPrefix);
-  const displayAchieved = formatValue(totalAchievedVal, currencyPrefix);
-
-  const overallPerf = totalTargetVal > 0 ? (totalAchievedVal / totalTargetVal) * 100 : 0;
-  const overallPerfString = `${overallPerf.toFixed(1)}%`;
-
-  const projectedVal = (totalAchievedVal / elapsedDays) * totalDays;
-  const displayProjected = formatValue(projectedVal, currencyPrefix);
-
-  const projDiffPercent = totalTargetVal > 0 ? ((projectedVal - totalTargetVal) / totalTargetVal) * 100 : 0;
-  const projDiffString = projDiffPercent >= 0 
-    ? `+${projDiffPercent.toFixed(1)}% of Target` 
-    : `${projDiffPercent.toFixed(1)}% of Target`;
-
-  const finalAchievedY = Math.max(10, Math.min(90, 100 - overallPerf));
-
-  // Animation variant for staggered list entrances
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: { staggerChildren: 0.08 }
-    }
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 15 },
-    show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 260, damping: 25 } }
-  };
 
   const normalizeStatus = (statusStr: string, performance?: number): 'ON TRACK' | 'ACHIEVED' | 'NEEDS ATTENTION' | 'CRITICAL' => {
     const s = String(statusStr || '').trim().toUpperCase();
@@ -770,10 +533,6 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
     }
   };
 
-  const getStatusStyle = (status: string, performance?: number) => {
-    return getSemanticBadgeInfo(status, performance).bgClass;
-  };
-
   const getProgressColor = (status: string, performance?: number) => {
     return getSemanticBadgeInfo(status, performance).progressClass;
   };
@@ -796,19 +555,6 @@ export default function DashboardView({ onNavigate, onSelectOwner }: DashboardVi
     const norm = getSemanticBadgeInfo(kpi.status, kpi.performance).normalized;
     return norm === 'CRITICAL' || norm === 'NEEDS ATTENTION';
   });
-
-  const handleExportPDF = () => {
-    exportKPIReportToPDF({
-      kpis,
-      overallPerfString,
-      displayTarget,
-      displayAchieved,
-      displayProjected,
-      projDiffString,
-      daysRemaining,
-      nextUploadDate,
-    });
-  };
 
   return (
     <motion.div 

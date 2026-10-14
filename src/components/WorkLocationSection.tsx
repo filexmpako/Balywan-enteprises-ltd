@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Circle, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import { 
@@ -79,7 +79,6 @@ function MapRecenter({ center, zoom }: { center: [number, number]; zoom?: number
 export default function WorkLocationSection({ 
   localOwner, 
   onUpdateOwner,
-  onUpdateWakalas,
   isEditable 
 }: WorkLocationSectionProps) {
   // Default to Dar es Salaam coordinates

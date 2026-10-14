@@ -9,8 +9,8 @@ import { ensurePrivateBucket, parseImageDataUrl } from './storageImages.server';
  */
 type DB = SupabaseClient<any, any, any>;
 
-export const ISSUE_PHOTO_BUCKET = 'issue-photos';
-export const MAX_PHOTOS_PER_MESSAGE = 3;
+const ISSUE_PHOTO_BUCKET = 'issue-photos';
+const MAX_PHOTOS_PER_MESSAGE = 3;
 const SAFE_KEY = /^[A-Za-z0-9_-]{1,64}$/;
 
 export class IssuePhotoError extends Error {}

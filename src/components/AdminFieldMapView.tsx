@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import L from 'leaflet';
@@ -108,8 +108,7 @@ function MapBoundsUpdater({ entities }: { entities: MapEntity[] }) {
   return null;
 }
 
-export default function AdminFieldMapView({ onSelectOwner, onNavigate }: AdminFieldMapViewProps) {
-  const [owners, setOwners] = useState<Owner[]>([]);
+export default function AdminFieldMapView({ onSelectOwner }: AdminFieldMapViewProps) {
   const [entities, setEntities] = useState<MapEntity[]>([]);
   const [photosMap, setPhotosMap] = useState<Record<string, WorkPhoto[]>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -147,8 +146,6 @@ export default function AdminFieldMapView({ onSelectOwner, onNavigate }: AdminFi
         console.error('Failed to parse owners list:', e);
       }
     }
-
-    setOwners(loadedOwners);
 
     // Extract Map Entities (Owners + Wakalas)
     const defaultLat = -6.7924; // Dar es Salaam

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Owner } from '../types';
 import { addNameAlias } from '../utils/ownerMatch';
 import { AlertTriangle, Link2, UserPlus, X } from 'lucide-react';

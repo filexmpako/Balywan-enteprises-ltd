@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Diff, TrendingUp, TrendingDown, Minus, ArrowUpRight, ArrowDownRight, Calendar } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { Diff, Minus, ArrowUpRight, ArrowDownRight, Calendar } from 'lucide-react';
 
 interface KPI {
   id: string;

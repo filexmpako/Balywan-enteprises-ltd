@@ -91,7 +91,7 @@ async function push(entry: QueueEntry) {
   }
 }
 
-export async function flushQueue(): Promise<void> {
+async function flushQueue(): Promise<void> {
   const queue = readQueue();
   if (!queue.length) return;
   const userId = await currentUserId();

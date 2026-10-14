@@ -1,11 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   ChevronDown, 
   ChevronUp, 
   Search, 
-  Calendar, 
   X, 
-  ArrowUpDown,
   History
 } from 'lucide-react';
 import { Owner } from '../types';

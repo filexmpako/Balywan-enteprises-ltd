@@ -1,17 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { ViewType, KPIMetric, Owner, BaseWakala, PriorityWakala, ManualOwnerTarget } from '../types';
 import { 
   TrendingUp, 
-  TrendingDown, 
-  CheckCircle, 
-  DollarSign, 
   Activity, 
-  ArrowUpRight, 
-  ArrowDownRight, 
   DownloadCloud, 
   FileSpreadsheet,
-  SlidersHorizontal,
-  ChevronRight,
   ShieldCheck,
   Info
 } from 'lucide-react';
@@ -28,7 +21,6 @@ import {
 } from '../utils/servicingStatus';
 import { getActivityRules, isActiveByRule, isServedByRule, extractTxnCounts, type TxnCounts } from '../utils/activityRules';
 import type { WeeklyStatsEntry } from '../utils/weeklyKpiEngine';
-import { calculateCompanyKPIs } from '../utils/mappingEngine';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
 import { getSavedManualOwnerTargets } from '../utils/targetResolution';
 import { isKpi1RowName, isKpi2RowName, withLiveKpiRows } from '../utils/kpiRowMatch';
@@ -44,7 +36,6 @@ interface KPIReportsViewProps {
 }
 
 export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
-  const [selectedSort, setSelectedSort] = useState('Achievement');
   const [saTillLastUpdated, setSaTillLastUpdated] = useState<string | null>(null);
   const [baseWakalaLastUpdated, setBaseWakalaLastUpdated] = useState<string | null>(null);
 
@@ -178,7 +169,6 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
   });
 
   const [selectedMetric, setSelectedMetric] = useState<string>('');
-
 
   const handleExportPDF = () => {
     if (kpis.length === 0) return;
@@ -482,7 +472,6 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
     loadWeeklyWakalaStats();
   }, [displayPeriod]);
 
-
   useEffect(() => {
     const handleUpdate = () => {
       const savedKpis = localStorage.getItem('dashboardKPIs');
@@ -590,27 +579,6 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
       'bg-emerald-500'
     ];
     return colors[index % colors.length];
-  };
-
-
-  const regionalZones = [
-    { zone: 'Zone A (Dar es Salaam)', percentage: 42, active: true },
-    { zone: 'Zone B (Arusha/Mwanza)', percentage: 28, active: false },
-    { zone: 'Zone C (Dodoma)', percentage: 18, active: false },
-    { zone: 'Zone D (Zanzibar)', percentage: 12, active: false },
-  ];
-
-  const getStatusBadgeStyle = (status: string) => {
-    switch (status) {
-      case 'EXCEEDED':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-      case 'MET':
-        return 'bg-blue-50 text-brand-primary border-blue-200';
-      case 'BELOW TARGET':
-        return 'bg-rose-50 text-rose-700 border-rose-200';
-      default:
-        return 'bg-slate-50 text-slate-700 border-slate-200';
-    }
   };
 
   return (
@@ -943,8 +911,6 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
                 </div>
               )}
             </div>
-
-
 
             {/* GROUP 3: Cross-Tabulation Wakala Operational Matrix */}
             {wakalaStats && !wakalaStats.error && (

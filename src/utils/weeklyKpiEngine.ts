@@ -109,7 +109,7 @@ export interface WeeklyStatsEntry extends WeeklyWakalaStats {
 
 const UNASSIGNED_ID = '__unassigned__';
 
-export function hasRowStatusKey(row: any): boolean {
+function hasRowStatusKey(row: any): boolean {
   if (!row) return false;
   return (
     'wakala_status' in row ||
@@ -121,7 +121,7 @@ export function hasRowStatusKey(row: any): boolean {
   );
 }
 
-export function getFieldValue(row: any, keys: string[]): number {
+function getFieldValue(row: any, keys: string[]): number {
   if (!row) return 0;
   for (const k of keys) {
     if (row[k] !== undefined && row[k] !== null) {
@@ -455,7 +455,7 @@ export function ownerWeeklySeries(
 }
 
 /** Expected linear pace for a given week index (1-based) of a 4-week month. */
-export function expectedPacePercent(weekNum: number): number {
+function expectedPacePercent(weekNum: number): number {
   return Math.min(100, Math.max(0, weekNum) * 25);
 }
 

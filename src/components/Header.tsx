@@ -7,19 +7,12 @@ import {
   CheckCircle, 
   AlertTriangle, 
   Clock, 
-  Search,
-  BookOpen,
   Camera,
-  X,
-  ChevronDown,
-  Sparkles,
-  Check
-} from 'lucide-react';
+  X} from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useReportingPeriod } from './ReportingPeriodContext';
 import PeriodSelector from './PeriodSelector';
 import InstallAppButton from './InstallAppButton';
-import { formatPeriodDisplay } from '../utils/periodUtils';
 import { formatShortDate } from '../utils/dateFormat';
 import { getPhoto, savePhoto, deletePhoto } from '../utils/db';
 import { useAuth } from './AuthContext';

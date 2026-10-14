@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { MessageSquare, Send, Plus, CheckCircle2, Clock, AlertCircle, X, Loader2, Camera } from 'lucide-react';
 import {
   createWakalaIssue,

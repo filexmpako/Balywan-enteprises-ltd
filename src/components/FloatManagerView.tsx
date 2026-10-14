@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { useCompany } from './CompanyContext';
 import { FloatRequest, Owner, Personnel, LoanRecord } from '../types';
@@ -30,24 +30,18 @@ import { ownersList } from '../data';
 import { 
   Banknote, 
   Search, 
-  Filter, 
   CheckCircle, 
   Clock, 
   AlertTriangle, 
   Power, 
   User, 
-  Building,
   RefreshCw,
   Image as ImageIcon,
   Check,
   X,
   XCircle,
   FileText,
-  Users,
-  Layers,
-  Calendar,
-  RotateCcw
-} from 'lucide-react';
+  Calendar} from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface FloatManagerViewProps {
@@ -379,11 +373,6 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
     return ownerName.includes(searchTerm.toLowerCase()) || r.ownerId.toLowerCase().includes(searchTerm.toLowerCase());
   });
   const totalPendingLoanAmount = getPendingLoanRequests(requests).reduce((sum, r) => sum + getShortfall(r), 0);
-
-  const totalOutstandingLoanAmount = loans
-    .filter(l => l.status !== 'Paid')
-    .reduce((sum, l) => sum + l.amount, 0);
-  const uniqueLoanOwnersCount = new Set(loans.filter(l => l.status !== 'Paid').map(l => l.ownerId)).size;
 
   // Grouped loans by owner (only unpaid loans)
   const loanTotalsByOwner = loans

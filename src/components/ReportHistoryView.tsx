@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { ViewType, AuditReport } from '../types';
 import { getAvatarUrl } from '../utils/avatar';
 import { 
@@ -31,7 +31,6 @@ interface ReportHistoryViewProps {
 export default function ReportHistoryView({
   onNavigate,
   reports,
-  onAddAuditReport,
   onDeleteReport
 }: ReportHistoryViewProps) {
   const [pendingDelete, setPendingDelete] = useState<AuditReport | null>(null);

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Search, CheckCircle2, XCircle } from 'lucide-react';
 import { fetchWakalaStatusHistory } from '../lib/wakalaStatus.functions';

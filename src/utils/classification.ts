@@ -3,7 +3,6 @@ import type { ServicingRow } from './mappingEngine';
 import { resolveOwnerMatch } from './ownerMatch';
 import { normalizeMsisdn } from './msisdn';
 import { ClassificationAuditRecord, ClassificationBucket } from '../types/classificationAudit';
-import { saveClassificationAuditRecords } from './indexedDB';
 
 export type { ClassificationBucket };
 
@@ -74,8 +73,6 @@ export function classifyServicingRows(
     if (key) tillOwnerByMsisdn.set(key, t.assignedOwner);
   });
 
-  const auditRecords: ClassificationAuditRecord[] = [];
-
   const classified = rows.map((row, idx): ClassifiedRow => {
     const rawDestMsisdn = String(row['Dest_MSISDN'] || row['destMsisdn'] || row['Dest Msisdn'] || '');
     const destMsisdn = normalizeMsisdn(rawDestMsisdn);
@@ -124,8 +121,6 @@ export function classifyServicingRows(
         ruleTriggered
       };
 
-      auditRecords.push(auditRecord);
-
       return {
         row,
         bucket,
@@ -154,8 +149,6 @@ export function classifyServicingRows(
         classificationBucket: 'SA_INTERNAL',
         ruleTriggered: `Sent From Staff Till (${servicingTillOwnerName || 'Unknown'}) — Internal, Excluded From Volume`
       };
-
-      auditRecords.push(auditRecord);
 
       return {
         row,
@@ -200,8 +193,6 @@ export function classifyServicingRows(
         ruleTriggered
       };
 
-      auditRecords.push(auditRecord);
-
       return {
         row,
         bucket,
@@ -226,8 +217,6 @@ export function classifyServicingRows(
       ruleTriggered: 'Unmatched Destination MSISDN (IOP Fallback)'
     };
 
-    auditRecords.push(auditRecord);
-
     return {
       row,
       bucket: 'IOP',
@@ -237,17 +226,6 @@ export function classifyServicingRows(
       auditRecord
     };
   });
-
-  // Persist classification audit records to IndexedDB. put() by
-  // transactionId means re-classifying the same transaction overwrites
-  // its prior entry instead of duplicating it — no cap needed.
-  // Browser only: the offline audit cache. On the server the caller persists
-  // the same records to Postgres (classification_audit_records).
-  if (typeof indexedDB !== 'undefined') {
-    saveClassificationAuditRecords(auditRecords).catch((e) => {
-      console.warn('Could not persist classification audit records:', e);
-    });
-  }
 
   return classified;
 }

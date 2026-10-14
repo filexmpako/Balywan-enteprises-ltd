@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { Sparkles, CheckCircle2, AlertTriangle, Lightbulb, TrendingUp, HelpCircle, ArrowUpRight } from 'lucide-react';
+import { useMemo } from 'react';
+import { Sparkles, CheckCircle2, AlertTriangle, Lightbulb } from 'lucide-react';
 
 interface KPI {
   id: string;

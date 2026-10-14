@@ -10,7 +10,7 @@ import {
   getShortfall, isLoanPendingApproval, getFloatAmount
 } from '../utils/floatManagement';
 import { useAuth } from './AuthContext';
-import { Banknote, X, Camera, CheckCircle2, AlertTriangle, Clock, FileText, XCircle, DollarSign, Send, Check } from 'lucide-react';
+import { Banknote, X, Camera, CheckCircle2, AlertTriangle, Clock, FileText, XCircle, DollarSign, Send } from 'lucide-react';
 
 interface FloatManagementPanelProps {
   ownerId: string;

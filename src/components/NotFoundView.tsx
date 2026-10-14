@@ -1,5 +1,4 @@
-import React from 'react';
-import { HelpCircle, ArrowLeft, Home, FileQuestion } from 'lucide-react';
+import { Home, FileQuestion } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from './AuthContext';
 import { useCompany } from './CompanyContext';

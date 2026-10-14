@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { BarChart3, PieChart, Activity, Info } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { BarChart3, PieChart, Activity } from 'lucide-react';
 
 interface KPI {
   id: string;

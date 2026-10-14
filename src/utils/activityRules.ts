@@ -11,7 +11,7 @@
  * Postgres (app_settings) with the local cache as offline mirror.
  */
 
-export const ACTIVITY_RULES_KEY = 'activityRules';
+const ACTIVITY_RULES_KEY = 'activityRules';
 
 export interface ActivityRules {
   /** Minimum CI+CO transaction count for a wakala to be Active in the window. Count only — amount plays no part in Active/Inactive. */
@@ -33,7 +33,7 @@ export interface ActivityRules {
   reportingPeriodOverride?: string | null;
 }
 
-export const DEFAULT_ACTIVITY_RULES: ActivityRules = {
+const DEFAULT_ACTIVITY_RULES: ActivityRules = {
   threshold: 25,
   amountThreshold: 600000,
   servedTxnThreshold: 6,
@@ -43,7 +43,7 @@ export const DEFAULT_ACTIVITY_RULES: ActivityRules = {
   reportingPeriodOverride: null,
 };
 
-export function normalizeActivityRules(raw: any): ActivityRules {
+function normalizeActivityRules(raw: any): ActivityRules {
   const threshold = Number(raw?.threshold);
   const amountThreshold = Number(raw?.amountThreshold);
   const servedTxnThreshold = Number(raw?.servedTxnThreshold);

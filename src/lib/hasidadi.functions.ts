@@ -61,18 +61,6 @@ export const saveDocument = createServerFn({ method: 'POST' })
     }
   });
 
-export const appendAuditLog = createServerFn({ method: 'POST' })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((input: { action: string; entity?: string; details?: any; actorName?: string }) => {
-    if (!input || typeof input.action !== 'string') throw new Error('Invalid audit entry');
-    return input;
-  })
-  .handler(async ({ data, context }) => {
-    const { appendAuditLog: append } = await import('./hasidadi/repo.server');
-    await append(context.supabase as any, { ...data, userId: context.userId });
-    return { ok: true };
-  });
-
 /**
  * Authoritative ingestion: classification runs on the server against the
  * database registries, and the results are written to Postgres in one pass.
@@ -130,7 +118,6 @@ export const ingestServicingRows = createServerFn({ method: 'POST' })
     });
 
     const counts = await persistClassifiedRows(supabase, uploadId, classified as any);
-
 
     await append(supabase, {
       userId: context.userId,

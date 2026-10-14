@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getDailyServicingRows, saveDailyServicingData } from '../utils/indexedDB';
 import { formatDateTime } from '../utils/dateFormat';
@@ -6,12 +6,8 @@ import {
   CheckCircle2, 
   AlertTriangle, 
   Search, 
-  ArrowRight, 
-  FileText, 
   SlidersHorizontal, 
-  Sparkles, 
   TrendingUp, 
-  Users, 
   Check, 
   FileCheck2, 
   RefreshCw, 
@@ -20,8 +16,6 @@ import {
   ChevronLeft, 
   ChevronRight,
   ArrowUpDown,
-  Building2,
-  UserCheck2,
   FileSpreadsheet
 } from 'lucide-react';
 import { getAvatarUrl } from '../utils/avatar';
@@ -35,7 +29,6 @@ import {
   generatePersonnelSummaries,
   recalculateAllPerformances
 } from '../utils/mappingEngine';
-import { classifyServicingRows, summarizeClassification } from '../utils/classification';
 import { ingestClassified } from '../lib/ingest';
 
 interface DailyMgtMappingEngineProps {

@@ -31,7 +31,7 @@ const define = (m: CollectionMapper) => m;
  * derived id so re-uploads upsert instead of duplicating. Hash the natural
  * business key into a deterministic uuid.
  */
-export function deterministicUuid(input: string): string {
+function deterministicUuid(input: string): string {
   const hex = (seed: number) => {
     let h = seed >>> 0;
     for (let i = 0; i < input.length; i++) {
@@ -290,9 +290,6 @@ export type DocumentKey = (typeof DOCUMENT_KEYS)[number];
  * overwrite other people's requests.
  */
 export const SERVER_MANAGED_KEYS = new Set<string>(['floatRequests', 'loanRecords']);
-
-/** All keys the client cache hydrates from the server. */
-export const SYNCED_KEYS: string[] = [...COLLECTION_KEYS, ...DOCUMENT_KEYS];
 
 export function getMapper(key: string): CollectionMapper | undefined {
   return COLLECTIONS.find((c) => c.key === key);

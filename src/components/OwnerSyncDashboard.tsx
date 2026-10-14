@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { 
-  FileSpreadsheet, 
   UploadCloud, 
   Search, 
   CheckCircle, 
@@ -10,19 +9,16 @@ import {
   MapPin, 
   Database, 
   Check, 
-  X, 
   RefreshCw, 
   ShieldCheck, 
   ArrowRight,
   Info,
-  Calendar,
   Layers,
   ChevronUp,
   ChevronDown,
   ArrowUpDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { getCompanyName } from '../utils/company';
 import { formatDateTime, formatMonthYear } from '../utils/dateFormat';
 import { Owner } from '../types';
 import { getAvatarUrl } from '../utils/avatar';
@@ -237,42 +233,6 @@ export default function OwnerSyncDashboard({ onCancel, onAddAuditReport, onSyncC
   }, [parsedRows, reloadKey]);
 
   // Load Preset Till Workbook Demonstration Dataset
-  const handleLoadDemoWorkbook = () => {
-    setSelectedFile({ name: "Authoritative_Till_Name_Registry_2026.xlsx", size: 54120 });
-    setIsParsing(true);
-    setParseProgress(0);
-
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 20;
-      setParseProgress(progress);
-
-      if (progress >= 100) {
-        clearInterval(interval);
-        setIsParsing(false);
-
-        // Populate with rich mock rows containing both Owners (MFS) and Personnel
-        setParsedRows([
-          { transactionTill: "255711223344", tillName: "Kariakoo Retail", ownerName: "Abubakar Khalid", title: "MFS", location: "Dar es Salaam", status: "Active" },
-          { transactionTill: "255722334455", tillName: "Nyamagana Shop", ownerName: "Mwita Chacha", title: "MFS", location: "Mwanza", status: "Active" },
-          { transactionTill: "255733445566", tillName: "Sekei Enterprises", ownerName: "Fatma Hassan", title: "Branch Manager", location: "Arusha", status: "Active" },
-          { transactionTill: "255744556677", tillName: "Tambukareli Boutique", ownerName: "Grace Mushi", title: "Agent Assistant", location: "Dodoma", status: "Suspended" },
-          { transactionTill: "255755667788", tillName: "Dodoma Plaza Wakala", ownerName: "Grace Mushi", title: "Agent Assistant", location: "Dodoma", status: "Active" },
-          // New Owner and Till
-          { transactionTill: "255766112233", tillName: "Kijitonyama Depot", ownerName: "Salim Rashid", title: "MFS", location: "Dar es Salaam", status: "Active" },
-          { transactionTill: "255766445566", tillName: "Sinza Base Station", ownerName: "Salim Rashid", title: "MFS", location: "Dar es Salaam", status: "Active" },
-          // Existing Owner, New Till
-          { transactionTill: "255711889900", tillName: "Kariakoo Express", ownerName: "Abubakar Khalid", title: "MFS", location: "Dar es Salaam", status: "Active" },
-          { transactionTill: "255722998877", tillName: "Mwanza Port Agency", ownerName: "Mwita Chacha", title: "MFS", location: "Mwanza", status: "Active" },
-          // New Personnel
-          { transactionTill: "255799112233", tillName: "Kawe Retail Center", ownerName: "Rashid Kassim", title: "Sales Specialist", location: "Dar es Salaam", status: "Active" },
-          // Invalid Record (missing Till or Name)
-          { transactionTill: "", tillName: "Invalid Shop", ownerName: "No Till Person", title: "MFS", location: "Dar es Salaam", status: "Active" }
-        ]);
-        setCurrentPage(1);
-      }
-    }, 80);
-  };
 
   // Parse Excel file upload
   const handleDrag = (e: React.DragEvent) => {
@@ -584,7 +544,6 @@ export default function OwnerSyncDashboard({ onCancel, onAddAuditReport, onSyncC
 
     // Logins are never auto-provisioned here: an administrator creates each
     // real account (with its own password) from People Management > Users.
-
 
     // Audit Log creation
     const newAuditLog = {

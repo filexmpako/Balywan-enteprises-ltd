@@ -48,7 +48,7 @@ export async function loadCollection(supabase: DB, mapper: CollectionMapper): Pr
  * resolve tills and wakala to owners, so these may be read with a separate
  * (read-only, server-side) client instead of the owner-scoped one.
  */
-export const REFERENCE_KEYS = new Set(['saTillRegistry', 'tillsList', 'baseWakalaIndex']);
+const REFERENCE_KEYS = new Set(['saTillRegistry', 'tillsList', 'baseWakalaIndex']);
 
 export async function loadWorkspace(supabase: DB, referenceClient?: DB): Promise<Workspace> {
   const collections: Record<string, any[]> = {};

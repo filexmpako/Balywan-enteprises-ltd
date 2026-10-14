@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mail, ArrowLeft, ArrowRight, Building, CheckCircle2, AlertTriangle, KeyRound } from 'lucide-react';
+import { Mail, ArrowLeft, ArrowRight, CheckCircle2, AlertTriangle, KeyRound } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from './AuthContext';
 import { useCompany } from './CompanyContext';

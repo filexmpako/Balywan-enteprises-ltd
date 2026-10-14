@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion } from 'motion/react';
 import { Owner, ManualOwnerTarget, PriorityWakala, BaseWakala } from '../types';
 import { useAuth } from './AuthContext';
@@ -146,7 +146,7 @@ export default function TargetsView() {
   }, [period]);
 
   const kpi1Results: KPI1Result[] = useMemo(() => {
-    return calculateKPI1(classifiedRows, [], owners, period, manualTargets, readWeeklyStatsHistory(), monthlyKpi?.servedValueByOwner);
+    return calculateKPI1(classifiedRows, owners, period, manualTargets, readWeeklyStatsHistory(), monthlyKpi?.servedValueByOwner);
   }, [classifiedRows, owners, period, manualTargets, monthlyKpi]);
 
   const kpi2Results: KPI2Result[] = useMemo(() => {

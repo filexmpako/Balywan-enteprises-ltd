@@ -20,36 +20,18 @@ import {
   Users, 
   Search, 
   MapPin, 
-  Activity, 
   UserPlus, 
-  Filter, 
   Eye, 
   CheckCircle, 
-  Clock, 
-  AlertTriangle,
   X,
-  Plus,
-  TrendingUp,
-  Award,
-  Settings as SettingsIcon,
-  ShieldAlert,
   Sliders,
-  History,
-  FileText,
-  UserCheck,
-  ChevronRight,
-  TrendingDown,
   Layers,
-  ArrowRight,
-  UserMinus,
   CheckCircle2,
   Trash2,
   Lock,
   LockOpen,
   Copy,
   Check,
-  Key,
-  User,
   Building2,
   UploadCloud,
   ShieldCheck,
@@ -80,8 +62,6 @@ interface PeopleManagementViewProps {
 }
 
 export default function PeopleManagementView({
-  onNavigate,
-  onSelectOwner,
   defaultSubmodule = 'owners',
   onAddAuditReport
 }: PeopleManagementViewProps) {
@@ -495,7 +475,6 @@ export default function PeopleManagementView({
     }
   };
 
-
   // --- EDIT MODAL STATES ---
   const [showEditOwnerModal, setShowEditOwnerModal] = useState(false);
   const [editingOwner, setEditingOwner] = useState<Owner | null>(null);
@@ -689,7 +668,7 @@ export default function PeopleManagementView({
   }, [owners, personnel]);
 
   // --- ROLE CLASSIFICATION STATE ---
-  const [roleMappings, setRoleMappings] = useState<Record<string, 'Owner' | 'Personnel'>>(() => {
+  const [roleMappings] = useState<Record<string, 'Owner' | 'Personnel'>>(() => {
     const saved = localStorage.getItem('roleMappings');
     if (saved) {
       try { return JSON.parse(saved); } catch(e) {}
@@ -697,17 +676,7 @@ export default function PeopleManagementView({
     return DEFAULT_ROLE_MAPPINGS;
   });
 
-  const [editedMappings, setEditedMappings] = useState<Record<string, 'Owner' | 'Personnel'>>({ ...roleMappings });
-
-  // Update edited mappings when roleMappings updates
-  useEffect(() => {
-    setEditedMappings({ ...roleMappings });
-  }, [roleMappings]);
-
   // Check if classification has unapplied changes
-  const hasUnappliedMappings = useMemo(() => {
-    return JSON.stringify(roleMappings) !== JSON.stringify(editedMappings);
-  }, [roleMappings, editedMappings]);
 
   // --- AUDIT HISTORY LOGS STATE ---
   const [auditLogs, setAuditLogs] = useState<any[]>(() => {
@@ -735,160 +704,6 @@ export default function PeopleManagementView({
       sourceFile
     };
     setAuditLogs(prev => [newLog, ...prev]);
-  };
-
-  // --- RECLASSIFICATION / UPDATE CLASSIFICATION PREVIEW STATE ---
-  const [showPreviewModal, setShowPreviewModal] = useState(false);
-  const [affectedPersonnelPreview, setAffectedPersonnelPreview] = useState<any[]>([]);
-
-  // Calculate affected users if we apply the edited mappings
-  const calculateAffectedPersonnel = () => {
-    // Collect all people presently in owners and personnel lists
-    const allPeople: { name: string; title: string; currentRole: 'Owner' | 'Personnel'; originalObj: any }[] = [];
-    
-    owners.forEach(o => {
-      allPeople.push({
-        name: o.name,
-        title: o.title || 'MFS',
-        currentRole: 'Owner',
-        originalObj: o
-      });
-    });
-
-    personnel.forEach(p => {
-      allPeople.push({
-        name: p.name,
-        title: p.title || 'Branch Manager',
-        currentRole: 'Personnel',
-        originalObj: p
-      });
-    });
-
-    // Find who will change roles based on editedMappings
-    const changed: any[] = [];
-    allPeople.forEach(person => {
-      const titleClean = person.title.trim();
-      // Match key case-insensitively
-      const matchedKey = Object.keys(editedMappings).find(k => k.toLowerCase() === titleClean.toLowerCase());
-      const targetRole = matchedKey ? editedMappings[matchedKey] : 'Personnel'; // default fallback is Personnel
-      
-      if (person.currentRole !== targetRole) {
-        changed.push({
-          name: person.name,
-          title: person.title,
-          currentRole: person.currentRole,
-          targetRole: targetRole,
-          originalObj: person.originalObj
-        });
-      }
-    });
-
-    setAffectedPersonnelPreview(changed);
-    setShowPreviewModal(true);
-  };
-
-  // Commit the reclassification changes
-  const applyReclassification = () => {
-    let currentOwners = [...owners];
-    let currentPersonnel = [...personnel];
-
-    affectedPersonnelPreview.forEach(item => {
-      if (item.currentRole === 'Owner' && item.targetRole === 'Personnel') {
-        // Move from Owner to Personnel
-        currentOwners = currentOwners.filter(o => o.name.toLowerCase() !== item.name.toLowerCase());
-        
-        // Check if already exists in Personnel list
-        const exists = currentPersonnel.some(p => p.name.toLowerCase() === item.name.toLowerCase());
-        if (!exists) {
-          const tArr = item.originalObj.assignedTills || [];
-          currentPersonnel.push({
-            id: `personnel-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
-            name: item.name,
-            title: item.title,
-            location: item.originalObj.region || 'Dar es Salaam',
-            assignedTill: Array.isArray(tArr) ? tArr.join(', ') : String(tArr),
-            status: item.originalObj.status || 'Active',
-            memberSince: item.originalObj.memberSince || formatMonthYear(new Date()),
-            avatar: item.originalObj.avatar,
-            lastSyncDate: formatDateTime(new Date())
-          });
-        }
-
-        // Add audit history log
-        addAuditLog(
-          'Role Change',
-          (currentUser?.name || 'System Admin'),
-          'Owner',
-          'Personnel',
-          item.name,
-          'Sovereign Reclassification Engine'
-        );
-      } else if (item.currentRole === 'Personnel' && item.targetRole === 'Owner') {
-        // Move from Personnel to Owner
-        currentPersonnel = currentPersonnel.filter(p => p.name.toLowerCase() !== item.name.toLowerCase());
-
-        // Check if already exists in Owner list
-        const exists = currentOwners.some(o => o.name.toLowerCase() === item.name.toLowerCase());
-        if (!exists) {
-          const randomId = `MA-${Math.floor(10000 + Math.random() * 90000)}`;
-          const tillStr = item.originalObj.assignedTill || '';
-          const tillsArr = tillStr.split(',').map((t: string) => t.trim()).filter(Boolean);
-
-          currentOwners.push({
-            id: `owner-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
-            name: item.name,
-            masterAgentId: randomId,
-            region: item.originalObj.location || 'Dar es Salaam',
-            memberSince: item.originalObj.memberSince || formatMonthYear(new Date()),
-            avatar: item.originalObj.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-            wakalas: tillsArr.length,
-            portfolioSize: 'TZS 5.0M',
-            portfolioGrowth: 'Not yet tracked',
-            performance: 0, // derived live from KPI1 achievement; no seeded score
-            status: item.originalObj.status || 'Active',
-            title: item.title,
-            assignedTills: tillsArr,
-            lastSyncDate: formatDateTime(new Date())
-          } as any);
-        }
-
-        // Add audit history log
-        addAuditLog(
-          'Role Change',
-          (currentUser?.name || 'System Admin'),
-          'Personnel',
-          'Owner',
-          item.name,
-          'Sovereign Reclassification Engine'
-        );
-      }
-    });
-
-    // Save final lists and mappings
-    setOwners(currentOwners);
-    setPersonnel(currentPersonnel);
-    localStorage.setItem('ownersList', JSON.stringify(currentOwners));
-    localStorage.setItem('personnelList', JSON.stringify(currentPersonnel));
-    setRoleMappings({ ...editedMappings });
-    localStorage.setItem('roleMappings', JSON.stringify(editedMappings));
-
-    affectedPersonnelPreview.forEach(item => {
-      if (item.currentRole === 'Owner' && item.targetRole === 'Personnel') {
-        const tArr = item.originalObj.assignedTills || [];
-        const tillStr = Array.isArray(tArr) ? tArr.join(', ') : String(tArr);
-        assignTillsToPerson(tillStr, item.name, item.title, item.originalObj.region || 'Dar es Salaam');
-      } else if (item.currentRole === 'Personnel' && item.targetRole === 'Owner') {
-        const tillStr = item.originalObj.assignedTill || '';
-        assignTillsToPerson(tillStr, item.name, item.title, item.originalObj.location || 'Dar es Salaam');
-      }
-    });
-
-    recalculateAllPerformances();
-
-    setShowPreviewModal(false);
-    
-    // Dispatch custom event to notify other components (KPI engines, etc.) to refresh
-    window.dispatchEvent(new Event('people-reclassified'));
   };
 
   // --- FILTERS & LIST QUERY STATES ---
@@ -1006,35 +821,8 @@ export default function PeopleManagementView({
   }, [mappedPersonnel]);
 
   // --- MAPPING MANAGEMENT ACTIONS ---
-  const [newTitleName, setNewTitleName] = useState('');
-  const [newTitleRole, setNewTitleRole] = useState<'Owner' | 'Personnel'>('Personnel');
-
-  const handleAddMapping = () => {
-    if (!newTitleName.trim()) return;
-    setEditedMappings(prev => ({
-      ...prev,
-      [newTitleName.trim()]: newTitleRole
-    }));
-    setNewTitleName('');
-  };
-
-  const handleDeleteMapping = (titleKey: string) => {
-    const updated = { ...editedMappings };
-    delete updated[titleKey];
-    setEditedMappings(updated);
-  };
-
-  const handleRoleChange = (titleKey: string, role: 'Owner' | 'Personnel') => {
-    setEditedMappings(prev => ({
-      ...prev,
-      [titleKey]: role
-    }));
-  };
 
   // Reset edited mappings back to saved mappings
-  const handleResetMappings = () => {
-    setEditedMappings({ ...roleMappings });
-  };
 
   // --- ADD MODEL HANDLERS (OWNER & PERSONNEL) ---
   const [showAddOwnerModal, setShowAddOwnerModal] = useState(false);
@@ -1161,149 +949,13 @@ export default function PeopleManagementView({
   };
 
   // Find assigned personnel for an owner
-  const getAssignedPersonnelForOwner = (ownerRecord: any) => {
-    return mappedPersonnel.filter(p => p.location.toLowerCase() === ownerRecord.region.toLowerCase());
-  };
 
   // --- SVG CHART RENDERERS (CUSTOM TO PREVENT CONFLICTS IN REACT 19) ---
-  const renderAreaChart = (data: { date: string; value: number }[]) => {
-    if (!data || data.length === 0 || data.every(d => d.value === 0)) {
-      return (
-        <div className="py-6 text-center text-[11px] font-bold text-slate-400 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
-          No activity recorded this week
-        </div>
-      );
-    }
-    const maxVal = Math.max(...data.map(d => d.value)) || 1;
-    const width = 500;
-    const height = 140;
-    const padding = 20;
-
-    const getX = (idx: number) => {
-      if (data.length <= 1) return width / 2;
-      return padding + (idx * (width - padding * 2)) / (data.length - 1);
-    };
-
-    const points = data.map((d, idx) => {
-      const x = getX(idx);
-      const y = height - padding - (d.value * (height - padding * 2)) / maxVal;
-      return `${x},${y}`;
-    }).join(' ');
-
-    const fillPoints = `${points} ${width - padding},${height - padding} ${padding},${height - padding}`;
-
-    return (
-      <svg className="w-full h-[140px]" viewBox={`0 0 ${width} ${height}`}>
-        {/* Grid lines */}
-        <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="#e2e8f0" strokeWidth="1" />
-        <line x1={padding} y1={padding} x2={width - padding} y2={padding} stroke="#f1f5f9" strokeWidth="1" />
-        
-        {/* Gradient fill */}
-        <defs>
-          <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#1e3a8a" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="#1e3a8a" stopOpacity="0.00" />
-          </linearGradient>
-        </defs>
-        <polygon points={fillPoints} fill="url(#areaGradient)" />
-        
-        {/* Line */}
-        <polyline points={points} fill="none" stroke="#1e3a8a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-        
-        {/* Tooltip circles */}
-        {data.map((d, idx) => {
-          const x = getX(idx);
-          const y = height - padding - (d.value * (height - padding * 2)) / maxVal;
-          return (
-            <g key={idx} className="group/dot">
-              <circle cx={x} cy={y} r="4" className="fill-brand-primary stroke-white stroke-2 hover:r-5 transition-all cursor-pointer" />
-              <text x={x} y={y - 10} className="text-[9px] font-bold font-mono fill-brand-secondary text-center opacity-0 group-hover/dot:opacity-100 transition-opacity" textAnchor="middle">
-                {(d.value / 1000).toFixed(0)}k
-              </text>
-            </g>
-          );
-        })}
-
-        {/* Labels */}
-        {data.map((d, idx) => {
-          const x = getX(idx);
-          return (
-            <text key={idx} x={x} y={height - 4} className="text-[9px] font-bold font-sans fill-slate-400" textAnchor="middle">
-              {d.date}
-            </text>
-          );
-        })}
-      </svg>
-    );
-  };
-
-  const renderTrendLine = (data: { date: string; rate: number }[]) => {
-    if (!data || data.length === 0 || data.every(d => d.rate === 0)) {
-      return (
-        <div className="py-6 text-center text-[11px] font-bold text-slate-400 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
-          No performance trend recorded
-        </div>
-      );
-    }
-    const maxVal = 100;
-    const minVal = 0;
-    const width = 500;
-    const height = 120;
-    const padding = 20;
-
-    const getX = (idx: number) => {
-      if (data.length <= 1) return width / 2;
-      return padding + (idx * (width - padding * 2)) / (data.length - 1);
-    };
-
-    const points = data.map((d, idx) => {
-      const x = getX(idx);
-      const y = height - padding - ((d.rate - minVal) * (height - padding * 2)) / (maxVal - minVal);
-      return `${x},${y}`;
-    }).join(' ');
-
-    return (
-      <svg className="w-full h-[120px]" viewBox={`0 0 ${width} ${height}`}>
-        {/* Horizontal grid lines */}
-        {[0, 50, 100].map((v, i) => {
-          const y = height - padding - ((v - minVal) * (height - padding * 2)) / (maxVal - minVal);
-          return (
-            <g key={i}>
-              <line x1={padding} y1={y} x2={width - padding} y2={y} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3,3" />
-              <text x={padding - 5} y={y + 3} className="text-[8px] font-mono font-bold fill-slate-400" textAnchor="end">{v}%</text>
-            </g>
-          );
-        })}
-
-        {/* Line */}
-        <polyline points={points} fill="none" stroke="#0ea5e9" strokeWidth="2.5" strokeLinecap="round" />
-
-        {/* Dots */}
-        {data.map((d, idx) => {
-          const x = getX(idx);
-          const y = height - padding - ((d.rate - minVal) * (height - padding * 2)) / (maxVal - minVal);
-          return (
-            <circle key={idx} cx={x} cy={y} r="3.5" className="fill-sky-500 stroke-white stroke-2" />
-          );
-        })}
-
-        {/* X Axis Labels */}
-        {data.map((d, idx) => {
-          const x = getX(idx);
-          return (
-            <text key={idx} x={x} y={height - 2} className="text-[9px] font-bold font-sans fill-slate-400" textAnchor="middle">
-              {d.date}
-            </text>
-          );
-        })}
-      </svg>
-    );
-  };
 
   if (selectedProfile && selectedProfile.type === 'Owner') {
     return (
       <OwnerDetailsView 
-        onNavigate={(view) => {
+        onNavigate={() => {
           setSelectedProfile(null);
         }}
         selectedOwnerName={selectedProfile.record.name}
@@ -1754,10 +1406,6 @@ export default function PeopleManagementView({
               </div>
             </div>
           )}
-
-
-
-
 
           {/* ========================================================= */}
           {/* SUBMODULE: USER ACCESS MANAGEMENT */}
@@ -2233,108 +1881,6 @@ export default function PeopleManagementView({
       {/* UPDATE CLASSIFICATION PREVIEW MODAL */}
       {/* ========================================================= */}
       <AnimatePresence>
-        {showPreviewModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/60 font-sans">
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-3xl border border-slate-100 max-w-2xl w-full p-6 shadow-2xl space-y-5"
-            >
-              <div className="flex justify-between items-start border-b border-slate-100 pb-4">
-                <div>
-                  <h3 className="text-lg font-black text-brand-secondary flex items-center gap-1.5">
-                    <ShieldAlert className="h-5 w-5 text-amber-500 animate-pulse" />
-                    Sovereign Reclassification Preview
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Please review the affected staff members before writing updates to the sovereign ledger databases.
-                  </p>
-                </div>
-                <button 
-                  onClick={() => setShowPreviewModal(false)}
-                  className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              {/* Affect preview count */}
-              <div className="bg-amber-50 border border-amber-200/60 p-4 rounded-xl flex gap-3 items-start text-xs text-amber-800 font-semibold leading-relaxed">
-                <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <strong className="block text-amber-950 font-black">Warning: Database Synchronization Required</strong>
-                  Your title-to-role adjustments will migrate <strong className="text-amber-950">{affectedPersonnelPreview.length} registered users</strong>.
-                  Upon authorization, matching records are moved dynamically between Owners and Personnel directories, and their permissions/credentials will align.
-                </div>
-              </div>
-
-              {/* affected list preview table */}
-              <div className="border border-slate-150 rounded-xl overflow-hidden max-h-[220px] overflow-y-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-50 text-slate-400 uppercase font-bold text-[10px] tracking-wider border-b border-slate-150">
-                      <th className="px-4 py-2.5">Staff Name</th>
-                      <th className="px-4 py-2.5">Workbook Title</th>
-                      <th className="px-4 py-2.5 text-center">Previous Role</th>
-                      <th className="px-4 py-2.5 text-right">Target Role</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-bold text-slate-700">
-                    {affectedPersonnelPreview.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="text-center py-6 text-slate-400">
-                          No registered staff are affected by these adjustments.
-                        </td>
-                      </tr>
-                    ) : (
-                      affectedPersonnelPreview.map((item, index) => (
-                        <tr key={index} className="hover:bg-slate-50/50 transition-all">
-                          <td className="px-4 py-3 text-slate-900">{item.name}</td>
-                          <td className="px-4 py-3 font-semibold">
-                            <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px]">
-                              {item.title}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded text-[9px] border border-amber-100 uppercase">
-                              {item.currentRole}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <span className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[9px] border border-indigo-100 uppercase">
-                              {item.targetRole}
-                            </span>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Action confirm buttons */}
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                <button 
-                  onClick={() => setShowPreviewModal(false)}
-                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer"
-                >
-                  Cancel Ingestion
-                </button>
-                <button 
-                  onClick={applyReclassification}
-                  disabled={affectedPersonnelPreview.length === 0}
-                  className={`px-5 py-2.5 rounded-xl text-xs font-extrabold text-white shadow-ambient flex items-center gap-1.5 transition-all cursor-pointer ${
-                    affectedPersonnelPreview.length === 0 ? 'bg-slate-300 cursor-not-allowed' : 'bg-brand-primary hover:bg-brand-primary-light'
-                  }`}
-                >
-                  <CheckCircle className="h-4 w-4" />
-                  Authorize Reclassification
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
       </AnimatePresence>
 
       {/* ========================================================= */}
@@ -2411,7 +1957,7 @@ export default function PeopleManagementView({
                       onChange={(e) => setAddOwnerForm({ ...addOwnerForm, title: e.target.value })}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none cursor-pointer"
                     >
-                      {Object.keys(editedMappings).map(t => (
+                      {Object.keys(roleMappings).map(t => (
                         <option key={t} value={t}>{t}</option>
                       ))}
                     </select>
@@ -2562,7 +2108,7 @@ export default function PeopleManagementView({
                       onChange={(e) => setAddPersonnelForm({ ...addPersonnelForm, title: e.target.value })}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none cursor-pointer"
                     >
-                      {Object.keys(editedMappings).map(t => (
+                      {Object.keys(roleMappings).map(t => (
                         <option key={t} value={t}>{t}</option>
                       ))}
                     </select>
@@ -2662,7 +2208,7 @@ export default function PeopleManagementView({
                       onChange={(e) => setEditOwnerForm({ ...editOwnerForm, title: e.target.value })}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none cursor-pointer"
                     >
-                      {Object.keys(editedMappings).map(t => (
+                      {Object.keys(roleMappings).map(t => (
                         <option key={t} value={t}>{t}</option>
                       ))}
                     </select>
@@ -2800,7 +2346,7 @@ export default function PeopleManagementView({
                       onChange={(e) => setEditPersonnelForm({ ...editPersonnelForm, title: e.target.value })}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 outline-none cursor-pointer"
                     >
-                      {Object.keys(editedMappings).map(t => (
+                      {Object.keys(roleMappings).map(t => (
                         <option key={t} value={t}>{t}</option>
                       ))}
                     </select>
@@ -3109,7 +2655,6 @@ export default function PeopleManagementView({
                         Minimum 8 characters. The password is shown once after saving.
                       </p>
                     </div>
-
 
                     <div className="border-t border-slate-100 pt-3 flex justify-end gap-2">
                       <button

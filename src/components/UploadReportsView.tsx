@@ -2,27 +2,23 @@ import React, { useState, useRef, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { ViewType, AuditReport, Owner, KPIMetric, BaseWakala, PriorityWakala } from '../types';
 import { normalizeMsisdn } from '../utils/msisdn';
-import { formatDate, formatDateTime, formatMonthYear } from '../utils/dateFormat';
-import { resolveOwnerMatch, normalizeOwnerName, addNameAlias } from '../utils/ownerMatch';
+import { formatDate, formatDateTime } from '../utils/dateFormat';
+import { resolveOwnerMatch, normalizeOwnerName } from '../utils/ownerMatch';
 import { buildBaseWakalaLookup, findBaseWakala, priorityOwnerOf } from '../utils/priorityOwners';
-import { resolveOwnerFromTillMsisdn } from '../utils/tillOwnerResolution';
-import UnresolvedNamesReview, { UnresolvedNameItem } from './UnresolvedNamesReview';
+import UnresolvedNamesReview from './UnresolvedNamesReview';
 import { ownersList as initialOwners } from '../data';
-import { getAvatarUrl } from '../utils/avatar';
 import OwnerSyncDashboard from './OwnerSyncDashboard';
 import DailyMgtMappingEngine from './DailyMgtMappingEngine';
 import { useReportingPeriod } from './ReportingPeriodContext';
 import { toIsoPeriod } from '../utils/periodUtils';
 import { 
   UploadCloud, 
-  FileText, 
   X, 
   CheckCircle, 
   AlertTriangle, 
   Sparkles,
   RefreshCw,
   Clock,
-  ArrowRight,
   Database,
   Target,
   FileSpreadsheet,
@@ -31,37 +27,21 @@ import {
   User,
   Check,
   RotateCw,
-  Eye,
-  FileCheck2,
-  Trash2,
-  ChevronRight,
   Info,
   Layers,
   ArrowLeft,
-  ChevronUp,
-  ChevronDown,
-  ArrowUpDown,
   ShieldCheck,
-  TrendingUp,
-  TrendingDown,
-  Minus,
   Download,
-  LayoutDashboard,
   History,
   Diff,
-  ArrowUpRight,
-  ArrowDownRight,
   BarChart3,
   MapPin,
-  Users,
   Flag
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { recalculateAllPerformances, mapTransactions, formatToISODate } from '../utils/mappingEngine';
-import { classifyServicingRows, summarizeClassification } from '../utils/classification';
-import { ingestClassified } from '../lib/ingest';
+import { mapTransactions } from '../utils/mappingEngine';
 import { invalidateClassificationCache } from '../utils/classificationCache';
-import { saveMonthlyServicingData, clearMonthlyServicingData, getServicingRows, getServicingColumns, saveWeeklyServicingData, clearWeeklyServicingData, getWeeklyServicingRows, getWeeklyServicingColumns, saveDailyServicingData, getDailyServicingRows, clearDailyServicingData } from '../utils/indexedDB';
+import { getServicingRows, getServicingColumns, clearWeeklyServicingData, getDailyServicingRows } from '../utils/indexedDB';
 import { persistWeeklyServicing, listStoredWeeks } from '../utils/weeklyStore';
 import IopLabel from './IopLabel';
 import { persistMonthlyServicing } from '../utils/monthlyStore';
@@ -82,7 +62,7 @@ export interface ReportTypeConfig {
   icon: React.ComponentType<{ className?: string }>;
 }
 
-export const REPORT_TYPES: ReportTypeConfig[] = [
+const REPORT_TYPES: ReportTypeConfig[] = [
   {
     id: 'till_sync',
     title: 'Till Name Sync (Authoritative)',
@@ -175,38 +155,7 @@ interface UploadReportsViewProps {
   onAddAuditReport: (report: AuditReport) => void;
 }
 
-interface StagingOwner {
-  id: string;
-  masterAgentId: string;
-  name: string;
-  phone: string;
-  email: string;
-  businessName: string;
-  region: string;
-  district: string;
-  ward: string;
-  classification: 'Existing' | 'New' | 'Updated' | 'Duplicate' | 'Invalid';
-  status: 'Active' | 'Pending' | 'Suspended';
-  resolutionStatus: 'Pending' | 'Approved' | 'Rejected' | 'Auto-Skipped';
-  changedFields?: {
-    field: string;
-    oldValue: string;
-    newValue: string;
-  }[];
-  errorMessage?: string;
-  originalRecord?: Owner;
-}
-
 export default function UploadReportsView({ onNavigate, onAddAuditReport }: UploadReportsViewProps) {
-  const validationWarnings = useMemo(() => {
-    const saved = localStorage.getItem('kpiValidationWarnings');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {}
-    }
-    return [];
-  }, []);
 
   // Report selection state
   const [reportType, setReportType] = useState<'kpi' | 'weekly_kpi' | 'mgt' | 'till_sync' | 'base_wakala_list' | 'priority_wakala' | null>(null);
@@ -247,10 +196,6 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
     }
   });
 
-  const [baseWakalaLastUpdated, setBaseWakalaLastUpdated] = useState<string | null>(() => {
-    return localStorage.getItem('baseWakalaIndex_lastUpdated') || null;
-  });
-
   const [stagedBaseWakalas, setStagedBaseWakalas] = useState<{
     record: BaseWakala;
     isUpdate: boolean;
@@ -267,19 +212,6 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
   const [baseWakalaSuccess, setBaseWakalaSuccess] = useState<{ count: number; timestamp: string } | null>(null);
 
   const [showUnresolvedReview, setShowUnresolvedReview] = useState(false);
-
-  const [lastClassificationSummary, setLastClassificationSummary] = useState<{
-    SA_INTERNAL: { count: number; volume: number };
-    BASE: { count: number; volume: number };
-    IOP: { count: number; volume: number };
-  } | null>(() => {
-    try {
-      const saved = localStorage.getItem('lastClassificationSummary');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
 
   // Base Wakala File Parsing Engine
   const parseBaseWakalaFile = (data: any) => {
@@ -480,7 +412,6 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
     invalidateClassificationCache();
 
     setBaseWakalas(updatedArray);
-    setBaseWakalaLastUpdated(nowStr);
     setBaseWakalaSuccess({
       count: stagedBaseWakalas.length,
       timestamp: nowStr,
@@ -774,26 +705,11 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
   const [parsedServicing, setParsedServicing] = useState<any[]>([]); // Servicing rows from Sheet 2
   const [servicingColumns, setServicingColumns] = useState<string[]>([]); // All auto-detected columns
 
-  // Servicing Table Interaction States
-  const [servicingSearch, setServicingSearch] = useState('');
-  const [servicingSortCol, setServicingSortCol] = useState<string | null>(null);
-  const [servicingSortAsc, setServicingSortAsc] = useState(true);
-  const [servicingPage, setServicingPage] = useState(0);
-  const [servicingRowsPerPage, setServicingRowsPerPage] = useState(10);
-  const [servicingFilterCol, setServicingFilterCol] = useState<string>('all');
-  const [servicingFilterVal, setServicingFilterVal] = useState<string>('all');
-
   // KPI Workbook Preview & Table Interaction States
   const [activeKpiTab, setActiveKpiTab] = useState<string>('executive');
   const [viewMode, setViewMode] = useState<'active_analysis' | 'history_archive' | 'comparison_center'>('active_analysis');
   const [compareMonthA, setCompareMonthA] = useState<string>('');
-  const [compareMonthB, setCompareMonthB] = useState<string>('');
   const [isKpiLoading, setIsKpiLoading] = useState(false);
-  const [kpiSearchQuery, setKpiSearchQuery] = useState('');
-  const [kpiCurrentPage, setKpiCurrentPage] = useState(1);
-  const [kpiRowsPerPage, setKpiRowsPerPage] = useState(10);
-  const [kpiSortColumn, setKpiSortColumn] = useState<string | null>(null);
-  const [kpiSortDirection, setKpiSortDirection] = useState<'asc' | 'desc'>('asc');
   const [workbookStats, setWorkbookStats] = useState<{
     fileName: string;
     numSheets: number;
@@ -822,18 +738,11 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
   }, [isWeeklyConfirm, uploadWeek]);
 
   // Staging list and filter states
-  const [stagingRecords, setStagingRecords] = useState<StagingOwner[]>([]);
   const [parsedMgtTransactions, setParsedMgtTransactions] = useState<any[]>([]);
-  const [mgtReconciliationFilter, setMgtReconciliationFilter] = useState<'all' | 'Mapped' | 'Unmapped'>('all');
-  const [selectedStagingIds, setSelectedStagingIds] = useState<Set<string>>(new Set());
-  const [reconciliationFilter, setReconciliationFilter] = useState<'all' | 'Existing' | 'New' | 'Updated' | 'Duplicate' | 'Invalid'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
   
   // Stepper state
   const [activeStep, setActiveStep] = useState(0);
   const [importProgress, setImportProgress] = useState(0);
-
-
 
   // Stats for the final completed screen
   const [syncStats, setSyncStats] = useState({
@@ -907,91 +816,6 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
   };
 
   // Preset MGT Demonstration Dataset
-  const handleLoadDemoMgtDataset = () => {
-    setReportType('mgt');
-    setSelectedFile({ name: "Daily_MGT_Report_Sync_Demo.csv", size: 45210 });
-    setIsUploading(true);
-    setUploadProgress(0);
-
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 15;
-      setUploadProgress(Math.min(progress, 100));
-
-      if (progress >= 100) {
-        clearInterval(interval);
-        setIsUploading(false);
-        
-        const demoTxns = [
-          {
-            id: "mgt-txn-1",
-            transactionId: "TXN-88201",
-            branchMsisdn: "255711223344",
-            tillName: "Kariakoo Retail",
-            ownerName: "Abubakar Khalid",
-            ownerId: "MA-88421",
-            location: "Dar es Salaam",
-            volume: 3850000,
-            status: "Completed",
-            isMapped: true
-          },
-          {
-            id: "mgt-txn-2",
-            transactionId: "TXN-88202",
-            branchMsisdn: "255722334455",
-            tillName: "Nyamagana Shop",
-            ownerName: "Mwita Chacha",
-            ownerId: "MA-77312",
-            location: "Mwanza",
-            volume: 1200000,
-            status: "Completed",
-            isMapped: true
-          },
-          {
-            id: "mgt-txn-3",
-            transactionId: "TXN-88203",
-            branchMsisdn: "255733445566",
-            tillName: "Sekei Enterprises",
-            ownerName: "Fatma Hassan",
-            ownerId: "MA-92105",
-            location: "Arusha",
-            volume: 2400000,
-            status: "Completed",
-            isMapped: true
-          },
-          {
-            id: "mgt-txn-4",
-            transactionId: "TXN-88204",
-            branchMsisdn: "255744556677",
-            tillName: "Tambukareli Boutique",
-            ownerName: "Grace Mushi",
-            ownerId: "MA-44122",
-            location: "Dodoma",
-            volume: 950000,
-            status: "Completed",
-            isMapped: true
-          },
-          {
-            id: "mgt-txn-5",
-            transactionId: "TXN-88205",
-            branchMsisdn: "255799999999",
-            tillName: "N/A",
-            ownerName: "N/A",
-            ownerId: "N/A",
-            location: "N/A",
-            volume: 450000,
-            status: "Completed",
-            isMapped: false
-          }
-        ];
-
-        setParsedMgtTransactions(demoTxns);
-        setImportState('reconciliation');
-      }
-    }, 80);
-  };
-
-
 
   const parseKPIExcelFileShared = (data: any, periodType: 'monthly' | 'weekly') => {
     const startTime = performance.now();
@@ -1402,179 +1226,23 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
       return;
     }
 
-    if (reportType === 'mgt') {
-      const tillsList = getTillsList();
-      const currentOwners = getMasterOwners();
-      const currentPersonnel = (() => {
-        const saved = localStorage.getItem('personnelList');
-        return saved ? JSON.parse(saved) : [];
-      })();
-      let existingTransactions: any[] = [];
-      try {
-        existingTransactions = await getDailyServicingRows();
-      } catch (e) {
-        console.error("Failed loading existing transactions for MGT mapping:", e);
-      }
-
-      const txns = mapTransactions(parsedRows, tillsList, currentOwners, currentPersonnel, existingTransactions);
-
-      setParsedMgtTransactions(txns);
-      setImportState('reconciliation');
-      return;
+    // Only Daily MGT files are parsed as CSV here.
+    const tillsList = getTillsList();
+    const currentOwners = getMasterOwners();
+    const currentPersonnel = (() => {
+      const saved = localStorage.getItem('personnelList');
+      return saved ? JSON.parse(saved) : [];
+    })();
+    let existingTransactions: any[] = [];
+    try {
+      existingTransactions = await getDailyServicingRows();
+    } catch (e) {
+      console.error("Failed loading existing transactions for MGT mapping:", e);
     }
 
-    // Process extracted lines against master owners list
-    const dbOwners = getMasterOwners();
-    const stagingList: StagingOwner[] = [];
-    const idCountMap: Record<string, number> = {};
+    const txns = mapTransactions(parsedRows, tillsList, currentOwners, currentPersonnel, existingTransactions);
 
-    // Count occurrences for Duplicate detection
-    parsedRows.forEach(row => {
-      const agentId = (row.agent_id || row.wakala_id || row.owner_code || row.id || '').trim();
-      if (agentId) {
-        idCountMap[agentId] = (idCountMap[agentId] || 0) + 1;
-      }
-    });
-
-    parsedRows.forEach((row, idx) => {
-      const agentId = (row.agent_id || row.wakala_id || row.owner_code || row.id || `UNKNOWN-${idx}`).trim();
-      const name = (row.owner_name || row.name || '').trim();
-      const phone = (row.phone || row.contact || row.telephone || '').trim();
-      const email = (row.email || '').trim();
-      const businessName = (row.business_name || row.business || '').trim();
-      const region = (row.region || 'Dar es Salaam').trim();
-      const district = (row.district || '').trim();
-      const ward = (row.ward || '').trim();
-      const status = (row.status || 'Active') as Owner['status'];
-
-      const stagingId = `staging-${idx}-${Date.now()}`;
-
-      // Validation
-      let errorMessage = '';
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!agentId || agentId.startsWith('UNKNOWN-') || agentId.length < 3) {
-        errorMessage = 'Invalid or missing Agent ID (must be at least 3 characters)';
-      } else if (!name) {
-        errorMessage = 'Blank owner name is not allowed';
-      } else if (email && !emailRegex.test(email)) {
-        errorMessage = 'Invalid email address signature';
-      }
-
-      if (errorMessage) {
-        stagingList.push({
-          id: stagingId,
-          masterAgentId: agentId,
-          name: name || "Unknown Owner",
-          phone,
-          email,
-          businessName,
-          region,
-          district,
-          ward,
-          classification: 'Invalid',
-          status: 'Pending',
-          resolutionStatus: 'Rejected',
-          errorMessage
-        });
-        return;
-      }
-
-      // Duplicate check inside the file
-      if (idCountMap[agentId] > 1) {
-        stagingList.push({
-          id: stagingId,
-          masterAgentId: agentId,
-          name,
-          phone,
-          email,
-          businessName,
-          region,
-          district,
-          ward,
-          classification: 'Duplicate',
-          status,
-          resolutionStatus: 'Pending',
-          errorMessage: 'Conflicting record declared for the same Agent ID in upload sheet.'
-        });
-        return;
-      }
-
-      // Match against master database
-      const dbMatch = dbOwners.find(o => o.masterAgentId === agentId);
-      if (!dbMatch) {
-        stagingList.push({
-          id: stagingId,
-          masterAgentId: agentId,
-          name,
-          phone,
-          email,
-          businessName,
-          region,
-          district,
-          ward,
-          classification: 'New',
-          status,
-          resolutionStatus: 'Pending'
-        });
-      } else {
-        // Compare values
-        const diffs: { field: string; oldValue: string; newValue: string }[] = [];
-        if (dbMatch.name.toLowerCase() !== name.toLowerCase()) {
-          diffs.push({ field: "Owner Name", oldValue: dbMatch.name, newValue: name });
-        }
-        if (dbMatch.region.toLowerCase() !== region.toLowerCase()) {
-          diffs.push({ field: "Region", oldValue: dbMatch.region, newValue: region });
-        }
-        if (status && dbMatch.status !== status) {
-          diffs.push({ field: "Status", oldValue: dbMatch.status, newValue: status });
-        }
-
-        if (diffs.length > 0) {
-          stagingList.push({
-            id: stagingId,
-            masterAgentId: agentId,
-            name,
-            phone,
-            email,
-            businessName,
-            region,
-            district,
-            ward,
-            classification: 'Updated',
-            status: dbMatch.status,
-            resolutionStatus: 'Pending',
-            changedFields: diffs,
-            originalRecord: dbMatch
-          });
-        } else {
-          stagingList.push({
-            id: stagingId,
-            masterAgentId: agentId,
-            name,
-            phone,
-            email,
-            businessName,
-            region,
-            district,
-            ward,
-            classification: 'Existing',
-            status: dbMatch.status,
-            resolutionStatus: 'Auto-Skipped'
-          });
-        }
-      }
-    });
-
-    setStagingRecords(stagingList);
-
-    // Default select New and Updated records
-    const defaultSelected = new Set<string>();
-    stagingList.forEach(r => {
-      if (r.classification === 'New' || r.classification === 'Updated') {
-        defaultSelected.add(r.id);
-      }
-    });
-    setSelectedStagingIds(defaultSelected);
+    setParsedMgtTransactions(txns);
     setImportState('reconciliation');
   };
 
@@ -1718,290 +1386,10 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
   };
 
   // Toggle selection for a staging ID
-  const handleToggleRowSelection = (id: string) => {
-    const record = stagingRecords.find(r => r.id === id);
-    if (record?.classification === 'Invalid') return; // Cannot select invalid rows
-
-    const next = new Set(selectedStagingIds);
-    if (next.has(id)) {
-      next.delete(id);
-    } else {
-      next.add(id);
-    }
-    setSelectedStagingIds(next);
-  };
 
   // Header Bulk Actions
-  const handleSelectAllFiltered = (filteredList: StagingOwner[]) => {
-    const next = new Set(selectedStagingIds);
-    filteredList.forEach(r => {
-      if (r.classification !== 'Invalid') {
-        next.add(r.id);
-      }
-    });
-    setSelectedStagingIds(next);
-  };
-
-  const handleDeselectAllFiltered = (filteredList: StagingOwner[]) => {
-    const next = new Set(selectedStagingIds);
-    filteredList.forEach(r => {
-      next.delete(r.id);
-    });
-    setSelectedStagingIds(next);
-  };
-
-  const handleApproveRow = (id: string) => {
-    setStagingRecords(prev => prev.map(r => r.id === id ? { ...r, resolutionStatus: 'Approved' } : r));
-    const next = new Set(selectedStagingIds);
-    next.add(id);
-    setSelectedStagingIds(next);
-  };
-
-  const handleRejectRow = (id: string) => {
-    setStagingRecords(prev => prev.map(r => r.id === id ? { ...r, resolutionStatus: 'Rejected' } : r));
-    const next = new Set(selectedStagingIds);
-    next.delete(id);
-    setSelectedStagingIds(next);
-  };
 
   // Apply Changes and Save (Trigger db writes & Audit logs)
-  const handleApplySynchronize = () => {
-    setImportState('importing');
-    setActiveStep(0);
-    setImportProgress(5);
-
-    if (reportType === 'mgt') {
-      const progressSteps = [
-        { title: "Verifying Transaction MSISDN Registry", desc: "Checking and matching branch_msisdn inputs against registered authoritative Tills." },
-        { title: "Resolving Wakala Owners via Tills", desc: "Identifying terminal owner profiles through authoritative Till associations." },
-        { title: "Formatting Ingestion Records", desc: "Constructing standard transaction object schema conforming to DODOMA system specifications." },
-        { title: "Writing Transactions to Sovereign Ledger", desc: "Appending verified mapped transaction rows into servicingDataRows database." },
-        { title: "Appending Ingestion Event to Audit Trail", desc: "Committing immutable cryptographic audit trail record for this ingestion event." }
-      ];
-
-      const mappedTxns = parsedMgtTransactions.filter(t => t.isMapped);
-      const unmappedCount = parsedMgtTransactions.filter(t => !t.isMapped).length;
-
-      // Progressive Stepper Simulation
-      let currentStep = 0;
-      const interval = setInterval(async () => {
-        currentStep += 1;
-        setActiveStep(currentStep);
-        setImportProgress(Math.min(Math.round((currentStep / progressSteps.length) * 100), 100));
-
-        if (currentStep >= progressSteps.length) {
-          clearInterval(interval);
-
-          // Write transactions to servicingDataRows with deterministic IDs so reuploads update/overwrite
-          const newServicingRows = mappedTxns.map((t, idx) => {
-            const dateFromRow = t.date || t['Servicing Date'] || t['servicing_date'] || t['servicing date'] || t.servicing_date || t.timestamp || '';
-            const finalDate = formatToISODate(dateFromRow);
-            const rawTS = t.timestamp || t['Servicing Timestamp'] || t['tranferdate'] || t['tranferda'] || t['transferdate'] || dateFromRow;
-            const finalTimestamp = rawTS && String(rawTS).trim() ? String(rawTS).trim() : new Date().toISOString();
-            const txIdStr = t.transactionId || t['Transaction ID'] || '';
-            const msisdnStr = t.branchMsisdn || t['Branch_msisdn'] || '';
-            const stableId = (txIdStr && msisdnStr)
-              ? `mgt-${String(txIdStr).toLowerCase()}_${String(msisdnStr).trim()}`
-              : t.id || `mgt-row-${idx}`;
-
-            return {
-              _id: stableId,
-              "Transaction ID": t.transactionId,
-              "Branch_msisdn": t.branchMsisdn,
-              "Dest_MSISDN": t.destMsisdn || '',
-              "Wakala Name": t.tillName,
-              "Agent ID": t.ownerId || 'MA-UNKNOWN',
-              "Wakala Owner": t.ownerName,
-              "Zone": t.location,
-              "Volume (TZS)": t.volume,
-              "Status": t.status,
-              "Servicing Date": finalDate,
-              "Servicing Timestamp": finalTimestamp,
-              "source_balance_before": t.sourceBalanceBefore,
-              "source_balance_after": t.sourceBalanceAfter
-            };
-          });
-
-          await saveDailyServicingData(newServicingRows);
-          invalidateClassificationCache();
-
-          // Run Transaction Classification Engine (server-authoritative)
-          const ingestResult = await ingestClassified(newServicingRows, {
-            fileName: selectedFile?.name || 'Daily_MGT_Report.csv',
-            reportType: 'Daily MGT',
-            fileSize: selectedFile?.size,
-            uploadedByName: lastUploadedBy,
-          });
-          const classSummary = ingestResult.summary;
-          localStorage.setItem('lastClassificationSummary', JSON.stringify(classSummary));
-          setLastClassificationSummary(classSummary);
-
-          // Recalculate and synchronize all performance metrics based on MGT contribution
-          await recalculateAllPerformances();
-          window.dispatchEvent(new Event('servicing-rows-updated'));
-
-          // Append Audit Logs to Local Storage
-          const newAuditLogs = [{
-            audit_id: Date.now() + Math.floor(Math.random() * 1000),
-            action_type: 'INGEST_MGT_TRANSACTIONS',
-            action_description: `Admin ingested ${newServicingRows.length} MGT transactions via Daily MGT Operational Ingestion.`,
-            affected_table: 'servicingDataRows',
-            affected_record_id: 'Daily_MGT_Report',
-            previous_value: null,
-            new_value: `${newServicingRows.length} rows mapped`,
-            ip_address: "192.168.1.114",
-            logged_at: new Date().toISOString()
-          }];
-          const existingLogs = JSON.parse(localStorage.getItem('systemAuditLogs') || '[]');
-          localStorage.setItem('systemAuditLogs', JSON.stringify([...newAuditLogs, ...existingLogs]));
-
-          setSyncStats({
-            processed: parsedMgtTransactions.length,
-            created: newServicingRows.length, // successfully mapped transactions
-            updated: 0,
-            skipped: unmappedCount // unregistered tills skipped
-          });
-
-          // Add file report instance to Upload History
-          const newReport: AuditReport = {
-            id: `REP-${Math.floor(90000 + Math.random() * 9000)}`,
-            fileName: selectedFile?.name || "Daily_MGT_Report.csv",
-            type: "Daily MGT",
-            uploadedBy: lastUploadedBy,
-            date: formatDateTime(new Date()),
-            size: `${((selectedFile?.size || 45210) / 1024).toFixed(1)} KB`,
-            status: 'Success',
-            uploadId: ingestResult.uploadId ?? null
-          };
-          onAddAuditReport(newReport);
-
-          setImportState('completed');
-        }
-      }, 1000);
-      return;
-    }
-
-    const progressSteps = [
-      { title: "Matching and Resolving Staging Rows", desc: "Evaluating Admin decisions and checking matching constraint indexes." },
-      { title: "Generating System Audit Trail Deltas", desc: "Writing immutable state delta snapshots in compliance with 3NF." },
-      { title: "Writing New Owners to Database", desc: "Registering new master terminal owners into Dodoma ledger." },
-      { title: "Updating Existing Owner Master Profiles", desc: "Committing spelling, phone, and zone updates to owners tables." },
-      { title: "Archiving Daily MGT Upload History", desc: "Ingesting raw report checksum hash to prevent duplication." }
-    ];
-
-    // Read existing database
-    const dbOwners = [...getMasterOwners()];
-    const approvedRecords = stagingRecords.filter(r => selectedStagingIds.has(r.id) || r.resolutionStatus === 'Approved');
-
-    let newOwnersCount = 0;
-    let updatedOwnersCount = 0;
-    let skippedOwnersCount = stagingRecords.length - approvedRecords.length;
-
-    // Staging list for audit logs to generate
-    const newAuditLogs: any[] = [];
-    const clientIP = "192.168.1.114"; // Simulated active admin IP
-
-    approvedRecords.forEach(rec => {
-      if (rec.classification === 'New') {
-        newOwnersCount++;
-        // Create actual database Owner entity
-        const newOwnerEntity: Owner = {
-          id: `owner-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-          name: rec.name,
-          masterAgentId: rec.masterAgentId,
-          region: rec.region,
-          memberSince: formatMonthYear(new Date()),
-          avatar: getAvatarUrl(rec.name),
-          wakalas: 1, // default starting terminal
-          portfolioSize: 'TZS 0.0M',
-          portfolioGrowth: 'Not yet tracked',
-          performance: 100, // starting clean score
-          status: rec.status
-        };
-        dbOwners.push(newOwnerEntity);
-
-        // System Audit log entry
-        newAuditLogs.push({
-          audit_id: Date.now() + Math.floor(Math.random() * 1000),
-          action_type: 'UPDATE_OWNER',
-          action_description: `Admin registered new Master Agent Owner ${rec.name} (${rec.masterAgentId}) via MGT synchronization.`,
-          affected_table: 'owners',
-          affected_record_id: rec.masterAgentId,
-          previous_value: null,
-          new_value: newOwnerEntity,
-          ip_address: clientIP,
-          logged_at: new Date().toISOString()
-        });
-      } 
-      else if (rec.classification === 'Updated') {
-        updatedOwnersCount++;
-        // Mutate existing entity
-        const matchIdx = dbOwners.findIndex(o => o.masterAgentId === rec.masterAgentId);
-        if (matchIdx !== -1) {
-          const oldSnapshot = { ...dbOwners[matchIdx] };
-          dbOwners[matchIdx] = {
-            ...dbOwners[matchIdx],
-            name: rec.name,
-            region: rec.region,
-            status: rec.status
-          };
-
-          // System Audit log entry
-          newAuditLogs.push({
-            audit_id: Date.now() + Math.floor(Math.random() * 1000),
-            action_type: 'UPDATE_OWNER',
-            action_description: `Admin updated Master Agent Owner ${rec.masterAgentId} attributes (${rec.changedFields?.map(f => f.field).join(', ')}) via MGT synchronization.`,
-            affected_table: 'owners',
-            affected_record_id: rec.masterAgentId,
-            previous_value: oldSnapshot,
-            new_value: dbOwners[matchIdx],
-            ip_address: clientIP,
-            logged_at: new Date().toISOString()
-          });
-        }
-      }
-    });
-
-    // Write back to mock DB in localStorage
-    localStorage.setItem('ownersList', JSON.stringify(dbOwners));
-
-    // Append Audit Logs to Local Storage
-    const existingLogs = JSON.parse(localStorage.getItem('systemAuditLogs') || '[]');
-    localStorage.setItem('systemAuditLogs', JSON.stringify([...newAuditLogs, ...existingLogs]));
-
-    setSyncStats({
-      processed: stagingRecords.length,
-      created: newOwnersCount,
-      updated: updatedOwnersCount,
-      skipped: skippedOwnersCount
-    });
-
-    // Stepper progressive animation
-    let currentStep = 0;
-    const interval = setInterval(() => {
-      currentStep += 1;
-      setActiveStep(currentStep);
-      setImportProgress(Math.min(Math.round((currentStep / progressSteps.length) * 100), 100));
-      
-      if (currentStep >= progressSteps.length) {
-        clearInterval(interval);
-        
-        // Add file report instance to Upload History
-        const newReport: AuditReport = {
-          id: `REP-${Math.floor(90000 + Math.random() * 9000)}`,
-          fileName: selectedFile?.name || "Daily_MGT_Report.csv",
-          type: "Owners List",
-          uploadedBy: lastUploadedBy,
-          date: formatDateTime(new Date()),
-          size: `${((selectedFile?.size || 45210) / 1024).toFixed(1)} KB`,
-          status: 'Success'
-        };
-        onAddAuditReport(newReport);
-        
-        setImportState('completed');
-      }
-    }, 1100);
-  };
 
   const handleConfirmKpiSync = () => {
     setShowConfirmDialog(false);
@@ -2065,7 +1453,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
           // re-uploads stay idempotent.
           clearWeeklyServicingData(uploadWeek)
             .catch(() => undefined)
-            .then(() => persistWeeklyServicing(uploadWeek, uploadMonth, parsedServicing, servicingColumns))
+            .then(() => persistWeeklyServicing(uploadWeek, uploadMonth, parsedServicing))
             .then((res) => {
               invalidateClassificationCache();
               window.dispatchEvent(new Event('servicing-rows-updated'));
@@ -2128,7 +1516,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
 
           // Replace this month's per-wakala rows in Postgres — same shape as
           // the Weekly path.
-          persistMonthlyServicing(activeMonth, parsedServicing, servicingColumns)
+          persistMonthlyServicing(activeMonth, parsedServicing)
             .then((res) => {
               invalidateClassificationCache();
               window.dispatchEvent(new Event('servicing-rows-updated'));
@@ -2203,100 +1591,19 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
 
   const handleCancelSync = () => {
     setSelectedFile(null);
-    setStagingRecords([]);
-    setSelectedStagingIds(new Set());
     setImportState('selection');
     setReportType(null);
   };
 
   // Filter staging rows based on tab/filter and search query
-  const filteredStagingRows = stagingRecords.filter(row => {
-    const matchesFilter = reconciliationFilter === 'all' || row.classification === reconciliationFilter;
-    const term = searchQuery.toLowerCase();
-    const matchesSearch = row.masterAgentId.toLowerCase().includes(term) ||
-                          row.name.toLowerCase().includes(term) ||
-                          row.region.toLowerCase().includes(term);
-    return matchesFilter && matchesSearch;
-  });
 
   // Calculate counts for badges
-  const totalCount = stagingRecords.length;
-  const existingCount = stagingRecords.filter(r => r.classification === 'Existing').length;
-  const newCount = stagingRecords.filter(r => r.classification === 'New').length;
-  const updatedCount = stagingRecords.filter(r => r.classification === 'Updated').length;
-  const duplicateCount = stagingRecords.filter(r => r.classification === 'Duplicate').length;
-  const invalidCount = stagingRecords.filter(r => r.classification === 'Invalid').length;
-
-  const handleKpiSort = (columnName: string) => {
-    if (kpiSortColumn === columnName) {
-      setKpiSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
-    } else {
-      setKpiSortColumn(columnName);
-      setKpiSortDirection('asc');
-    }
-    setKpiCurrentPage(1);
-  };
 
   // Filter Sheet 2 Servicing Data based on search query and column-level filter
-  const servicingFilterValues = useMemo(() => {
-    if (!servicingFilterCol || servicingFilterCol === 'all' || !parsedServicing) return [];
-    const vals = parsedServicing.map(row => String(row[servicingFilterCol] || '').trim()).filter(Boolean);
-    return Array.from(new Set(vals)).sort();
-  }, [servicingFilterCol, parsedServicing]);
-
-  const filteredKpiRows = parsedServicing.filter(row => {
-    // Column filter check
-    if (servicingFilterCol !== 'all' && servicingFilterVal !== 'all') {
-      const cellVal = String(row[servicingFilterCol] || '').trim();
-      if (cellVal !== servicingFilterVal) return false;
-    }
-
-    if (!kpiSearchQuery.trim()) return true;
-    const term = kpiSearchQuery.toLowerCase();
-    // Check if any column contains the search term
-    return Object.keys(row).some(key => {
-      if (key.startsWith('_')) return false; // skip internal IDs
-      return String(row[key] || '').toLowerCase().includes(term);
-    });
-  });
 
   // Sort filtered rows
-  const sortedKpiRows = [...filteredKpiRows].sort((a, b) => {
-    if (!kpiSortColumn) return 0;
-    
-    const valA = a[kpiSortColumn];
-    const valB = b[kpiSortColumn];
-    
-    if (valA === undefined || valA === null) return 1;
-    if (valB === undefined || valB === null) return -1;
-    
-    // Check if they are numbers
-    const cleanNum = (str: any) => {
-      if (typeof str === 'number') return str;
-      const parsed = parseFloat(String(str).replace(/[^0-9.-]/g, ''));
-      return isNaN(parsed) ? String(str).toLowerCase() : parsed;
-    };
-    
-    const cleanA = cleanNum(valA);
-    const cleanB = cleanNum(valB);
-    
-    if (typeof cleanA === 'number' && typeof cleanB === 'number') {
-      return kpiSortDirection === 'asc' ? cleanA - cleanB : cleanB - cleanA;
-    }
-    
-    const strA = String(valA).toLowerCase();
-    const strB = String(valB).toLowerCase();
-    
-    if (strA < strB) return kpiSortDirection === 'asc' ? -1 : 1;
-    if (strA > strB) return kpiSortDirection === 'asc' ? 1 : -1;
-    return 0;
-  });
 
   // Paginate sorted rows
-  const kpiTotalPages = Math.ceil(sortedKpiRows.length / kpiRowsPerPage);
-  const startIdx = (kpiCurrentPage - 1) * kpiRowsPerPage;
-  const endIdx = startIdx + kpiRowsPerPage;
-  const pagedKpiRows = sortedKpiRows.slice(startIdx, endIdx);
 
   return (
     <motion.div 
@@ -2318,19 +1625,6 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
               Incorporate Daily MGT master files to auto-align registered Wakala Business Owners. Run validation, resolve changes, and authorize synchronization before database writing.
             </p>
           </div>
-          <button
-            id="clear-ledger-btn"
-            onClick={async () => {
-              if (window.confirm("Are you sure you want to clear all ingested transaction data? This cannot be undone and you will need to re-upload your MGT files to restore history.")) {
-                await clearDailyServicingData();
-                window.location.reload();
-              }
-            }}
-            className="mt-3.5 inline-flex items-center gap-2 px-4 py-2 border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-900/30 dark:text-rose-400 dark:hover:bg-rose-950/20 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
-          >
-            <Trash2 className="h-4 w-4 text-rose-500" />
-            Clear Ingested Ledger
-          </button>
         </div>
         
         {/* Metadata Widgets */}
@@ -2366,8 +1660,6 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
           </div>
         </div>
       </div>
-
-
 
       <AnimatePresence mode="wait">
         {/* 1. SELECTION & UPLOAD STATE */}
@@ -3588,7 +2880,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
 
             {/* TRANSACTION CLASSIFICATION ENGINE SUMMARY (Daily MGT uploads only) */}
             {reportType === 'mgt' && (() => {
-              const summary = lastClassificationSummary || (() => {
+              const summary = (() => {
                 try {
                   const saved = localStorage.getItem('lastClassificationSummary');
                   return saved ? JSON.parse(saved) : null;
@@ -3691,8 +2983,6 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
                   setReportType(null);
                   setSelectedFile(null);
                   setUploadProgress(0);
-                  setStagingRecords([]);
-                  setSelectedStagingIds(new Set());
                 }}
                 className="w-full bg-brand-accent hover:bg-brand-accent-light text-brand-primary font-black text-xs uppercase tracking-wider py-3 rounded-xl shadow-md cursor-pointer transition-all"
               >
@@ -3849,7 +3139,6 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
           onClose={() => setShowUnresolvedReview(false)}
         />
       )}
-
 
     </motion.div>
   );
