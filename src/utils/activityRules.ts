@@ -193,3 +193,12 @@ export function calculatePenalty(cpServicingValue: number, rules: ActivityRules 
   // Money: rounded to cents (0.05% of 1,923,698,857 is 961,849.43, not .4285).
   return Math.round(vol * (Number(rules.penaltyRate) || 0)) / 100;
 }
+
+/**
+ * IOP settlement: (Daily MGT IOP − the report's IOP) × the penalty rate, over
+ * the same month-to-date window. Positive is a gain, negative a penalty.
+ */
+export function calculateIopSettlement(dailyIop: number, reportIop: number, rules: ActivityRules = getActivityRules()): number {
+  const diff = (Number(dailyIop) || 0) - (Number(reportIop) || 0);
+  return Math.sign(diff) * calculatePenalty(Math.abs(diff), rules);
+}
