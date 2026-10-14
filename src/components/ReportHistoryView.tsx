@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import PageHeaderBanner from './PageHeaderBanner';
+import ReportResyncPanel from './ReportResyncPanel';
 import { getCompanyName } from '../utils/company';
 
 interface ReportHistoryViewProps {
@@ -181,6 +182,8 @@ export default function ReportHistoryView({
           </button>
         </div>
       </div>
+
+      <ReportResyncPanel />
 
       {/* Filter Options block (Image 3 design) */}
       <div className="rounded-2xl border border-brand-gray-border bg-brand-card p-4 shadow-ambient">

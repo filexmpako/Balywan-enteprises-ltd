@@ -8,7 +8,10 @@
  */
 import { COLLECTION_KEYS, DOCUMENT_KEYS, SERVER_MANAGED_KEYS } from './hasidadi/collections';
 import { fetchWorkspace, saveCollection, saveDocument } from './hasidadi.functions';
-import { CLOUD_HYDRATED_EVENT } from './cloudSyncEvents';
+import { CLOUD_HYDRATED_EVENT, REGISTRIES_CHANGED_EVENT } from './cloudSyncEvents';
+
+/** Lists that decide who a transaction or wakala belongs to. */
+const REGISTRY_KEYS = new Set(['ownersList', 'tillsList', 'saTillRegistry', 'baseWakalaIndex']);
 
 const QUEUE_KEY = 'hasidadi_sync_queue';
 // Float requests and loans are saved per record through their own server
@@ -20,6 +23,7 @@ const SYNCED = new Set<string>(
 let installed = false;
 let suspended = false;
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
+let inFlight = 0;
 
 /** A write that could not be sent yet, and the signed-in user who made it. */
 type QueueEntry = { key: string; kind: 'collection' | 'document'; value: string; userId?: string };
@@ -117,14 +121,22 @@ function schedulePush(key: string, value: string) {
     key,
     setTimeout(async () => {
       timers.delete(key);
+      inFlight++;
       const userId = await currentUserId();
       try {
         await push(entry);
       } catch {
         if (userId) enqueue({ ...entry, userId });
+      } finally {
+        inFlight--;
       }
     }, 600),
   );
+}
+
+/** Resolves once every cached write made so far has been sent (or queued after failing). */
+export async function whenSynced(): Promise<void> {
+  while (timers.size > 0 || inFlight > 0) await new Promise((r) => setTimeout(r, 200));
 }
 
 /** Write-through: every cached mutation is mirrored to Postgres. */
@@ -134,14 +146,17 @@ export function installCloudSync() {
 
   const original = Storage.prototype.setItem;
   Storage.prototype.setItem = function patchedSetItem(key: string, value: string) {
+    const local = this === window.localStorage && !suspended;
+    const registryChanged = local && REGISTRY_KEYS.has(key) && this.getItem(key) !== value;
     original.call(this, key, value);
-    if (this === window.localStorage && !suspended && SYNCED.has(key)) {
+    if (local && SYNCED.has(key)) {
       try {
         schedulePush(key, value);
       } catch {
         /* cache write must never break the UI */
       }
     }
+    if (registryChanged) window.dispatchEvent(new Event(REGISTRIES_CHANGED_EVENT));
   };
 
   window.addEventListener('online', () => {

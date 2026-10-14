@@ -4,6 +4,7 @@ import { ViewType, AuditReport, Owner, KPIMetric, BaseWakala, PriorityWakala } f
 import { normalizeMsisdn } from '../utils/msisdn';
 import { formatDate, formatDateTime, formatMonthYear } from '../utils/dateFormat';
 import { resolveOwnerMatch, normalizeOwnerName, addNameAlias } from '../utils/ownerMatch';
+import { buildBaseWakalaLookup, findBaseWakala, priorityOwnerOf } from '../utils/priorityOwners';
 import { resolveOwnerFromTillMsisdn } from '../utils/tillOwnerResolution';
 import UnresolvedNamesReview, { UnresolvedNameItem } from './UnresolvedNamesReview';
 import { ownersList as initialOwners } from '../data';
@@ -541,25 +542,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
         }
       })();
 
-      const codeMap = new Map<string, BaseWakala>();
-      const msisdnMap = new Map<string, BaseWakala>();
-
-      for (const bw of currentBaseWakalas) {
-        const code = bw.wakalaCode || (bw as any).code;
-        if (code && typeof code === 'string') {
-          codeMap.set(code.trim().toLowerCase(), bw);
-        }
-        if (bw.msisdn) {
-          const norm = normalizeMsisdn(bw.msisdn);
-          if (norm) msisdnMap.set(norm, bw);
-        }
-      }
-      // Alternate numbers only fill numbers that are no wakala's main number,
-      // so another wakala's alternate entry can never take over a main number.
-      for (const bw of currentBaseWakalas) {
-        const normAlt = normalizeMsisdn(bw.alternateNumber || (bw as any).altMsisdn);
-        if (normAlt && !msisdnMap.has(normAlt)) msisdnMap.set(normAlt, bw);
-      }
+      const baseLookup = buildBaseWakalaLookup(currentBaseWakalas);
 
       // Exact header match candidate arrays
       const codeHeaderCandidates = ['wakala code', 'wakala_code', 'code', 'agent code', 'agent_code', 'terminal code', 'terminal_code'];
@@ -598,33 +581,20 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
         const rawCode = codeColKey ? String(row[codeColKey] ?? '').trim() : '';
         const rawMsisdn = msisdnColKey ? String(row[msisdnColKey] ?? '').trim() : '';
 
-        let matchedBase: BaseWakala | undefined = undefined;
-
-        // Priority (a): Exact code match against BaseWakala.wakalaCode
-        if (rawCode) {
-          matchedBase = codeMap.get(rawCode.toLowerCase());
-        }
-
-        // Priority (b): Exact msisdn/altMsisdn normalized match
-        if (!matchedBase && rawMsisdn) {
-          const normMsisdn = normalizeMsisdn(rawMsisdn);
-          if (normMsisdn) {
-            matchedBase = msisdnMap.get(normMsisdn);
-          }
-        }
+        const matchedBase = findBaseWakala(baseLookup, rawCode, rawMsisdn);
 
         if (matchedBase) {
           const normMsisdn = normalizeMsisdn(matchedBase.msisdn || rawMsisdn);
           const key = normMsisdn || matchedBase.wakalaCode || rawCode;
           if (key && !seenKeys.has(key)) {
             seenKeys.add(key);
-            const ownerMatch = resolveOwnerMatch(matchedBase.ownerName, masterOwners, 'Priority Wakala List Upload');
-            if (ownerMatch.status !== 'Matched') unresolvedOwnerCount++;
+            const owner = priorityOwnerOf(matchedBase, masterOwners, 'Priority Wakala List Upload');
+            if (!owner.resolved) unresolvedOwnerCount++;
             parsed.push({
               msisdn: normMsisdn,
-              wakalaCode: matchedBase.wakalaCode || (matchedBase as any).code || rawCode || undefined,
-              ownerId: ownerMatch.matchedOwner?.id || matchedBase.ownerId || undefined,
-              ownerName: ownerMatch.matchedOwner?.name || matchedBase.ownerName || undefined,
+              wakalaCode: matchedBase.wakalaCode || matchedBase.code || rawCode || undefined,
+              ownerId: owner.ownerId,
+              ownerName: owner.ownerName,
               period: priorityWakalaPeriod,
               importedAt: currentDate
             });
@@ -657,8 +627,10 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
     // Keep every existing record NOT in the period being uploaded, then
     // add the newly staged records for this period — this replaces the
     // period's list rather than merging into one endless registry.
+    // The month is taken from the Target Period box at commit time: it can
+    // be changed in the preview, after the rows were parsed.
     const otherPeriods = priorityWakalas.filter(p => p.period !== priorityWakalaPeriod);
-    const updatedArray = [...otherPeriods, ...stagedPriorityWakalas];
+    const updatedArray = [...otherPeriods, ...stagedPriorityWakalas.map(p => ({ ...p, period: priorityWakalaPeriod }))];
 
     const nowStr = formatDateTime(new Date());
 
@@ -2870,7 +2842,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
                                     </span>
                                   ) : '—'}
                                 </td>
-                                <td className="px-4 py-2 font-mono text-slate-600">{p.period}</td>
+                                <td className="px-4 py-2 font-mono text-slate-600">{priorityWakalaPeriod}</td>
                                 <td className="px-4 py-2 text-slate-500 font-mono text-[11px]">{p.importedAt}</td>
                               </tr>
                             ))}

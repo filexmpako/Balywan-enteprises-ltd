@@ -136,6 +136,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [user?.username]);
 
+  // Staff edits to owners, tills or the Base Wakala Index re-attribute the
+  // reports already uploaded (see reportResync.ts).
+  const isStaff = user?.role === 'Admin' || user?.role === 'FloatManager';
+  useEffect(() => {
+    if (!isStaff) return;
+    let stop: (() => void) | null = null;
+    let cancelled = false;
+    import('@/utils/reportResync').then(({ startAutoResync }) => {
+      if (!cancelled) stop = startAutoResync();
+    });
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, [isStaff, user?.username]);
+
   const setPortalType = (type: 'admin' | 'owner' | 'float-manager' | null) => {
     setPortalState(type);
     if (type) localStorage.setItem('hasidadi_portal_type', type);
