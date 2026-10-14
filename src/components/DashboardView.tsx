@@ -13,8 +13,9 @@ import { loadWeeklyServedMap } from '../utils/weeklyServed';
 import { fetchMonthlyMonths } from '../lib/monthly.functions';
 import IopLabel from './IopLabel';
 import IopVariance, { shortMonth } from './IopVariance';
+import IopSettlementCard from './IopSettlementCard';
 import { periodsMatch } from '../utils/periodUtils';
-import { calculatePenalty, getActivityRules } from '../utils/activityRules';
+import { getActivityRules } from '../utils/activityRules';
 import type { ClassifiedRow } from '../utils/classification';
 import { computeLiveKpiTotals, type LiveKpiTotals } from '../utils/liveKpiTotals';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
@@ -733,9 +734,6 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
             const dailyIop = settlement.period
               ? dailyIopForPeriod(classifiedDaily, settlement.period, undefined, settlement.endDate)
               : 0;
-            // IOP (volume serviced outside our SA) carries the same penalty rate as CP.
-            const iopPenalty = calculatePenalty(settlement.iop);
-            const totalPenalty = Math.round((settlement.penalty + iopPenalty) * 100) / 100;
             return (
               <div className="space-y-2">
                 <div className="flex items-center gap-2 px-1">
@@ -744,24 +742,13 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                   <MetricCard
-                    title="CP Penalty"
+                    title="Bank Penalty"
                     value={`TZS ${settlement.penalty.toLocaleString()}`}
                     subValue={`CP × ${getActivityRules().penaltyRate}%`}
                     icon={AlertTriangle}
                     variant="red"
                   />
-                  <MetricCard
-                    title="IOP Penalty"
-                    value={`TZS ${iopPenalty.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                    subValue={`IOP × ${getActivityRules().penaltyRate}%`}
-                    icon={AlertTriangle}
-                    variant="red"
-                  >
-                    <div className="flex justify-between gap-3 border-t border-slate-100 pt-2 font-sans text-xs">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Total (CP + IOP)</span>
-                      <span className="font-black text-brand-text">TZS {totalPenalty.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    </div>
-                  </MetricCard>
+                  <IopSettlementCard dailyIop={dailyIop} reportIop={settlement.iop} reportKind={settlement.kind} bankPenalty={settlement.penalty} />
                   <MetricCard
                     title={settlement.kind ? <IopLabel source={settlement.kind} /> : 'IOP'}
                     value={`TZS ${settlement.iop.toLocaleString()}`}
@@ -885,7 +872,7 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
                 const iopMtd = monthly ? monthly.iopValue : (monthLatest as any).iopValue || 0;
                 return (
                   <MetricCard
-                    title={monthly ? 'Penalty · Monthly' : 'Penalty (Month to date)'}
+                    title={monthly ? 'Bank Penalty · Monthly' : 'Bank Penalty (Month to date)'}
                     value={formatNumberWithAbbreviation(penaltyMtd)}
                     subValue={<><IopLabel source={monthly ? 'monthly' : 'weekly'} /> {formatNumberWithAbbreviation(iopMtd)}</>}
                     icon={AlertTriangle}
@@ -899,7 +886,7 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
               <table className="w-full min-w-[640px] text-left">
                 <thead>
                   <tr className="border-b border-brand-gray-border">
-                    {['Week', 'Active', 'Inactive', 'Served', 'Unserved', 'Weekly Value', 'IOP Value', 'Penalty', 'Cumulative', 'vs Target'].map(h => (
+                    {['Week', 'Active', 'Inactive', 'Served', 'Unserved', 'Weekly Value', 'IOP Value', 'Bank Penalty', 'Cumulative', 'vs Target'].map(h => (
                       <th key={h} className="py-2 font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">
                         {h === 'IOP Value' ? <IopLabel source="weekly" /> : h}
                       </th>
@@ -1058,7 +1045,7 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
                       <MetricCard
                         title="CP Value"
                         value={`TZS ${weeklyIopComparison.cpValue.toLocaleString()}`}
-                        subValue="Penalty basis"
+                        subValue="Bank penalty basis"
                         icon={AlertCircle}
                         variant="amber"
                       />

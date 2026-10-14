@@ -3,7 +3,7 @@ import { ViewType, Owner, WakalaEntry, BaseWakala } from '../types';
 import { formatDate } from '../utils/dateFormat';
 import { buildOwnerWakalaMap } from '../utils/wakalaMapping';
 import { getOwnerPortfolio } from '../utils/ownerPortfolio';
-import { calculatePenalty, getActivityRules, isActiveByRule } from '../utils/activityRules';
+import { getActivityRules, isActiveByRule } from '../utils/activityRules';
 import { getActiveStatusFromColumn, mergeServicedStatus, preferColumnStatus } from '../utils/servicingStatus';
 import { ownersList } from '../data';
 import WorkLocationSection from './WorkLocationSection';
@@ -43,6 +43,7 @@ import DailyMgtSummary from './DailyMgtSummary';
 import type { ClassifiedRow } from '../utils/classification';
 import IopLabel, { type IopSource } from './IopLabel';
 import IopVariance, { shortMonth } from './IopVariance';
+import IopSettlementCard from './IopSettlementCard';
 import { loadMonthlyReportStats, toMonthlyKpiOverride, type MonthlyReportStats } from '../utils/monthlySettlement';
 import { motion, AnimatePresence } from 'motion/react';
 import FloatManagementPanel from './FloatManagementPanel';
@@ -631,7 +632,7 @@ export default function OwnerDetailsView({
     ? weeklyInactive - latestWeeklyActivity.inactive
     : 0;
 
-  // CP Penalty / External Servicing: the uploaded Monthly report is final for
+  // Bank Penalty / External Servicing: the uploaded Monthly report is final for
   // its month; until one exists, the latest (month-to-date) weekly report for
   // the month supplies the same two columns.
   const [monthlyReportMonths, setMonthlyReportMonths] = useState<string[]>([]);
@@ -1206,31 +1207,13 @@ export default function OwnerDetailsView({
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <MetricCard
-                title="CP Penalty"
+                title="Bank Penalty"
                 value={`TZS ${settlement.penalty.toLocaleString()}`}
                 subValue={`CP × ${getActivityRules().penaltyRate}%`}
                 icon={AlertTriangle}
                 variant="red"
               />
-              {(() => {
-                // IOP (volume serviced outside our SA) carries the same penalty rate as CP.
-                const iopPenalty = calculatePenalty(settlement.iop);
-                const totalPenalty = Math.round((settlement.penalty + iopPenalty) * 100) / 100;
-                return (
-                  <MetricCard
-                    title="IOP Penalty"
-                    value={`TZS ${iopPenalty.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
-                    subValue={`IOP × ${getActivityRules().penaltyRate}%`}
-                    icon={AlertTriangle}
-                    variant="red"
-                  >
-                    <div className="flex justify-between gap-3 border-t border-slate-100 pt-2 font-sans text-xs">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Total (CP + IOP)</span>
-                      <span className="font-black text-brand-text">TZS {totalPenalty.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                    </div>
-                  </MetricCard>
-                );
-              })()}
+              <IopSettlementCard dailyIop={settlementDailyIop} reportIop={settlement.iop} reportKind={settlement.kind} bankPenalty={settlement.penalty} />
               <MetricCard
                 title={settlement.kind ? <IopLabel source={settlement.kind} /> : 'IOP'}
                 value={`TZS ${settlement.iop.toLocaleString()}`}
