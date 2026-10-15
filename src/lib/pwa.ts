@@ -70,4 +70,62 @@ function initPwa() {
   }
 }
 
+/**
+ * New-version check. Every build gives the entry script a new hashed name
+ * (/assets/index-XXXX.js). An app left open (an installed app keeps running in
+ * the background) would otherwise stay on the old code after a Publish, so the
+ * page is re-fetched when the app comes back into view, regains focus, and
+ * every 10 minutes, and a different entry name means a new version is out.
+ */
+const ENTRY_RE = /\/assets\/index-[\w-]+\.js/;
+let updateAvailable = false;
+const updateListeners = new Set<() => void>();
+
+function runningEntry(): string | null {
+  const el = document.querySelector<HTMLScriptElement | HTMLLinkElement>(
+    'script[src*="/assets/index-"], link[rel="modulepreload"][href*="/assets/index-"]',
+  );
+  const url = el ? (el as HTMLScriptElement).src || (el as HTMLLinkElement).href : '';
+  return url.match(ENTRY_RE)?.[0] ?? null;
+}
+
+async function checkForUpdate(): Promise<void> {
+  if (updateAvailable || !navigator.onLine) return;
+  const current = runningEntry();
+  if (!current) return; // dev server: no hashed build
+  try {
+    const res = await fetch('/', { cache: 'no-store', credentials: 'same-origin' });
+    if (!res.ok) return;
+    const latest = (await res.text()).match(ENTRY_RE)?.[0];
+    if (latest && latest !== current) {
+      updateAvailable = true;
+      updateListeners.forEach((fn) => fn());
+    }
+  } catch {
+    /* offline or blocked: try again on the next trigger */
+  }
+}
+
+export function isUpdateAvailable(): boolean {
+  return updateAvailable;
+}
+
+export function subscribeUpdate(fn: () => void): () => void {
+  updateListeners.add(fn);
+  return () => updateListeners.delete(fn);
+}
+
+function initUpdateCheck() {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void checkForUpdate();
+  });
+  window.addEventListener('focus', () => void checkForUpdate());
+  window.addEventListener('online', () => void checkForUpdate());
+  setInterval(() => void checkForUpdate(), 10 * 60 * 1000);
+}
+
 initPwa();
+if (typeof window !== 'undefined' && !(window as any).__balwynUpdateCheck) {
+  (window as any).__balwynUpdateCheck = true;
+  initUpdateCheck();
+}
