@@ -23,8 +23,8 @@ type DB = SupabaseClient<any, any, any>;
 const TAGS = ['owner_id', 'bucket', 'matched_via', 'attributed_owner_id', 'attributed_owner_name'] as const;
 const same = (a: unknown, b: unknown) => String(a ?? '') === String(b ?? '');
 
-/** Rows per resync call: a month can hold tens of thousands of transactions. */
-const RESYNC_PAGE_ROWS = 4000;
+/** Rows per resync call: small enough that rewriting a fully changed page stays well inside the hosting request time limit. */
+const RESYNC_PAGE_ROWS = 1000;
 const READ_PAGE = 1000;
 
 /**

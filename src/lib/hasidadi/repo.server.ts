@@ -143,8 +143,13 @@ async function clearUnresolvedBaseWakalaOwners(
   }
 }
 
-/** Full replace of a collection (upsert everything, delete what disappeared). */
-export async function saveCollection(supabase: DB, key: string, items: any[]): Promise<number> {
+/**
+ * Saves a collection: upserts every item, then deletes only `removedIds`, the
+ * rows the saving device itself removed. A device holding an out-of-date copy
+ * (loaded before someone else added a row) must never delete rows it never
+ * had, so nothing is pruned just for being absent from the list.
+ */
+export async function saveCollection(supabase: DB, key: string, items: any[], removedIds: string[] = []): Promise<number> {
   const mapper = getMapper(key);
   if (!mapper) throw new Error(`Unknown collection: ${key}`);
   if (SERVER_MANAGED_KEYS.has(key)) throw new Error(`${key} is saved per record, not as a whole list`);
@@ -162,22 +167,14 @@ export async function saveCollection(supabase: DB, key: string, items: any[]): P
     if (error) throw new Error(`${mapper.table} upsert: ${error.message}`);
   }
 
-  // Prune by diffing existing PKs instead of sending one giant NOT IN filter
-  // (that overflows the request URL and fails with an empty error message).
   const keepIds = new Set(rows.map((r) => String(r[mapper.pk])));
-  const existing = await selectAll(supabase, mapper.table, mapper.pk);
-
-  const staleIds = (existing ?? [])
-    .map((r: any) => String(r[mapper.pk]))
-    .filter((id) => !keepIds.has(id));
-
-  for (const batch of chunk(staleIds, 200)) {
+  const deleteIds = Array.from(new Set(removedIds.map(String))).filter((id) => id && !keepIds.has(id));
+  for (const batch of chunk(deleteIds, 200)) {
     const { error: delError } = await supabase.from(mapper.table).delete().in(mapper.pk, batch);
-    if (delError) throw new Error(`${mapper.table} prune: ${delError.message}`);
+    if (delError) throw new Error(`${mapper.table} delete: ${delError.message}`);
   }
 
   return rows.length;
-
 }
 
 export async function saveDocument(supabase: DB, key: string, value: any, userId?: string) {
