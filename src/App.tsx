@@ -19,6 +19,7 @@ import DashboardView from "./components/DashboardView";
 import OwnerDetailsView from "./components/OwnerDetailsView";
 import UploadReportsView from "./components/UploadReportsView";
 import KPIReportsView from "./components/KPIReportsView";
+import UpdateBanner from "./components/UpdateBanner";
 import ReportHistoryView from "./components/ReportHistoryView";
 import SettingsView from "./components/SettingsView";
 import PeopleManagementView from "./components/PeopleManagementView";
@@ -552,6 +553,7 @@ export default function App() {
     <CompanyProvider>
       <ReportingPeriodProvider>
         <AuthProvider>
+          <UpdateBanner />
           <AppContent />
         </AuthProvider>
       </ReportingPeriodProvider>
