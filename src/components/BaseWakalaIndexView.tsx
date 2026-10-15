@@ -31,7 +31,8 @@ import {
   MapPin,
   Loader2,
   Navigation,
-  AlertCircle
+  AlertCircle,
+  Download
 } from 'lucide-react';
 
 const PAGE_SIZE = 25;
@@ -262,6 +263,76 @@ export default function BaseWakalaIndexView() {
   const totalPages = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE));
   const pageSafe = Math.min(page, totalPages);
   const pageItems = filteredItems.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
+
+  // --- Export filtered rows to CSV or Excel ---
+  const [exporting, setExporting] = useState(false);
+
+  const buildExportRows = () => {
+    return filteredItems.map(({ entity, ownerStatus, matchedOwner, liveStatus, monthHistory }) => {
+      const row: Record<string, string> = {
+        'Wakala Code': entity.wakalaCode || entity.code || '',
+        'Terminal Name': entity.wakalaName || entity.fullName || '',
+        'MSISDN': entity.msisdn || '',
+        'Alt MSISDN': entity.altMsisdn || entity.alternateNumber || '',
+        'Owner': matchedOwner?.name || entity.ownerName || '',
+        'Owner Status': ownerStatus,
+        'Ward': entity.siteWard || '',
+        'District': entity.district || '',
+        'Region': entity.region || '',
+        'Live Status': liveStatus,
+      };
+      monthHistory.forEach(mh => { row[`Status ${mh.month}`] = mh.status; });
+      return row;
+    });
+  };
+
+  const exportFileName = (ext: string) => {
+    const parts = ['base-wakala'];
+    if (statusFilter !== 'ALL') parts.push(statusFilter.toLowerCase().replace('_', '-'));
+    if (districtFilter !== 'all') parts.push(districtFilter.toLowerCase().replace(/\s+/g, '-'));
+    if (ownerFilter !== 'all' && !ownerFilter.startsWith('__')) {
+      const o = owners.find(x => x.id === ownerFilter);
+      if (o) parts.push(o.name.toLowerCase().replace(/\s+/g, '-'));
+    }
+    parts.push(new Date().toISOString().slice(0, 10));
+    return `${parts.join('-')}.${ext}`;
+  };
+
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  };
+
+  const handleExport = (format: 'csv' | 'xlsx') => {
+    if (filteredItems.length === 0 || exporting) return;
+    setExporting(true);
+    try {
+      const rows = buildExportRows();
+      const ws = XLSX.utils.json_to_sheet(rows);
+      if (format === 'csv') {
+        const csv = XLSX.utils.sheet_to_csv(ws);
+        downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), exportFileName('csv'));
+      } else {
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Base Wakala');
+        const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        downloadBlob(
+          new Blob([out], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+          exportFileName('xlsx'),
+        );
+      }
+    } catch (e) {
+      console.error('Export failed:', e);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // --- CSV / Excel Parsing & Delta Logic ---
   const handleFileUpload = async (file: File) => {
@@ -700,6 +771,28 @@ export default function BaseWakalaIndexView() {
               <option key={d} value={d}>{d}</option>
             ))}
           </select>
+
+          {/* Export filtered rows */}
+          <div className="flex items-center gap-1.5 ml-1 pl-3 border-l border-slate-200">
+            <button
+              onClick={() => handleExport('csv')}
+              disabled={filteredItems.length === 0 || exporting}
+              className="inline-flex items-center gap-1.5 text-xs font-bold rounded-xl border border-slate-200 px-3 py-2 bg-white text-slate-700 hover:bg-slate-50 hover:border-brand-primary disabled:opacity-50 transition-all cursor-pointer"
+              title="Download the filtered rows as a CSV file"
+            >
+              <Download className="h-3.5 w-3.5 text-brand-primary" />
+              CSV ({filteredItems.length})
+            </button>
+            <button
+              onClick={() => handleExport('xlsx')}
+              disabled={filteredItems.length === 0 || exporting}
+              className="inline-flex items-center gap-1.5 text-xs font-bold rounded-xl border border-slate-200 px-3 py-2 bg-white text-slate-700 hover:bg-slate-50 hover:border-brand-primary disabled:opacity-50 transition-all cursor-pointer"
+              title="Download the filtered rows as an Excel file"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+              Excel ({filteredItems.length})
+            </button>
+          </div>
         </div>
       </div>
 
