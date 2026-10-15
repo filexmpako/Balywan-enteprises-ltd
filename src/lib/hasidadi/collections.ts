@@ -70,6 +70,11 @@ export const COLLECTIONS: CollectionMapper[] = [
       avatarPhotoId: 'avatar_photo_id',
     },
     makeId: (o, i) => o.id || `owner-${i + 1}`,
+    // name_aliases is NOT NULL; owners added in the app start without aliases,
+    // and one such row would fail the whole list's save.
+    finalizeRow: (row) => {
+      if (!Array.isArray(row.name_aliases)) row.name_aliases = [];
+    },
   }),
   define({
     key: 'personnelList',
