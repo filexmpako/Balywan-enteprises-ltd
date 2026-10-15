@@ -771,6 +771,28 @@ export default function BaseWakalaIndexView() {
               <option key={d} value={d}>{d}</option>
             ))}
           </select>
+
+          {/* Export filtered rows */}
+          <div className="flex items-center gap-1.5 ml-1 pl-3 border-l border-slate-200">
+            <button
+              onClick={() => handleExport('csv')}
+              disabled={filteredItems.length === 0 || exporting}
+              className="inline-flex items-center gap-1.5 text-xs font-bold rounded-xl border border-slate-200 px-3 py-2 bg-white text-slate-700 hover:bg-slate-50 hover:border-brand-primary disabled:opacity-50 transition-all cursor-pointer"
+              title="Download the filtered rows as a CSV file"
+            >
+              <Download className="h-3.5 w-3.5 text-brand-primary" />
+              CSV ({filteredItems.length})
+            </button>
+            <button
+              onClick={() => handleExport('xlsx')}
+              disabled={filteredItems.length === 0 || exporting}
+              className="inline-flex items-center gap-1.5 text-xs font-bold rounded-xl border border-slate-200 px-3 py-2 bg-white text-slate-700 hover:bg-slate-50 hover:border-brand-primary disabled:opacity-50 transition-all cursor-pointer"
+              title="Download the filtered rows as an Excel file"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+              Excel ({filteredItems.length})
+            </button>
+          </div>
         </div>
       </div>
 
