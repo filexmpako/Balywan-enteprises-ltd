@@ -6,7 +6,7 @@
  * transactions have no local cache at all and are always read live from the
  * server.
  */
-import { COLLECTION_KEYS, DOCUMENT_KEYS, SERVER_MANAGED_KEYS } from './hasidadi/collections';
+import { COLLECTION_KEYS, DOCUMENT_KEYS, SERVER_MANAGED_KEYS, collectionIds } from './hasidadi/collections';
 import { fetchWorkspace, saveCollection, saveDocument } from './hasidadi.functions';
 import { CLOUD_HYDRATED_EVENT, REGISTRIES_CHANGED_EVENT } from './cloudSyncEvents';
 
@@ -24,9 +24,15 @@ let installed = false;
 let suspended = false;
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 let inFlight = 0;
+/** Rows this device removed from a collection since its last push, per key. */
+const pendingRemovals = new Map<string, Set<string>>();
 
-/** A write that could not be sent yet, and the signed-in user who made it. */
-type QueueEntry = { key: string; kind: 'collection' | 'document'; value: string; userId?: string };
+/**
+ * A write that could not be sent yet, and the signed-in user who made it.
+ * `removedIds` are the rows this device deleted: the server deletes only
+ * those, never rows that are merely missing from an out-of-date copy.
+ */
+type QueueEntry = { key: string; kind: 'collection' | 'document'; value: string; userId?: string; removedIds?: string[] };
 
 function readQueue(): QueueEntry[] {
   try {
@@ -44,9 +50,16 @@ function writeQueue(entries: QueueEntry[]) {
 }
 
 function enqueue(entry: QueueEntry) {
-  const queue = readQueue().filter((q) => q.key !== entry.key);
-  queue.push(entry);
-  writeQueue(queue);
+  const queue = readQueue();
+  // A newer write of the same list replaces the queued one, but must keep the
+  // deletions that one carried (unless the newer list has the row again).
+  const older = queue.find((q) => q.key === entry.key);
+  if (older?.removedIds?.length && entry.kind === 'collection') {
+    const kept = new Set(collectionIds(entry.key, JSON.parse(entry.value)));
+    const merged = new Set([...(entry.removedIds || []), ...older.removedIds.filter((id) => !kept.has(id))]);
+    entry = { ...entry, removedIds: Array.from(merged) };
+  }
+  writeQueue([...queue.filter((q) => q.key !== entry.key), entry]);
 }
 
 async function currentUserId(): Promise<string | null> {
@@ -85,7 +98,9 @@ async function push(entry: QueueEntry) {
   if (!(await hasSession())) throw new Error('No active session; deferring sync');
   const parsed = JSON.parse(entry.value);
   if (entry.kind === 'collection') {
-    await saveCollection({ data: { key: entry.key, items: Array.isArray(parsed) ? parsed : [] } });
+    await saveCollection({
+      data: { key: entry.key, items: Array.isArray(parsed) ? parsed : [], removedIds: entry.removedIds ?? [] },
+    });
   } else {
     await saveDocument({ data: { key: entry.key, value: parsed } });
   }
@@ -112,15 +127,27 @@ async function flushQueue(): Promise<void> {
   writeQueue(remaining);
 }
 
-function schedulePush(key: string, value: string) {
+function schedulePush(key: string, value: string, removed: string[]) {
   const kind: QueueEntry['kind'] = COLLECTION_KEYS.includes(key) ? 'collection' : 'document';
-  const entry: QueueEntry = { key, kind, value };
+  let removedIds: string[] | undefined;
+  if (kind === 'collection') {
+    // Several quick edits are sent as one push: carry every removal since the
+    // last push, minus rows the latest list has again.
+    const pending = pendingRemovals.get(key) ?? new Set<string>();
+    removed.forEach((id) => pending.add(id));
+    const kept = new Set(collectionIds(key, JSON.parse(value)));
+    kept.forEach((id) => pending.delete(id));
+    pendingRemovals.set(key, pending);
+    removedIds = Array.from(pending);
+  }
+  const entry: QueueEntry = { key, kind, value, removedIds };
   const existing = timers.get(key);
   if (existing) clearTimeout(existing);
   timers.set(
     key,
     setTimeout(async () => {
       timers.delete(key);
+      pendingRemovals.delete(key);
       inFlight++;
       const userId = await currentUserId();
       try {
@@ -147,11 +174,19 @@ export function installCloudSync() {
   const original = Storage.prototype.setItem;
   Storage.prototype.setItem = function patchedSetItem(key: string, value: string) {
     const local = this === window.localStorage && !suspended;
-    const registryChanged = local && REGISTRY_KEYS.has(key) && this.getItem(key) !== value;
+    const previous = local && SYNCED.has(key) ? this.getItem(key) : null;
+    const registryChanged = local && REGISTRY_KEYS.has(key) && previous !== value;
     original.call(this, key, value);
     if (local && SYNCED.has(key)) {
       try {
-        schedulePush(key, value);
+        // Rows this write took out of this device's own copy: the only rows
+        // the server may delete for it.
+        let removed: string[] = [];
+        if (COLLECTION_KEYS.includes(key) && previous) {
+          const next = new Set(collectionIds(key, JSON.parse(value)));
+          removed = collectionIds(key, JSON.parse(previous)).filter((id) => !next.has(id));
+        }
+        schedulePush(key, value, removed);
       } catch {
         /* cache write must never break the UI */
       }

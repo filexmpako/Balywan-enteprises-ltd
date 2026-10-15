@@ -297,6 +297,16 @@ export function getMapper(key: string): CollectionMapper | undefined {
 
 const isPlainValue = (v: any) => v === null || typeof v !== 'object';
 
+/** The primary keys a list is stored under (the same ids saveCollection writes). */
+export function collectionIds(key: string, items: unknown): string[] {
+  const mapper = getMapper(key);
+  if (!mapper || !Array.isArray(items)) return [];
+  return items
+    .map((item, i) => (item && typeof item === 'object' ? toRow(mapper, item, i)[mapper.pk] : undefined))
+    .filter((id) => id !== undefined && id !== null && String(id) !== '')
+    .map(String);
+}
+
 export function toRow(mapper: CollectionMapper, obj: any, index: number): Record<string, any> {
   const row: Record<string, any> = {};
   const consumed = new Set<string>();

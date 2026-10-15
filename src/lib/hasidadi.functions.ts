@@ -28,15 +28,16 @@ export const fetchWorkspace = createServerFn({ method: 'GET' })
 
 export const saveCollection = createServerFn({ method: 'POST' })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { key: string; items: any[] }) => {
+  .inputValidator((input: { key: string; items: any[]; removedIds?: string[] }) => {
     if (!input || typeof input.key !== 'string' || !Array.isArray(input.items)) {
       throw new Error('Invalid collection payload');
     }
-    return input;
+    const removedIds = Array.isArray(input.removedIds) ? input.removedIds.filter((id) => typeof id === 'string') : [];
+    return { key: input.key, items: input.items, removedIds };
   })
   .handler(async ({ data, context }) => {
     const { saveCollection: save } = await import('./hasidadi/repo.server');
-    const count = await save(context.supabase as any, data.key, data.items);
+    const count = await save(context.supabase as any, data.key, data.items, data.removedIds);
     return { saved: count };
   });
 

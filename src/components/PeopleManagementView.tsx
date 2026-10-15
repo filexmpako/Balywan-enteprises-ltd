@@ -484,7 +484,6 @@ export default function PeopleManagementView({
     wakalas: 3,
     portfolioSize: 'TZS 5.0M',
     portfolioGrowth: 'Not yet tracked',
-    performance: 0, // derived live from KPI1 achievement; no seeded score
     status: 'Active' as Owner['status'],
     title: 'MFS',
     assignedTillsStr: ''
@@ -507,7 +506,6 @@ export default function PeopleManagementView({
       wakalas: owner.wakalas || 0,
       portfolioSize: owner.portfolioSize || 'TZS 5.0M',
       portfolioGrowth: owner.portfolioGrowth || 'Not yet tracked',
-      performance: owner.performance || 88,
       status: owner.status,
       title: owner.title || 'MFS',
       assignedTillsStr: (owner as any).assignedTills ? (owner as any).assignedTills.join(', ') : ''
@@ -545,7 +543,6 @@ export default function PeopleManagementView({
           status: editOwnerForm.status,
           wakalas: tillsArr.length || Number(editOwnerForm.wakalas),
           portfolioGrowth: editOwnerForm.portfolioGrowth,
-          performance: Number(editOwnerForm.performance),
           assignedTills: tillsArr,
           lastSyncDate: formatDateTime(new Date())
         } as any;
@@ -832,7 +829,6 @@ export default function PeopleManagementView({
     wakalas: 3,
     portfolioSize: 'TZS 5.0M',
     portfolioGrowth: 'Not yet tracked',
-    performance: 0, // derived live from KPI1 achievement; no seeded score
     status: 'Active' as Owner['status'],
     title: 'MFS',
     assignedTillsStr: ''
@@ -858,7 +854,7 @@ export default function PeopleManagementView({
       wakalas: Number(addOwnerForm.wakalas),
       portfolioSize: addOwnerForm.portfolioSize,
       portfolioGrowth: addOwnerForm.portfolioGrowth,
-      performance: Number(addOwnerForm.performance),
+      performance: 0, // derived live from KPI 1 (recalculateAllPerformances)
       status: addOwnerForm.status,
       title: addOwnerForm.title,
       assignedTills: tillsArr,
@@ -880,7 +876,6 @@ export default function PeopleManagementView({
       wakalas: 3,
       portfolioSize: 'TZS 5.0M',
       portfolioGrowth: 'Not yet tracked',
-      performance: 0, // derived live from KPI1 achievement; no seeded score
       status: 'Active',
       title: 'MFS',
       assignedTillsStr: ''
@@ -1964,7 +1959,7 @@ export default function PeopleManagementView({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="block text-[10px] uppercase text-slate-400 tracking-wider mb-0.5">Tills Owned</label>
                     <input
@@ -1984,18 +1979,6 @@ export default function PeopleManagementView({
                       value={addOwnerForm.portfolioGrowth}
                       onChange={(e) => setAddOwnerForm({ ...addOwnerForm, portfolioGrowth: e.target.value })}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 outline-none focus:bg-white focus:border-brand-primary"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase text-slate-400 tracking-wider mb-0.5">Perf index %</label>
-                    <input
-                      type="number"
-                      required
-                      min={10}
-                      max={100}
-                      value={addOwnerForm.performance}
-                      onChange={(e) => setAddOwnerForm({ ...addOwnerForm, performance: Number(e.target.value) })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 outline-none focus:bg-white focus:border-brand-primary font-mono"
                     />
                   </div>
                 </div>
@@ -2237,18 +2220,6 @@ export default function PeopleManagementView({
                       value={editOwnerForm.portfolioGrowth}
                       onChange={(e) => setEditOwnerForm({ ...editOwnerForm, portfolioGrowth: e.target.value })}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 outline-none focus:bg-white focus:border-brand-primary"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase text-slate-400 tracking-wider mb-0.5">Perf index %</label>
-                    <input
-                      type="number"
-                      required
-                      min={10}
-                      max={100}
-                      value={editOwnerForm.performance}
-                      onChange={(e) => setEditOwnerForm({ ...editOwnerForm, performance: Number(e.target.value) })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 outline-none focus:bg-white focus:border-brand-primary font-mono"
                     />
                   </div>
                 </div>
