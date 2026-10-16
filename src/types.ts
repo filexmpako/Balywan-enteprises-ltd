@@ -133,7 +133,7 @@ export interface MonthlyTargetUpload {
 
 export interface FloatReturnEntry {
   id: string;
-  channel: 'CRDB' | 'YAS' | 'NBC' | 'Other';
+  channel: FloatReturnChannel;
   channelOther?: string;
   amount: number;
   receiptPhotoId?: string;
