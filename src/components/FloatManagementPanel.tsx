@@ -459,7 +459,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                       </select>
                       {row.channel === 'Other' && (
                         <input
-                          type="text" placeholder="e.g. M-Pesa agent, cash handover"
+                          type="text" placeholder="e.g. Selcom, cash handover"
                           value={row.channelOther}
                           onChange={e => updateReturnRow(idx, { channelOther: e.target.value })}
                           className="w-full text-sm rounded-lg border border-slate-300 bg-white px-3 py-2 focus:outline-none focus:border-brand-primary font-medium"
