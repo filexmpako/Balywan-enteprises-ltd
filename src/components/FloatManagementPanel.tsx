@@ -41,7 +41,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
   const [repaymentDescriptionInput, setRepaymentDescriptionInput] = useState('');
   const [repaymentError, setRepaymentError] = useState('');
 
-  const emptyRow = (): DraftReturnRow => ({ channel: 'CRDB', channelOther: '', amount: '', receiptFile: null });
+  const emptyRow = (): DraftReturnRow => ({ channel: 'M-Pesa', channelOther: '', amount: '', receiptFile: null });
   const [returnRows, setReturnRows] = useState<DraftReturnRow[]>([emptyRow()]);
   const [returnValidationError, setReturnValidationError] = useState('');
 
@@ -455,10 +455,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                         onChange={e => updateReturnRow(idx, { channel: e.target.value as DraftReturnRow['channel'], channelOther: '' })}
                         className="w-full text-sm rounded-lg border border-slate-300 bg-white px-3 py-2 focus:outline-none focus:border-brand-primary font-bold"
                       >
-                        <option value="CRDB">CRDB</option>
-                        <option value="YAS">YAS</option>
-                        <option value="NBC">NBC</option>
-                        <option value="Other">Other</option>
+                        {FLOAT_RETURN_CHANNELS.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                       {row.channel === 'Other' && (
                         <input
