@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FloatRequest, FloatReturnEntry, Personnel, LoanRecord } from '../types';
+import { FloatRequest, FloatReturnEntry, FloatReturnChannel, FLOAT_RETURN_CHANNELS, Personnel, LoanRecord } from '../types';
 import { formatDate } from '../utils/dateFormat';
 import {
   getFloatRequestsForOwner, createFloatRequest, confirmFloatRequest,
