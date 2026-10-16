@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FloatRequest, FloatReturnEntry, Personnel, LoanRecord } from '../types';
+import { FloatRequest, FloatReturnEntry, FloatReturnChannel, FLOAT_RETURN_CHANNELS, Personnel, LoanRecord } from '../types';
 import { formatDate } from '../utils/dateFormat';
 import {
   getFloatRequestsForOwner, createFloatRequest, confirmFloatRequest,
@@ -19,7 +19,7 @@ interface FloatManagementPanelProps {
 }
 
 interface DraftReturnRow {
-  channel: 'CRDB' | 'YAS' | 'NBC' | 'Other';
+  channel: FloatReturnChannel;
   channelOther: string;
   amount: string;
   receiptFile: string | null;
@@ -41,7 +41,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
   const [repaymentDescriptionInput, setRepaymentDescriptionInput] = useState('');
   const [repaymentError, setRepaymentError] = useState('');
 
-  const emptyRow = (): DraftReturnRow => ({ channel: 'CRDB', channelOther: '', amount: '', receiptFile: null });
+  const emptyRow = (): DraftReturnRow => ({ channel: 'M-Pesa', channelOther: '', amount: '', receiptFile: null });
   const [returnRows, setReturnRows] = useState<DraftReturnRow[]>([emptyRow()]);
   const [returnValidationError, setReturnValidationError] = useState('');
 
@@ -455,14 +455,11 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                         onChange={e => updateReturnRow(idx, { channel: e.target.value as DraftReturnRow['channel'], channelOther: '' })}
                         className="w-full text-sm rounded-lg border border-slate-300 bg-white px-3 py-2 focus:outline-none focus:border-brand-primary font-bold"
                       >
-                        <option value="CRDB">CRDB</option>
-                        <option value="YAS">YAS</option>
-                        <option value="NBC">NBC</option>
-                        <option value="Other">Other</option>
+                        {FLOAT_RETURN_CHANNELS.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                       {row.channel === 'Other' && (
                         <input
-                          type="text" placeholder="e.g. M-Pesa agent, cash handover"
+                          type="text" placeholder="e.g. Selcom, cash handover"
                           value={row.channelOther}
                           onChange={e => updateReturnRow(idx, { channelOther: e.target.value })}
                           className="w-full text-sm rounded-lg border border-slate-300 bg-white px-3 py-2 focus:outline-none focus:border-brand-primary font-medium"

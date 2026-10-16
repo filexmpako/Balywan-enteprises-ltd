@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { FloatRequest, FloatReturnEntry, LoanRecord } from '../types';
+import { FLOAT_RETURN_CHANNELS, type FloatRequest, type FloatReturnEntry, type LoanRecord } from '../types';
 import { fromRow, getMapper, toRow, type CollectionMapper } from './hasidadi/collections';
 import { loadCollection } from './hasidadi/repo.server';
 import { ensurePrivateBucket, ImageUploadError, parseImageDataUrl } from './storageImages.server';
@@ -99,7 +99,7 @@ const totalReturned = (r: FloatRequest) => (r.returnEntries || []).reduce((s, e)
 /** The amount the owner owes back: what was sent, else what was requested. */
 const owedAmount = (r: FloatRequest) => (Number(r.sentAmount) > 0 ? Number(r.sentAmount) : r.requestedAmount);
 
-const CHANNELS = new Set(['CRDB', 'YAS', 'NBC', 'Other']);
+const CHANNELS = new Set<string>(FLOAT_RETURN_CHANNELS);
 
 function cleanEntries(entries: FloatReturnEntry[]): FloatReturnEntry[] {
   if (!Array.isArray(entries) || entries.length === 0) throw new FloatActionError('Add at least one return amount.');

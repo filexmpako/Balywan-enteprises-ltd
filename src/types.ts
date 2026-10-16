@@ -131,9 +131,12 @@ export interface MonthlyTargetUpload {
   importedAt: string;
 }
 
+export const FLOAT_RETURN_CHANNELS = ['M-Pesa', 'Yas', 'Airtel Money', 'HaloPesa', 'T-Pesa', 'NMB', 'CRDB', 'NBC', 'Other'] as const;
+export type FloatReturnChannel = (typeof FLOAT_RETURN_CHANNELS)[number];
+
 export interface FloatReturnEntry {
   id: string;
-  channel: 'CRDB' | 'YAS' | 'NBC' | 'Other';
+  channel: FloatReturnChannel;
   channelOther?: string;
   amount: number;
   receiptPhotoId?: string;
