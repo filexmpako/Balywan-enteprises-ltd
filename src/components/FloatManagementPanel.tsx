@@ -19,7 +19,7 @@ interface FloatManagementPanelProps {
 }
 
 interface DraftReturnRow {
-  channel: 'CRDB' | 'YAS' | 'NBC' | 'Other';
+  channel: FloatReturnChannel;
   channelOther: string;
   amount: string;
   receiptFile: string | null;

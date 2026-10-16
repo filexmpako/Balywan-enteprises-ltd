@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { FloatRequest, FloatReturnEntry, LoanRecord } from '../types';
+import { FLOAT_RETURN_CHANNELS, type FloatRequest, type FloatReturnEntry, type LoanRecord } from '../types';
 import { fromRow, getMapper, toRow, type CollectionMapper } from './hasidadi/collections';
 import { loadCollection } from './hasidadi/repo.server';
 import { ensurePrivateBucket, ImageUploadError, parseImageDataUrl } from './storageImages.server';
