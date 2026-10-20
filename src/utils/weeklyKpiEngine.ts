@@ -154,7 +154,7 @@ const VAL_KEYS = [
 /** The penalty basis: CP_Servicing_Val, the value serviced via a cross-partner network. */
 const CP_VAL_KEYS = [
   'CP_Servicing_Val', 'CP Servicing Val', 'cp_servicing_val',
-  'CP_Servicing_Value', 'cp_servicing_value',
+  'CP_Servicing_Value', 'cp_servicing_value', 'CP_val', 'CP_Val', 'CP Val', 'cp_val',
 ];
 /** The report's own IOP column: volume serviced outside the company for a wakala still in our base. */
 const IOP_KEYS = ['IOP', 'iop', 'Iop'];
