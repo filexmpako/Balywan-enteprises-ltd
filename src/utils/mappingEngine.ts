@@ -37,7 +37,7 @@ const IOP_COLUMN_KEYS = ['IOP'];
 /** The penalty basis: CP_Servicing_Val, the value serviced via a cross-partner network. */
 const CP_SERVICING_VAL_KEYS = [
   'CP_Servicing_Val', 'CP Servicing Val', 'cp_servicing_val',
-  'CP_Servicing_Value', 'cp_servicing_value',
+  'CP_Servicing_Value', 'cp_servicing_value', 'CP_val', 'CP_Val', 'CP Val', 'cp_val',
 ];
 
 function getIopColumnVal(row: any): number {
