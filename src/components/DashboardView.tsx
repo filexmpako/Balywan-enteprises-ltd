@@ -339,17 +339,6 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
     });
   }, [rawKpis, liveTotals]);
 
-  const realPerformanceByKpiId = useMemo(() => {
-    const m = new Map<string, number>();
-    rawKpis.forEach(kpi => {
-      const live = isKpi1RowName(kpi.name) ? liveTotals.kpi1 : (isKpi2RowName(kpi.name) ? liveTotals.kpi2 : null);
-      if (live && live.target > 0) {
-        const realPct = (live.achieved / live.target) * 100;
-        if (realPct > 100) m.set(kpi.id, Math.round(realPct * 10) / 10);
-      }
-    });
-    return m;
-  }, [rawKpis, liveTotals]);
 
   const defaultCompanyKPIs: CompanyKPIsResult = {
     openingFloat: 0,
@@ -538,24 +527,6 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
     return getSemanticBadgeInfo(status, performance).progressClass;
   };
 
-  const getActionRecommendation = (kpiName: string) => {
-    const nameLower = kpiName.toLowerCase();
-    if (nameLower.includes('value') || nameLower.includes('servicing')) {
-      return "Mobilize top regional distributors in underperforming zones and adjust local liquidity float rules.";
-    }
-    if (nameLower.includes('active') || nameLower.includes('wakala')) {
-      return "Substantial inactive wakalas detected. Implement localized promotional incentives and dispatch territory support.";
-    }
-    if (nameLower.includes('product') || nameLower.includes('seller')) {
-      return "Low seller engagement. Conduct targeted onboarding workshops and evaluate terminal commissions.";
-    }
-    return "Perform localized operational audit. Contact regional owners to optimize terminal liquidity limits.";
-  };
-
-  const highPriorityKPIs = kpis.filter(kpi => {
-    const norm = getSemanticBadgeInfo(kpi.status, kpi.performance).normalized;
-    return norm === 'CRITICAL' || norm === 'NEEDS ATTENTION';
-  });
 
   return (
     <motion.div 
