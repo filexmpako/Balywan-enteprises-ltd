@@ -39,7 +39,6 @@ import {
   ExternalLink, 
   AlertCircle,
   AlertTriangle,
-  CheckCircle2,
   DollarSign,
   Activity,
   Calendar,
