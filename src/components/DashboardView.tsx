@@ -39,7 +39,6 @@ import {
   ExternalLink, 
   AlertCircle,
   AlertTriangle,
-  CheckCircle2,
   DollarSign,
   Activity,
   Calendar,
@@ -339,17 +338,6 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
     });
   }, [rawKpis, liveTotals]);
 
-  const realPerformanceByKpiId = useMemo(() => {
-    const m = new Map<string, number>();
-    rawKpis.forEach(kpi => {
-      const live = isKpi1RowName(kpi.name) ? liveTotals.kpi1 : (isKpi2RowName(kpi.name) ? liveTotals.kpi2 : null);
-      if (live && live.target > 0) {
-        const realPct = (live.achieved / live.target) * 100;
-        if (realPct > 100) m.set(kpi.id, Math.round(realPct * 10) / 10);
-      }
-    });
-    return m;
-  }, [rawKpis, liveTotals]);
 
   const defaultCompanyKPIs: CompanyKPIsResult = {
     openingFloat: 0,
@@ -538,24 +526,6 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
     return getSemanticBadgeInfo(status, performance).progressClass;
   };
 
-  const getActionRecommendation = (kpiName: string) => {
-    const nameLower = kpiName.toLowerCase();
-    if (nameLower.includes('value') || nameLower.includes('servicing')) {
-      return "Mobilize top regional distributors in underperforming zones and adjust local liquidity float rules.";
-    }
-    if (nameLower.includes('active') || nameLower.includes('wakala')) {
-      return "Substantial inactive wakalas detected. Implement localized promotional incentives and dispatch territory support.";
-    }
-    if (nameLower.includes('product') || nameLower.includes('seller')) {
-      return "Low seller engagement. Conduct targeted onboarding workshops and evaluate terminal commissions.";
-    }
-    return "Perform localized operational audit. Contact regional owners to optimize terminal liquidity limits.";
-  };
-
-  const highPriorityKPIs = kpis.filter(kpi => {
-    const norm = getSemanticBadgeInfo(kpi.status, kpi.performance).normalized;
-    return norm === 'CRITICAL' || norm === 'NEEDS ATTENTION';
-  });
 
   return (
     <motion.div 
@@ -1100,11 +1070,8 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
         animate={{ y: 0, opacity: 1 }}
         className="rounded-2xl border border-brand-gray-border bg-brand-card p-6 shadow-ambient"
       >
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-brand-gray-border pb-5">
-          <div>
-            <h3 className="font-sans text-lg font-bold text-brand-text">KPI Performance Summary</h3>
-            <p className="font-sans text-xs text-brand-text-variant mt-0.5">Real-time status of critical monthly performance indicators.</p>
-          </div>
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="font-sans text-lg font-bold text-brand-text">KPI Summary</h3>
           {companyKPIs.reportingMonth !== '—' && kpis.length > 0 && (
             <button 
               onClick={() => onNavigate(ViewType.KPI_REPORTS)}
@@ -1137,126 +1104,36 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
             </button>
           </div>
         ) : (
-          <>
-            {/* High-Priority KPIs Attention Summary Block */}
-            {highPriorityKPIs.length > 0 ? (
-              <div className="mt-5 p-4 rounded-2xl border border-brand-gray-border bg-brand-gray-hover/30">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="flex h-2.5 w-2.5 rounded-full bg-status-error-text animate-pulse shrink-0" />
-                  <h4 className="font-sans text-xs font-bold uppercase tracking-wider text-status-error-text">Action Required: Priority KPI Attention Summary</h4>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {highPriorityKPIs.map(kpi => {
-                    const badge = getSemanticBadgeInfo(kpi.status, kpi.performance);
-                    const isCritical = badge.normalized === 'CRITICAL';
-                    return (
-                      <div 
-                        key={`high-priority-${kpi.id}`}
-                        className="p-6 rounded-[24px] bg-brand-card border border-brand-gray-border/80 shadow-[0_8px_30px_rgba(0,0,0,0.04)] flex flex-col justify-between transition-all duration-300 hover:scale-[1.01] hover:shadow-[0_12px_40px_rgba(0,0,0,0.08)]"
-                      >
-                        <div>
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              {isCritical ? (
-                                <span className="inline-flex items-center gap-1 px-3 py-1 font-sans text-[10px] font-black uppercase tracking-wider text-white bg-status-error-text border border-status-error-border rounded-lg shadow-sm animate-pulse">
-                                  <AlertCircle className="h-3.5 w-3.5 text-white" />
-                                  CRITICAL
-                                </span>
-                              ) : (
-                                <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 font-sans text-[10px] font-bold uppercase tracking-wider ${badge.bgClass}`}>
-                                  <AlertCircle className="h-3 w-3" />
-                                  {badge.badgeText}
-                                </span>
-                              )}
-                              <h5 className="font-sans text-sm font-extrabold text-brand-text mt-3.5">{kpi.name}</h5>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <span className="block font-sans text-[10px] text-brand-text-variant uppercase font-bold tracking-wider">MTD Perf.</span>
-                              <span className={`font-mono text-base font-black ${isCritical ? 'text-status-error-text' : 'text-status-warning-text'}`}>{kpi.performance}%</span>
-                            </div>
-                          </div>
-                          <p className="font-sans text-xs text-brand-text-variant font-medium mt-3 leading-relaxed">
-                            {getActionRecommendation(kpi.name)}
-                          </p>
-                        </div>
-                        <div className="mt-5 pt-3.5 border-t border-dashed border-brand-gray-border flex items-center justify-between text-[11px]">
-                          <span className="font-sans font-medium text-brand-text-variant">Target: <strong className="font-mono text-brand-text font-bold">{kpi.target}</strong></span>
-                          <span className="font-sans font-medium text-brand-text-variant">Achieved: <strong className="font-mono text-brand-text font-bold">{kpi.achieved}</strong></span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : (
-              <div className="mt-5 p-4 rounded-2xl border border-status-success-border/30 bg-status-success-bg/30 flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-status-success-bg/80 text-status-success-text shrink-0">
-                  <CheckCircle2 className="h-5 w-5" />
-                </div>
-                <div>
-                  <h5 className="font-sans text-xs font-bold text-status-success-text">Operational Summary Healthy</h5>
-                  <p className="font-sans text-xs text-status-success-text/90 mt-0.5">All tracked key performance indicators are currently on track or achieved. Operational targets are stabilized.</p>
-                </div>
-              </div>
-            )}
-
-            {/* Every KPI as its own status card */}
-            <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {kpis.map((kpi) => {
-                const badge = getSemanticBadgeInfo(kpi.status, kpi.performance);
-                return (
-                  <button
-                    key={kpi.id}
-                    onClick={() => onNavigate(ViewType.KPI_REPORTS)}
-                    className="text-left p-5 rounded-2xl bg-brand-card border border-brand-gray-border shadow-xs hover:shadow-ambient hover:border-brand-primary/40 transition-all cursor-pointer"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-primary-container/40 text-brand-primary shrink-0">
-                          <Layers className="h-5 w-5" />
-                        </div>
-                        <h4 className="font-sans text-sm font-extrabold text-brand-text leading-snug">{kpi.name}</h4>
-                      </div>
-                      <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 font-sans text-[10px] font-bold tracking-wider whitespace-nowrap ${badge.bgClass}`}>
-                        {badge.badgeText}
-                      </span>
-                    </div>
-
-                    <div className="mt-4 flex items-end justify-between">
-                      <div>
-                        <p className="font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">Performance</p>
-                        <p className="font-mono text-2xl font-black text-brand-text">
-                          {kpi.performance}%
-                          {realPerformanceByKpiId.has(kpi.id) && (
-                            <span className="ml-1 font-sans text-[10px] font-semibold text-brand-primary align-middle">
-                              real: {realPerformanceByKpiId.get(kpi.id)}%
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-sans text-[10px] font-bold uppercase tracking-wider text-brand-text-variant">MTD Achieved</p>
-                        <p className="font-mono text-sm font-bold text-brand-primary">{kpi.achieved}</p>
-                      </div>
-                    </div>
-
-                    <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-brand-gray-hover/40">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${Math.min(100, kpi.performance)}%` }}
-                        transition={{ duration: 1, ease: 'easeOut' }}
-                        className={`h-full rounded-full ${getProgressColor(kpi.status, kpi.performance)}`}
-                      />
-                    </div>
-
-                    <p className="mt-2.5 font-sans text-[11px] text-brand-text-variant">
-                      Target: <strong className="font-mono text-brand-text">{kpi.target}</strong>
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
-          </>
+          <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            {kpis.map((kpi) => {
+              const badge = getSemanticBadgeInfo(kpi.status, kpi.performance);
+              return (
+                <button
+                  key={kpi.id}
+                  onClick={() => onNavigate(ViewType.KPI_REPORTS)}
+                  className="text-left p-4 rounded-xl border border-brand-gray-border bg-brand-card hover:border-brand-primary/40 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="font-sans text-sm font-bold text-brand-text truncate">{kpi.name}</h4>
+                    <span className={`shrink-0 rounded-full border px-2 py-0.5 font-sans text-[10px] font-bold ${badge.bgClass}`}>
+                      {badge.badgeText}
+                    </span>
+                  </div>
+                  <p className="mt-3 font-mono text-2xl font-black text-brand-text">{kpi.performance}%</p>
+                  <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-brand-gray-hover/40">
+                    <div
+                      className={`h-full rounded-full ${getProgressColor(kpi.status, kpi.performance)}`}
+                      style={{ width: `${Math.min(100, kpi.performance)}%` }}
+                    />
+                  </div>
+                  <div className="mt-3 flex justify-between font-sans text-[11px] text-brand-text-variant">
+                    <span>Target <strong className="font-mono text-brand-text">{kpi.target}</strong></span>
+                    <span>Achieved <strong className="font-mono text-brand-text">{kpi.achieved}</strong></span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         )}
       </motion.div>
 
