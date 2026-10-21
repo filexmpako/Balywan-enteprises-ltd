@@ -785,11 +785,6 @@ export default function OwnerDetailsView({
     }
 
     const effectiveOwnerId = targetOwnerId || localOwner.id;
-    const ownerRows = classified.filter(cr => 
-      cr.attributedOwnerId === effectiveOwnerId || 
-      cr.auditRecord?.ownerId === effectiveOwnerId
-    );
-
     const manualTargets = manualTargetsList;
 
     const period = currentPeriod;
