@@ -19,7 +19,7 @@ import { CLOUD_HYDRATED_EVENT } from '../lib/cloudSyncEvents';
 interface Props {
   ownerId: string;
   monthlyTarget: number;
-  onLatestActivity?: (active: number, inactive: number) => void;
+  onLatestActivity?: (active: number | null, inactive: number | null) => void;
 }
 
 interface WakalaStatusRow {
@@ -133,7 +133,11 @@ export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget, onLates
   const series = ownerWeeklySeries(history, ownerId, currentPeriod);
   const latest = [...series].reverse().find(entry => entry.breakdown) || null;
   useEffect(() => {
-    if (!latest?.breakdown || !onLatestActivity) return;
+    if (!onLatestActivity) return;
+    if (!latest?.breakdown) {
+      onLatestActivity(null, null);
+      return;
+    }
     const active = latest.breakdown.active ?? 0;
     const total = latest.breakdown.total ?? (active + (latest.breakdown.inactive ?? 0));
     onLatestActivity(active, Math.max(0, total - active));

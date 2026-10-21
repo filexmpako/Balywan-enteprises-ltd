@@ -207,7 +207,11 @@ export default function OwnerDetailsView({
   const [servicingRows, setServicingRows] = useState<any[]>([]);
   const [loadingMetrics, setLoadingMetrics] = useState(true);
   const [latestWeeklyActivity, setLatestWeeklyActivity] = useState<{ active: number; inactive: number } | null>(null);
-  const handleLatestWeeklyActivity = useCallback((active: number, inactive: number) => {
+  const handleLatestWeeklyActivity = useCallback((active: number | null, inactive: number | null) => {
+    if (active === null || inactive === null) {
+      setLatestWeeklyActivity(null);
+      return;
+    }
     setLatestWeeklyActivity(current =>
       current?.active === active && current?.inactive === inactive ? current : { active, inactive }
     );
@@ -217,10 +221,6 @@ export default function OwnerDetailsView({
     // Sync localOwner if selectedOwnerName changes
     setLocalOwner(owner);
   }, [selectedOwnerName, registryVersion]);
-
-  useEffect(() => {
-    setLatestWeeklyActivity(null);
-  }, [selectedOwnerName, currentPeriod]);
 
   const loadData = useCallback(async () => {
     try {
@@ -1194,7 +1194,7 @@ export default function OwnerDetailsView({
             </div>
           </div>
 
-          <DailyMgtSummary classified={ownerMtdData.classified} period={currentPeriod} ownerId={ownerMtdData.ownerId} />
+          {!loadingMetrics && <DailyMgtSummary classified={ownerMtdData.classified} period={currentPeriod} ownerId={ownerMtdData.ownerId} />}
 
           {/* Settlement Section — report figures (Monthly report once uploaded, else the latest weekly report), kept apart from Daily MGT so the source is never ambiguous */}
           <div className="space-y-2">
