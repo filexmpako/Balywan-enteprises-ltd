@@ -96,9 +96,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (sessionUser && active) {
           const session = await buildSession(sessionUser.id, sessionUser.email || '');
           if (session && active) {
+            await hydrateFromCloud();
+            if (!active) return;
             setUser(session);
             localStorage.setItem('hasidadi_current_user', JSON.stringify(session));
-            void hydrateFromCloud();
           }
         }
       } finally {

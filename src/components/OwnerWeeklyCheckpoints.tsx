@@ -13,6 +13,8 @@ import { fetchWakalaStatusHistory } from '../lib/wakalaStatus.functions';
 import { normalizeMsisdn } from '../utils/msisdn';
 import { buildWakalaNameMap } from '../utils/wakalaName';
 import type { BaseWakala } from '../types';
+import { useReportingPeriod } from './ReportingPeriodContext';
+import { CLOUD_HYDRATED_EVENT } from '../lib/cloudSyncEvents';
 
 interface Props {
   ownerId: string;
@@ -89,6 +91,7 @@ function matchesFilter(w: WakalaStatusRow, filter: DetailFilter, ctx: FilterCont
 }
 
 export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget, onLatestActivity }: Props) {
+  const { currentPeriod } = useReportingPeriod();
   const [history, setHistory] = useState<WeeklyStatsEntry[]>(() => readWeeklyStatsHistory());
   const [expandedWeek, setExpandedWeek] = useState<string | null>(null);
   const [weekDetail, setWeekDetail] = useState<Record<string, WakalaStatusRow[] | 'loading' | 'error'>>({});
@@ -119,13 +122,15 @@ export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget, onLates
     };
     load();
     window.addEventListener('weekly-kpi-updated', load);
+    window.addEventListener(CLOUD_HYDRATED_EVENT, load);
     return () => {
       cancelled = true;
       window.removeEventListener('weekly-kpi-updated', load);
+      window.removeEventListener(CLOUD_HYDRATED_EVENT, load);
     };
   }, []);
 
-  const series = ownerWeeklySeries(history, ownerId);
+  const series = ownerWeeklySeries(history, ownerId, currentPeriod);
   const latest = [...series].reverse().find(entry => entry.breakdown) || null;
   useEffect(() => {
     if (!latest?.breakdown || !onLatestActivity) return;
