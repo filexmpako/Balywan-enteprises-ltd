@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, test } from 'node:test';
+import assert from 'node:assert/strict';
 import { ownerWeeklySeries, type WeeklyStatsEntry } from './weeklyKpiEngine';
 
 const entry = (month: string, week: number, value: number): WeeklyStatsEntry => ({
@@ -16,11 +17,11 @@ describe('owner weekly reporting', () => {
     const series = ownerWeeklySeries([
       entry('October', 3, 300), entry('September', 3, 900), entry('October', 2, 200),
     ], 'petro', '2026-10');
-    expect(series.map(s => s.cumulativeValue)).toEqual([200, 300]);
+    assert.deepEqual(series.map(s => s.cumulativeValue), [200, 300]);
   });
   test('an owner never receives another owner’s weekly totals', () => {
     const series = ownerWeeklySeries([entry('October', 2, 200)], 'another-owner', '2026-10');
-    expect(series[0]?.breakdown).toBeNull();
-    expect(series[0]?.cumulativeValue).toBe(0);
+    assert.equal(series[0]?.breakdown, null);
+    assert.equal(series[0]?.cumulativeValue, 0);
   });
 });
