@@ -62,6 +62,7 @@ import { resolveOwnerMatch } from '../utils/ownerMatch';
 import { ManualOwnerTarget } from '../types';
 import { useAuth } from './AuthContext';
 import { useReportingPeriod } from './ReportingPeriodContext';
+import { CLOUD_HYDRATED_EVENT } from '../lib/cloudSyncEvents';
 import DeleteOwnerModal from './DeleteOwnerModal';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
@@ -111,6 +112,7 @@ export default function OwnerDetailsView({
   selectedOwnerName,
   isStandaloneAgent = false}: OwnerDetailsViewProps) {
   const { currentPeriod } = useReportingPeriod();
+  const [registryVersion, setRegistryVersion] = useState(0);
   // Try to find selected owner in our list; fallback to first owner
   const owner = (() => {
     const saved = localStorage.getItem('ownersList');
@@ -196,7 +198,7 @@ export default function OwnerDetailsView({
       }
     }
     return ownersList;
-  }, []);
+  }, [registryVersion]);
 
   const [localOwner, setLocalOwner] = useState<Owner>(owner as Owner);
   const [activeTab, setActiveTab] = useState<'overview' | 'wakalas' | 'location' | 'float'>('overview');
@@ -205,7 +207,11 @@ export default function OwnerDetailsView({
   const [servicingRows, setServicingRows] = useState<any[]>([]);
   const [loadingMetrics, setLoadingMetrics] = useState(true);
   const [latestWeeklyActivity, setLatestWeeklyActivity] = useState<{ active: number; inactive: number } | null>(null);
-  const handleLatestWeeklyActivity = useCallback((active: number, inactive: number) => {
+  const handleLatestWeeklyActivity = useCallback((active: number | null, inactive: number | null) => {
+    if (active === null || inactive === null) {
+      setLatestWeeklyActivity(null);
+      return;
+    }
     setLatestWeeklyActivity(current =>
       current?.active === active && current?.inactive === inactive ? current : { active, inactive }
     );
@@ -214,7 +220,7 @@ export default function OwnerDetailsView({
   useEffect(() => {
     // Sync localOwner if selectedOwnerName changes
     setLocalOwner(owner);
-  }, [selectedOwnerName]);
+  }, [selectedOwnerName, registryVersion]);
 
   const loadData = useCallback(async () => {
     try {
@@ -241,9 +247,16 @@ export default function OwnerDetailsView({
     loadData();
 
     const handleUpdate = () => { loadData(); };
+    const handleHydrated = () => {
+      setRegistryVersion(v => v + 1);
+      try { setTillsList(JSON.parse(localStorage.getItem('tillsList') || '[]')); } catch { /* retain last good registry */ }
+      void loadData();
+    };
     window.addEventListener('servicing-rows-updated', handleUpdate);
+    window.addEventListener(CLOUD_HYDRATED_EVENT, handleHydrated);
     return () => {
       window.removeEventListener('servicing-rows-updated', handleUpdate);
+      window.removeEventListener(CLOUD_HYDRATED_EVENT, handleHydrated);
     };
   }, [loadData]);
 
@@ -620,7 +633,7 @@ export default function OwnerDetailsView({
       normalWakalaCount: portfolio.normalCount,
       hasPriorityData: portfolio.hasPriorityData,
     };
-  }, [localOwner, currentPeriod]);
+  }, [localOwner, currentPeriod, registryVersion]);
 
   // Roster wakala with no row in the latest weekly report had no recorded
   // activity that week, so they count as inactive: Active + Inactive = Wakala.
@@ -772,23 +785,6 @@ export default function OwnerDetailsView({
     }
 
     const effectiveOwnerId = targetOwnerId || localOwner.id;
-    const ownerRows = classified.filter(cr => 
-      cr.attributedOwnerId === effectiveOwnerId || 
-      cr.auditRecord?.ownerId === effectiveOwnerId
-    );
-
-    console.log('=== JACKSON DIAGNOSTIC ===');
-    console.log('Total rows attributed to this owner:', ownerRows.length);
-    const bucketCounts: Record<string, number> = { BASE: 0, IOP: 0, SA_INTERNAL: 0, BASE_CROSS_OWNER: 0 };
-    const bucketVolumes: Record<string, number> = { BASE: 0, IOP: 0, SA_INTERNAL: 0, BASE_CROSS_OWNER: 0 };
-    ownerRows.forEach(cr => {
-      bucketCounts[cr.bucket] = (bucketCounts[cr.bucket] || 0) + 1;
-      bucketVolumes[cr.bucket] = (bucketVolumes[cr.bucket] || 0) + (cr.auditRecord?.amount || 0);
-    });
-    console.log('Row counts per bucket:', bucketCounts);
-    console.log('Volume per bucket:', bucketVolumes);
-    console.log('Sample IOP rows (first 5):', ownerRows.filter(cr => cr.bucket === 'IOP').slice(0, 5));
-
     const manualTargets = manualTargetsList;
 
     const period = currentPeriod;
@@ -1198,7 +1194,7 @@ export default function OwnerDetailsView({
             </div>
           </div>
 
-          <DailyMgtSummary classified={ownerMtdData.classified} period={currentPeriod} ownerId={ownerMtdData.ownerId} />
+          {!loadingMetrics && <DailyMgtSummary classified={ownerMtdData.classified} period={currentPeriod} ownerId={ownerMtdData.ownerId} />}
 
           {/* Settlement Section — report figures (Monthly report once uploaded, else the latest weekly report), kept apart from Daily MGT so the source is never ambiguous */}
           <div className="space-y-2">

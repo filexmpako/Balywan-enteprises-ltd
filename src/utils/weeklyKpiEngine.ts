@@ -17,6 +17,7 @@
 
 import { BaseWakala, Owner } from '../types';
 import { normalizeMsisdn } from './msisdn';
+import { periodsMatch } from './periodUtils';
 import { resolveOwnerMatch } from './ownerMatch';
 import {
   getActiveStatusFromColumn,
@@ -446,9 +447,17 @@ export function withCumulativeValue(entries: WeeklyStatsEntry[]): Array<WeeklySt
 /** Month-to-date servicing value for one owner as of each week, in week order. */
 export function ownerWeeklySeries(
   entries: WeeklyStatsEntry[],
-  ownerId: string
+  ownerId: string,
+  reportingMonth?: string,
 ): Array<{ reportingWeek: string; breakdown: WeeklyOwnerBreakdown | null; cumulativeValue: number }> {
-  return entries.map(e => {
+  return entries
+    .filter(e => !reportingMonth || periodsMatch(e.reportingMonth || e.reportingWeek, reportingMonth))
+    .sort((a, b) => {
+      const dateA = parseWeekDateRange(a.reportingWeek)?.end || '';
+      const dateB = parseWeekDateRange(b.reportingWeek)?.end || '';
+      return dateA.localeCompare(dateB) || weekNumberOf(a.reportingWeek) - weekNumberOf(b.reportingWeek);
+    })
+    .map(e => {
     const breakdown = (e.byOwner || []).find(b => b.ownerId === ownerId) || null;
     return { reportingWeek: e.reportingWeek, breakdown, cumulativeValue: breakdown?.value || 0 };
   });

@@ -13,11 +13,13 @@ import { fetchWakalaStatusHistory } from '../lib/wakalaStatus.functions';
 import { normalizeMsisdn } from '../utils/msisdn';
 import { buildWakalaNameMap } from '../utils/wakalaName';
 import type { BaseWakala } from '../types';
+import { useReportingPeriod } from './ReportingPeriodContext';
+import { CLOUD_HYDRATED_EVENT } from '../lib/cloudSyncEvents';
 
 interface Props {
   ownerId: string;
   monthlyTarget: number;
-  onLatestActivity?: (active: number, inactive: number) => void;
+  onLatestActivity?: (active: number | null, inactive: number | null) => void;
 }
 
 interface WakalaStatusRow {
@@ -89,6 +91,7 @@ function matchesFilter(w: WakalaStatusRow, filter: DetailFilter, ctx: FilterCont
 }
 
 export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget, onLatestActivity }: Props) {
+  const { currentPeriod } = useReportingPeriod();
   const [history, setHistory] = useState<WeeklyStatsEntry[]>(() => readWeeklyStatsHistory());
   const [expandedWeek, setExpandedWeek] = useState<string | null>(null);
   const [weekDetail, setWeekDetail] = useState<Record<string, WakalaStatusRow[] | 'loading' | 'error'>>({});
@@ -119,16 +122,22 @@ export default function OwnerWeeklyCheckpoints({ ownerId, monthlyTarget, onLates
     };
     load();
     window.addEventListener('weekly-kpi-updated', load);
+    window.addEventListener(CLOUD_HYDRATED_EVENT, load);
     return () => {
       cancelled = true;
       window.removeEventListener('weekly-kpi-updated', load);
+      window.removeEventListener(CLOUD_HYDRATED_EVENT, load);
     };
   }, []);
 
-  const series = ownerWeeklySeries(history, ownerId);
+  const series = ownerWeeklySeries(history, ownerId, currentPeriod);
   const latest = [...series].reverse().find(entry => entry.breakdown) || null;
   useEffect(() => {
-    if (!latest?.breakdown || !onLatestActivity) return;
+    if (!onLatestActivity) return;
+    if (!latest?.breakdown) {
+      onLatestActivity(null, null);
+      return;
+    }
     const active = latest.breakdown.active ?? 0;
     const total = latest.breakdown.total ?? (active + (latest.breakdown.inactive ?? 0));
     onLatestActivity(active, Math.max(0, total - active));

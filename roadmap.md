@@ -2,3 +2,4 @@
 - [ ] Make the navigation collapsible
 - [ ] Redesign the settings page professionally
 - [ ] Verify weekly reporting, settings, and navigation
+- [x] Verify October weekly and Daily MGT profile loading after cloud hydration

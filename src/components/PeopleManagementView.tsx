@@ -43,6 +43,7 @@ import { assignTillsToPerson, recalculateAllPerformances } from '../utils/mappin
 import { normalizeMsisdn } from '../utils/msisdn';
 import OwnerDetailsView from './OwnerDetailsView';
 import DeleteOwnerModal from './DeleteOwnerModal';
+import { CLOUD_HYDRATED_EVENT } from '../lib/cloudSyncEvents';
 
 // Default Role Mappings for Title classification
 const DEFAULT_ROLE_MAPPINGS = {
@@ -93,7 +94,11 @@ export default function PeopleManagementView({
       setSaTillLastUpdated(localStorage.getItem('saTillRegistry_lastUpdated') || null);
     };
     window.addEventListener('storage', reload);
-    return () => window.removeEventListener('storage', reload);
+    window.addEventListener(CLOUD_HYDRATED_EVENT, reload);
+    return () => {
+      window.removeEventListener('storage', reload);
+      window.removeEventListener(CLOUD_HYDRATED_EVENT, reload);
+    };
   }, []);
   const [stagedSaTills, setStagedSaTills] = useState<{ tillMsisdn: string; ownerName?: string; registeredAt: string; isUpdate?: boolean }[] | null>(null);
   const [saTillSearchQuery, setSaTillSearchQuery] = useState('');
