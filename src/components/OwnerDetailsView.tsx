@@ -8,6 +8,7 @@ import { getActiveStatusFromColumn, mergeServicedStatus, preferColumnStatus } fr
 import { ownersList } from '../data';
 import WorkLocationSection from './WorkLocationSection';
 import TransactionHistorySection from './TransactionHistorySection';
+import OwnerKpiOverview from './OwnerKpiOverview';
 import OwnerWeeklyCheckpoints from './OwnerWeeklyCheckpoints';
 import WakalaIssuesPanel from './WakalaIssuesPanel';
 import { getAvatarUrl } from '../utils/avatar';
@@ -1047,6 +1048,7 @@ export default function OwnerDetailsView({
 
       {activeTab === 'overview' && (
         <>
+          <OwnerKpiOverview ownerId={localOwner.id} ownerName={localOwner.name || ""} period={currentPeriod} servedValue={ownerMtdData.servedVolume} monthlyTarget={ownerMtdData.monthlyTarget || 0} registryVersion={registryVersion} />
           {/* Portfolio Snapshot */}
           <div className="space-y-2">
             <h3 className="font-sans text-xs font-black uppercase text-brand-text-variant tracking-wider font-mono">
