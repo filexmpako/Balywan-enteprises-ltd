@@ -31,7 +31,7 @@ function Table({ title, head, rows }: { title: string; head: string[]; rows: (st
       <h4 className="mb-1.5 font-sans text-[11px] font-black uppercase tracking-wider text-brand-text">{title}</h4>
       <table className="w-full min-w-[620px] text-left font-sans text-xs">
         <thead>
-          <tr className="bg-brand-primary text-brand-on-primary">
+          <tr className="bg-brand-primary text-primary-foreground">
             {head.map((h, i) => (
               <th key={h} className={`px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider ${i > 1 ? 'text-right' : ''}`}>{h}</th>
             ))}
