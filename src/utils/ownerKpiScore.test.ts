@@ -1,4 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+const expect = (a: unknown) => ({ toBe: (b: unknown) => assert.equal(a, b) });
 import { scoreOwnerKpis } from './ownerKpiScore';
 
 const sample = scoreOwnerKpis({
