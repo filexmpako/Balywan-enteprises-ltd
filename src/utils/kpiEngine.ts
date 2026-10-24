@@ -1,6 +1,7 @@
 import { ClassifiedRow } from './classification';
 import { Owner, ManualOwnerTarget } from '../types';
 import { resolveOwnerTarget, getSavedManualOwnerTargets } from './targetResolution';
+import { weightedKpi1 } from './ownerKpiScore';
 import { formatToISODate } from './mappingEngine';
 import { parseWeekDateRange, type WeeklyStatsEntry } from './weeklyKpiEngine';
 import { periodsMatch, toIsoPeriod } from './periodUtils';
@@ -25,11 +26,30 @@ export function filterClassifiedRowsToPeriod(rows: ClassifiedRow[], period?: str
 
 export type KPI1Status = 'Green' | 'Blue' | 'Yellow' | 'Red';
 
+/** Where a served figure came from. */
+export type MtdSource = 'daily' | 'weekly' | 'monthly';
+
 export interface OwnerMtdVolumeResult {
+  /** Base + IOP: the KPI 1 served value. */
   servedVolume: number;
   baseVolume: number;
   iopVolume: number;
+  baseSource: MtdSource;
+  iopSource: MtdSource;
+  /** Daily MGT alone, for comparison. */
+  dailyBase: number;
+  dailyIop: number;
 }
+
+/** The month's Monthly report per owner: SA servicing value (Base) and IOP. Final once uploaded. */
+export interface MonthlyServedValues {
+  servedValueByOwner: Map<string, number>;
+  iopValueByOwner: Map<string, number>;
+}
+
+const emptyVolume = (): OwnerMtdVolumeResult => ({
+  servedVolume: 0, baseVolume: 0, iopVolume: 0, baseSource: 'daily', iopSource: 'daily', dailyBase: 0, dailyIop: 0,
+});
 
 /**
  * The newest weekly-report entry for `period`, by the end date of its week
@@ -110,38 +130,6 @@ export function dailyIopForPeriod(
   return total;
 }
 
-/**
- * Per owner: the greater of Daily MGT's month-to-date served volume and the
- * latest weekly report's served value for the month. The telco weekly report
- * is itself month-to-date (its Month column is the whole month and its
- * values track Daily MGT's MTD totals), so weeks must not be added to each
- * other or to earlier Daily MGT days — that double counts. `classifiedRows`
- * must already be cut to `period`.
- */
-function calculateServedVolumeWithWeeklyMax(
-  classifiedRows: ClassifiedRow[],
-  weeklyStats: WeeklyStatsEntry[],
-  period: string
-): Map<string, number> {
-  const dailyByOwner = new Map<string, number>();
-  classifiedRows.forEach(cr => {
-    if (cr.bucket !== 'BASE' && cr.bucket !== 'IOP') return;
-    const ownerId = mtdOwnerKey(cr);
-    dailyByOwner.set(ownerId, (dailyByOwner.get(ownerId) || 0) + (cr.auditRecord?.amount || 0));
-  });
-
-  const reportByOwner = new Map<string, number>();
-  (latestWeeklyEntryForPeriod(weeklyStats, period)?.byOwner || []).forEach(b => {
-    if (b.ownerId) reportByOwner.set(b.ownerId, b.value || 0);
-  });
-
-  const servedByOwner = new Map<string, number>();
-  new Set([...dailyByOwner.keys(), ...reportByOwner.keys()]).forEach(ownerId => {
-    servedByOwner.set(ownerId, Math.max(dailyByOwner.get(ownerId) || 0, reportByOwner.get(ownerId) || 0));
-  });
-  return servedByOwner;
-}
-
 /** Volume with no owner, keyed like the weekly / monthly reports' unassigned bucket. */
 export const UNASSIGNED_OWNER_KEY = '__unassigned__';
 
@@ -151,95 +139,95 @@ function mtdOwnerKey(cr: ClassifiedRow): string {
 }
 
 /**
- * Calculates MTD volume breakdown (served, base, iop) across classified rows for all owners,
- * plus volume with no owner under UNASSIGNED_OWNER_KEY (counted in company totals).
- * Only rows dated in `period` count when a period is given. Base/IOP split always comes from
- * Daily MGT classification. When weeklyStats + period are given, `servedVolume` (the figure
- * KPI1 achievement is measured against) is the greater of Daily MGT and the latest weekly
- * report for the month (see calculateServedVolumeWithWeeklyMax).
- * When the month's own Monthly report is given (`monthlyServedValue`, owner id ->
- * servicing value), it is final: `servedVolume` is that report's value.
+ * Month-to-date Base and IOP served per owner, plus volume with no owner under
+ * UNASSIGNED_OWNER_KEY (counted in company totals). Only rows dated in
+ * `period` count. Each type is the greater of Daily MGT and the latest weekly
+ * report for the month (Base = the report's SA servicing value, IOP = its IOP
+ * column); the telco weekly report is itself month-to-date, so weeks are never
+ * added together. The month's own Monthly report (`monthly`) is final for both.
+ * servedVolume, the KPI 1 served value, is Base + IOP.
  */
 export function calculateMtdVolumes(
   allClassifiedRows: ClassifiedRow[],
   weeklyStats?: WeeklyStatsEntry[],
   period?: string,
-  monthlyServedValue?: Map<string, number>
+  monthly?: MonthlyServedValues | null
 ): Map<string, OwnerMtdVolumeResult> {
   const result = new Map<string, OwnerMtdVolumeResult>();
-  const classifiedRows = filterClassifiedRowsToPeriod(allClassifiedRows, period);
+  const get = (ownerId: string) => {
+    let v = result.get(ownerId);
+    if (!v) result.set(ownerId, (v = emptyVolume()));
+    return v;
+  };
 
-  for (const cr of classifiedRows) {
+  for (const cr of filterClassifiedRowsToPeriod(allClassifiedRows, period)) {
     if (cr.bucket !== 'BASE' && cr.bucket !== 'IOP') continue;
-    const actingOwnerId = mtdOwnerKey(cr);
+    const v = get(mtdOwnerKey(cr));
     const amount = cr.auditRecord?.amount || 0;
+    if (cr.bucket === 'BASE') v.dailyBase += amount;
+    else v.dailyIop += amount;
+  }
 
-    let existing = result.get(actingOwnerId);
-    if (!existing) {
-      existing = { servedVolume: 0, baseVolume: 0, iopVolume: 0 };
-      result.set(actingOwnerId, existing);
+  const report = new Map<string, { base: number; iop: number }>();
+  let source: MtdSource = 'daily';
+  if (monthly) {
+    source = 'monthly';
+    monthly.servedValueByOwner.forEach((base, ownerId) => report.set(ownerId, { base, iop: monthly.iopValueByOwner.get(ownerId) || 0 }));
+    monthly.iopValueByOwner.forEach((iop, ownerId) => { if (!report.has(ownerId)) report.set(ownerId, { base: 0, iop }); });
+  } else if (weeklyStats?.length && period) {
+    const entry = latestWeeklyEntryForPeriod(weeklyStats, period);
+    if (entry) source = 'weekly';
+    (entry?.byOwner || []).forEach(b => {
+      if (b.ownerId) report.set(b.ownerId, { base: b.value || 0, iop: b.iopValue || 0 });
+    });
+  }
+  report.forEach((_, ownerId) => get(ownerId));
+
+  result.forEach((v, ownerId) => {
+    const r = report.get(ownerId) || { base: 0, iop: 0 };
+    if (source === 'monthly') {
+      v.baseVolume = r.base;
+      v.iopVolume = r.iop;
+      v.baseSource = v.iopSource = 'monthly';
+    } else {
+      v.baseVolume = Math.max(v.dailyBase, r.base);
+      v.iopVolume = Math.max(v.dailyIop, r.iop);
+      v.baseSource = r.base > v.dailyBase ? 'weekly' : 'daily';
+      v.iopSource = r.iop > v.dailyIop ? 'weekly' : 'daily';
     }
-
-    existing.servedVolume += amount;
-    if (cr.bucket === 'BASE') {
-      existing.baseVolume += amount;
-    } else if (cr.bucket === 'IOP') {
-      existing.iopVolume += amount;
-    }
-  }
-
-  if (weeklyStats && weeklyStats.length > 0 && period) {
-    const weeklyMaxServed = calculateServedVolumeWithWeeklyMax(classifiedRows, weeklyStats, period);
-    weeklyMaxServed.forEach((servedVolume, ownerId) => {
-      let existing = result.get(ownerId);
-      if (!existing) {
-        existing = { servedVolume: 0, baseVolume: 0, iopVolume: 0 };
-        result.set(ownerId, existing);
-      }
-      existing.servedVolume = servedVolume;
-    });
-  }
-
-  if (monthlyServedValue) {
-    monthlyServedValue.forEach((_, ownerId) => {
-      if (!result.has(ownerId)) result.set(ownerId, { servedVolume: 0, baseVolume: 0, iopVolume: 0 });
-    });
-    result.forEach((vol, ownerId) => {
-      vol.servedVolume = monthlyServedValue.get(ownerId) || 0;
-    });
-  }
+    v.servedVolume = v.baseVolume + v.iopVolume;
+  });
 
   return result;
 }
 
 /**
- * Calculates MTD volume breakdown for a specific ownerId or overall if ownerId is omitted.
- * Pass weeklyStats + period to reconcile servedVolume against the Weekly Report
- * (see calculateMtdVolumes) — omitting them keeps the pure Daily MGT total.
+ * MTD volumes for one owner, or the whole company's Daily MGT when ownerId is
+ * omitted. Pass weeklyStats + period (and the Monthly report) to apply the
+ * report rules of calculateMtdVolumes; omitting them keeps pure Daily MGT.
  */
 export function calculateOwnerMtdVolume(
   classifiedRows: ClassifiedRow[],
   ownerId?: string,
   weeklyStats?: WeeklyStatsEntry[],
   period?: string,
-  monthlyServedValue?: Map<string, number>
+  monthly?: MonthlyServedValues | null
 ): OwnerMtdVolumeResult {
   if (!ownerId) {
-    let totalServed = 0;
-    let totalBase = 0;
-    let totalIop = 0;
+    const total = emptyVolume();
     for (const cr of filterClassifiedRowsToPeriod(classifiedRows, period)) {
       if (cr.bucket !== 'BASE' && cr.bucket !== 'IOP') continue;
       const amount = cr.auditRecord?.amount || 0;
-      totalServed += amount;
-      if (cr.bucket === 'BASE') totalBase += amount;
-      else if (cr.bucket === 'IOP') totalIop += amount;
+      if (cr.bucket === 'BASE') total.baseVolume += amount;
+      else total.iopVolume += amount;
     }
-    return { servedVolume: totalServed, baseVolume: totalBase, iopVolume: totalIop };
+    total.dailyBase = total.baseVolume;
+    total.dailyIop = total.iopVolume;
+    total.servedVolume = total.baseVolume + total.iopVolume;
+    return total;
   }
 
-  const map = calculateMtdVolumes(classifiedRows, weeklyStats, period, monthlyServedValue);
-  return map.get(ownerId) || { servedVolume: 0, baseVolume: 0, iopVolume: 0 };
+  return calculateMtdVolumes(classifiedRows, weeklyStats, period, monthly).get(ownerId) || emptyVolume();
 }
 
 export interface KPI1Result {
@@ -247,9 +235,15 @@ export interface KPI1Result {
   ownerName: string;
   period: string;
   servedVolume: number;        // Base + IOP combined, excluding SA_INTERNAL
+  baseServed: number;
+  iopServed: number;
+  baseSource: MtdSource;
+  iopSource: MtdSource;
   monthlyTarget: number;
+  baseTarget: number;
+  iopTarget: number;
   paDayTarget: number;         // monthlyTarget / 24
-  achievementPercentage: number;   // uncapped, real value
+  achievementPercentage: number;   // uncapped: Base 70% + IOP 30% (weightedKpi1)
   displayPercentage: number;       // Math.min(achievementPercentage, 100) for display only
   status: KPI1Status;
   hasTarget: boolean;
@@ -295,8 +289,8 @@ export function getCompanyTotalKPI1Target(
  * in the caller) — this function does no classification itself, only
  * aggregation, so it stays fast and independently testable.
  * Pass weeklyStats (e.g. from readWeeklyStatsHistory()) so an uploaded
- * Weekly Report counts toward the target, and monthlyServedValue when the
- * month's Monthly report is uploaded (final) — see calculateMtdVolumes.
+ * Weekly Report counts toward the target, and `monthly` once the month's
+ * Monthly report is uploaded (final) — see calculateMtdVolumes.
  */
 export function calculateKPI1(
   classifiedRows: ClassifiedRow[],
@@ -304,13 +298,13 @@ export function calculateKPI1(
   period: string,
   manualTargets?: ManualOwnerTarget[],
   weeklyStats?: WeeklyStatsEntry[],
-  monthlyServedValue?: Map<string, number>
+  monthly?: MonthlyServedValues | null
 ): KPI1Result[] {
   const results: KPI1Result[] = [];
   const actualManualTargets = manualTargets || getSavedManualOwnerTargets();
 
   // Aggregate served volume (BASE + IOP combined) per owner
-  const mtdVolumes = calculateMtdVolumes(classifiedRows, weeklyStats, period, monthlyServedValue);
+  const mtdVolumes = calculateMtdVolumes(classifiedRows, weeklyStats, period, monthly);
 
   for (const owner of owners) {
     if (!owner) continue;
@@ -325,11 +319,11 @@ export function calculateKPI1(
 
     const monthlyTarget = targetRes.monthlyTarget || 0;
     const paDayTarget = monthlyTarget / 24;
-    const ownerVolume = ownerId ? (mtdVolumes.get(ownerId) || { servedVolume: 0, baseVolume: 0, iopVolume: 0 }) : { servedVolume: 0, baseVolume: 0, iopVolume: 0 };
+    const ownerVolume = (ownerId && mtdVolumes.get(ownerId)) || emptyVolume();
     const servedVolume = ownerVolume.servedVolume;
 
-    // Uncapped achievement percentage
-    const achievementPercentage = monthlyTarget > 0 ? (servedVolume / monthlyTarget) * 100 : 0;
+    // Uncapped: Base 70% + IOP 30% against their own targets
+    const achievementPercentage = weightedKpi1(ownerVolume.baseVolume, targetRes.baseTarget, ownerVolume.iopVolume, targetRes.iopTarget);
     // Capped display percentage
     const displayPercentage = Math.min(100, achievementPercentage);
 
@@ -338,7 +332,13 @@ export function calculateKPI1(
       ownerName: owner.name || 'Unknown Owner',
       period,
       servedVolume,
+      baseServed: ownerVolume.baseVolume,
+      iopServed: ownerVolume.iopVolume,
+      baseSource: ownerVolume.baseSource,
+      iopSource: ownerVolume.iopSource,
       monthlyTarget,
+      baseTarget: targetRes.baseTarget,
+      iopTarget: targetRes.iopTarget,
       paDayTarget,
       achievementPercentage: round1(achievementPercentage),
       displayPercentage: round1(displayPercentage),

@@ -26,13 +26,17 @@ export function isKpi2RowName(name: string): boolean {
   return n.includes('served wakala') || n.includes('serviced wakala');
 }
 
-type LiveTotalsLike = {
-  kpi1: { target: number; achieved: number } | null;
-  kpi2: { target: number; achieved: number } | null;
-};
+type LiveTotal = { target: number; achieved: number; percent?: number };
+type LiveTotalsLike = { kpi1: LiveTotal | null; kpi2: LiveTotal | null };
 
-function liveRow(id: string, name: string, live: { target: number; achieved: number }): KPIMetric {
-  const performance = live.target > 0 ? Math.round(Math.min((live.achieved / live.target) * 100, 100) * 10) / 10 : 0;
+/** Achievement % of a live total: its own weighted percent when it has one (KPI 1), else achieved / target. */
+function liveTotalPercent(live: LiveTotal): number {
+  if (live.percent !== undefined) return live.percent;
+  return live.target > 0 ? (live.achieved / live.target) * 100 : 0;
+}
+
+function liveRow(id: string, name: string, live: LiveTotal): KPIMetric {
+  const performance = Math.round(Math.min(liveTotalPercent(live), 100) * 10) / 10;
   const status: KPIMetric['status'] =
     performance >= 100 ? 'ACHIEVED' : performance >= 75 ? 'ON TRACK' : performance >= 50 ? 'NEEDS ATTENTION' : 'CRITICAL';
   return { id, name, target: '', targetVal: live.target, achieved: '', achievedVal: live.achieved, performance, status };

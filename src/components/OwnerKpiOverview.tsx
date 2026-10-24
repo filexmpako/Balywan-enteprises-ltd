@@ -4,15 +4,24 @@ import { readWeeklyStatsHistory, refreshWeeklyStatsHistory } from '../utils/week
 import { ownerWeeklySeries, type WeeklyStatsEntry } from '../utils/weeklyKpiEngine';
 import { normalizeMsisdn } from '../utils/msisdn';
 import { getOwnerPortfolio } from '../utils/ownerPortfolio';
-import { scoreOwnerKpis, KPI_WEIGHTS } from '../utils/ownerKpiScore';
+import { scoreOwnerKpis, KPI_WEIGHTS, KPI1_SPLIT } from '../utils/ownerKpiScore';
 import { CLOUD_HYDRATED_EVENT } from '../lib/cloudSyncEvents';
+
+/** KPI 1 by type: served value, its target, and where the served figure came from. */
+export interface Kpi1ByType {
+  baseServed: number;
+  baseTarget: number;
+  baseSource: string;
+  iopServed: number;
+  iopTarget: number;
+  iopSource: string;
+}
 
 interface Props {
   ownerId: string;
   ownerName: string;
   period: string;
-  servedValue: number;
-  monthlyTarget: number;
+  kpi1: Kpi1ByType;
   registryVersion?: number;
 }
 
@@ -58,7 +67,7 @@ function Table({ title, head, rows }: { title: string; head: string[]; rows: (st
   );
 }
 
-export default function OwnerKpiOverview({ ownerId, ownerName, period, servedValue, monthlyTarget, registryVersion }: Props) {
+export default function OwnerKpiOverview({ ownerId, ownerName, period, kpi1, registryVersion }: Props) {
   const [history, setHistory] = useState<WeeklyStatsEntry[]>(() => readWeeklyStatsHistory());
   const [rows, setRows] = useState<{ msisdn: string; is_served: boolean | null; is_active: boolean }[] | null>(null);
 
@@ -109,12 +118,14 @@ export default function OwnerKpiOverview({ ownerId, ownerName, period, servedVal
 
   const base = portfolio.wakalas.length;
   const s = scoreOwnerKpis({
-    servedValue, monthlyTarget,
+    baseServed: kpi1.baseServed, baseTarget: kpi1.baseTarget,
+    iopServed: kpi1.iopServed, iopTarget: kpi1.iopTarget,
     normalBase: portfolio.normalCount, normalServed: counts.normalServed,
     priorityBase: portfolio.priorityCount, priorityServed: counts.priorityServed,
     activeBase: base, active: counts.active,
   });
   const name = ownerName.toUpperCase();
+  const totalTarget = kpi1.baseTarget + kpi1.iopTarget;
 
   return (
     <div className="space-y-5 rounded-2xl border border-brand-gray-border bg-brand-card p-5 shadow-ambient">
@@ -124,9 +135,13 @@ export default function OwnerKpiOverview({ ownerId, ownerName, period, servedVal
       </div>
 
       <Table
-        title="KPI 1 · SA Value Servicing"
-        head={['Month', 'SA Name', 'SA Base', 'Monthly Target', 'Per Day Target', 'Served Value', 'Achievement']}
-        rows={[[period, name, base, n(monthlyTarget), n(monthlyTarget / 24), n(servedValue), p(s.kpi1)]]}
+        title={`KPI 1 · SA Value Servicing · ${name} · Base ${KPI1_SPLIT.base}% / IOP ${KPI1_SPLIT.iop}%`}
+        head={['Month', 'Type', 'SA Base', 'Monthly Target', 'Per Day Target', 'Served Value', 'Source', 'Achievement']}
+        rows={[
+          [period, 'Base', base, n(kpi1.baseTarget), n(kpi1.baseTarget / 24), n(kpi1.baseServed), kpi1.baseSource, p(s.baseShare)],
+          [period, 'IOP', '', n(kpi1.iopTarget), n(kpi1.iopTarget / 24), n(kpi1.iopServed), kpi1.iopSource, p(s.iopShare)],
+          ['', 'Total', base, n(totalTarget), n(totalTarget / 24), n(kpi1.baseServed + kpi1.iopServed), '', p(s.kpi1)],
+        ]}
       />
 
       <Table

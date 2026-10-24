@@ -1,16 +1,27 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 const expect = (a: unknown) => ({ toBe: (b: unknown) => assert.equal(a, b) });
-import { scoreOwnerKpis } from './ownerKpiScore';
+import { scoreOwnerKpis, weightedKpi1 } from './ownerKpiScore';
 
 const sample = scoreOwnerKpis({
-  servedValue: 1_107_921_554, monthlyTarget: 2_790_160_168,
+  baseServed: 996_064_067, baseTarget: 2_490_160_168,
+  iopServed: 120_000_000, iopTarget: 300_000_000,
   normalBase: 239, normalServed: 145, priorityBase: 29, priorityServed: 5,
   activeBase: 268, active: 178,
 });
 
 describe('owner KPI sheet scoring', () => {
-  it('KPI 1 is served value over monthly target (40%)', () => expect(Math.round(sample.kpi1)).toBe(40));
+  it('KPI 1 weights Base 70 / IOP 30 (28% + 12% = 40%)', () => {
+    expect(Math.round(sample.baseShare)).toBe(28);
+    expect(Math.round(sample.iopShare)).toBe(12);
+    expect(Math.round(sample.kpi1)).toBe(40);
+  });
+  it('KPI 1 with only one target set uses that type alone', () => {
+    expect(weightedKpi1(50, 100, 999, 0)).toBe(50);
+    expect(weightedKpi1(0, 0, 30, 60)).toBe(50);
+    expect(weightedKpi1(10, 0, 10, 0)).toBe(0);
+  });
+  it('KPI 1 is uncapped above target', () => expect(Math.round(weightedKpi1(300, 100, 30, 100))).toBe(219));
   it('targets are 80% served and 90% active of base', () => {
     expect(sample.normalTarget).toBe(191);
     expect(sample.priorityTarget).toBe(23);

@@ -10,13 +10,14 @@ export function resolveOwnerTarget(
   ownerId: string,
   period: string,
   manualTargets: ManualOwnerTarget[]
-): { monthlyTarget: number; source: 'manual' | 'none' } {
+): { monthlyTarget: number; baseTarget: number; iopTarget: number; source: 'manual' | 'none' } {
   const manual = manualTargets.find(m => m.ownerId === ownerId && periodsMatch(m.period, period));
   if (manual && (manual.kpi1BaseTarget !== undefined || manual.kpi1IopTarget !== undefined)) {
-    const monthlyTarget = (manual.kpi1BaseTarget || 0) + (manual.kpi1IopTarget || 0);
-    return { monthlyTarget, source: 'manual' };
+    const baseTarget = manual.kpi1BaseTarget || 0;
+    const iopTarget = manual.kpi1IopTarget || 0;
+    return { monthlyTarget: baseTarget + iopTarget, baseTarget, iopTarget, source: 'manual' };
   }
-  return { monthlyTarget: 0, source: 'none' };
+  return { monthlyTarget: 0, baseTarget: 0, iopTarget: 0, source: 'none' };
 }
 
 /**

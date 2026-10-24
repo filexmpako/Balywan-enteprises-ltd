@@ -53,6 +53,8 @@ import { getDailyServicingRows } from '../utils/indexedDB';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
 import {
   calculateOwnerMtdVolume,
+  latestWeeklyEntryForPeriod,
+  type MtdSource,
   pickSettlementReport,
   dailyIopForPeriod,
   reportEndDate,
@@ -60,6 +62,7 @@ import {
 import { fetchMonthlyMonths } from '../lib/monthly.functions';
 import { readWeeklyStatsHistory } from '../utils/weeklyHistory';
 import { resolveOwnerMatch } from '../utils/ownerMatch';
+import { weightedKpi1 } from '../utils/ownerKpiScore';
 import { ManualOwnerTarget } from '../types';
 import { useAuth } from './AuthContext';
 import { useReportingPeriod } from './ReportingPeriodContext';
@@ -752,7 +755,14 @@ export default function OwnerDetailsView({
         servedVolume: 0,
         baseVolume: 0,
         iopVolume: 0,
+        baseSource: 'daily' as MtdSource,
+        iopSource: 'daily' as MtdSource,
+        dailyBase: 0,
+        dailyIop: 0,
+        sourceLabel: { daily: 'Daily MGT', weekly: '', monthly: '' } as Record<MtdSource, string>,
         monthlyTarget: 0,
+        baseTarget: 0,
+        iopTarget: 0,
         paDayTarget: 0,
         achievementPercentage: 0,
         status: 'Red' as const,
@@ -772,16 +782,15 @@ export default function OwnerDetailsView({
     const classified = getClassifiedRowsCached(servicingRows, saTillRegistry, baseWakalaIndex, tillsList, owners);
 
     const weeklyStats = readWeeklyStatsHistory();
-    const monthlyServedValue = monthlyKpi?.servedValueByOwner;
 
     let targetOwnerId = localOwner.id;
-    let vols = calculateOwnerMtdVolume(classified, localOwner.id, weeklyStats, currentPeriod, monthlyServedValue);
+    let vols = calculateOwnerMtdVolume(classified, localOwner.id, weeklyStats, currentPeriod, monthlyKpi);
 
     if (vols.servedVolume === 0 && localOwner.name) {
       const matched = resolveOwnerMatch(localOwner.name, owners, 'Owner Portal');
       if (matched.matchedOwner?.id) {
         targetOwnerId = matched.matchedOwner.id;
-        vols = calculateOwnerMtdVolume(classified, matched.matchedOwner.id, weeklyStats, currentPeriod, monthlyServedValue);
+        vols = calculateOwnerMtdVolume(classified, matched.matchedOwner.id, weeklyStats, currentPeriod, monthlyKpi);
       }
     }
 
@@ -809,7 +818,9 @@ export default function OwnerDetailsView({
 
     const monthlyTarget = targetRes.monthlyTarget || 0;
     const paDayTarget = monthlyTarget / 24;
-    const achievementPercentage = monthlyTarget > 0 ? (vols.servedVolume / monthlyTarget) * 100 : 0;
+    // Base 70% + IOP 30%, each against its own target.
+    const achievementPercentage = weightedKpi1(vols.baseVolume, targetRes.baseTarget, vols.iopVolume, targetRes.iopTarget);
+    const latestWeek = latestWeeklyEntryForPeriod(weeklyStats, period)?.reportingWeek.split(' (')[0];
     
     let status: 'Green' | 'Blue' | 'Yellow' | 'Red' = 'Red';
     if (achievementPercentage >= 90) status = 'Green';
@@ -820,7 +831,18 @@ export default function OwnerDetailsView({
       servedVolume: vols.servedVolume,
       baseVolume: vols.baseVolume,
       iopVolume: vols.iopVolume,
+      baseSource: vols.baseSource,
+      iopSource: vols.iopSource,
+      dailyBase: vols.dailyBase,
+      dailyIop: vols.dailyIop,
+      sourceLabel: {
+        daily: 'Daily MGT',
+        weekly: latestWeek ? `Weekly · ${latestWeek}` : 'Weekly report',
+        monthly: monthlyKpi ? `Monthly · ${monthlyKpi.month}` : 'Monthly report',
+      } as Record<MtdSource, string>,
       monthlyTarget,
+      baseTarget: targetRes.baseTarget,
+      iopTarget: targetRes.iopTarget,
       paDayTarget,
       achievementPercentage: Math.round(achievementPercentage * 10) / 10,
       status,
@@ -1048,46 +1070,20 @@ export default function OwnerDetailsView({
 
       {activeTab === 'overview' && (
         <>
-          <OwnerKpiOverview ownerId={localOwner.id} ownerName={localOwner.name || ""} period={currentPeriod} servedValue={ownerMtdData.servedVolume} monthlyTarget={ownerMtdData.monthlyTarget || 0} registryVersion={registryVersion} />
-          {/* Portfolio Snapshot */}
-          <div className="space-y-2">
-            <h3 className="font-sans text-xs font-black uppercase text-brand-text-variant tracking-wider font-mono">
-              Portfolio Snapshot
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <MetricCard
-                title="Wakala"
-                value={priorityWakalaCount + normalWakalaCount}
-                subValue={
-                  hasPriorityData
-                    ? `${priorityWakalaCount} Priority · ${normalWakalaCount} Normal`
-                    : 'Awaiting Ingestion'
-                }
-                icon={Users}
-                variant="blue"
-              />
-              <MetricCard
-                title="Active Wakala"
-                value={latestWeeklyActivity?.active ?? (isSynced ? activeWakalaCount : 'Not yet synced')}
-                subValue={latestWeeklyActivity ? 'LATEST WEEKLY RULE' : (isSynced ? 'DAILY INGESTION' : 'Awaiting Ingestion')}
-                icon={UserCheck}
-                variant="green"
-              />
-              <MetricCard
-                title="Inactive Wakala"
-                value={weeklyInactive ?? (isSynced ? inactiveWakalaCount : 'Not yet synced')}
-                subValue={
-                  latestWeeklyActivity
-                    ? notInReportCount > 0
-                      ? `LATEST WEEKLY RULE · INCL. ${notInReportCount} NOT IN REPORT`
-                      : 'LATEST WEEKLY RULE'
-                    : (isSynced ? 'DAILY INGESTION' : 'Awaiting Ingestion')
-                }
-                icon={UserX}
-                variant="red"
-              />
-            </div>
-          </div>
+          <OwnerKpiOverview
+            ownerId={localOwner.id}
+            ownerName={localOwner.name || ""}
+            period={currentPeriod}
+            kpi1={{
+              baseServed: ownerMtdData.baseVolume,
+              baseTarget: ownerMtdData.baseTarget,
+              baseSource: ownerMtdData.sourceLabel[ownerMtdData.baseSource],
+              iopServed: ownerMtdData.iopVolume,
+              iopTarget: ownerMtdData.iopTarget,
+              iopSource: ownerMtdData.sourceLabel[ownerMtdData.iopSource],
+            }}
+            registryVersion={registryVersion}
+          />
 
           {/* Daily MGT Section — Daily MGT classification data only */}
           <div className="space-y-4">
@@ -1111,7 +1107,7 @@ export default function OwnerDetailsView({
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <span className="block font-sans text-[10px] font-bold text-brand-text-variant uppercase tracking-wider">
-                    MTD Serviced Volume (Base + <IopLabel source="daily" />)
+                    MTD Serviced Volume (Base + IOP)
                   </span>
                   <div className="mt-1 flex items-baseline gap-2">
                     <span className="font-sans text-2xl sm:text-3xl font-black text-brand-primary font-mono">
@@ -1135,7 +1131,7 @@ export default function OwnerDetailsView({
               {ownerMtdData.hasTarget ? (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between font-sans text-xs font-bold">
-                    <span className="text-brand-text-variant">Target Fulfillment Progress</span>
+                    <span className="text-brand-text-variant">Target Fulfillment Progress · Base 70% + IOP 30%</span>
                     <span className={`font-mono text-sm ${
                       ownerMtdData.status === 'Green' ? 'text-emerald-700' :
                       ownerMtdData.status === 'Blue' ? 'text-blue-700' :
@@ -1165,22 +1161,26 @@ export default function OwnerDetailsView({
                 </div>
               )}
 
-              {/* Informational Breakdown */}
-              <div className="pt-3 border-t border-brand-gray-border/60 flex flex-wrap items-center justify-between gap-3 text-xs font-sans">
-                <span className="text-[10px] font-bold uppercase text-brand-text-variant tracking-wider">
-                  Volume Breakdown
-                </span>
-                <div className="flex flex-wrap items-center gap-4 font-mono font-bold">
-                  <span className="flex items-center gap-1.5 text-slate-700">
-                    <span className="h-2 w-2 rounded-full bg-indigo-500 inline-block" />
-                    Base Volume: <span className="text-brand-primary">TZS {ownerMtdData.baseVolume.toLocaleString()}</span>
-                  </span>
-                  <span className="flex items-center gap-1.5 text-slate-700">
-                    <span className="h-2 w-2 rounded-full bg-purple-500 inline-block" />
-<IopLabel source="daily" /> Volume: <span className="text-purple-700">TZS {ownerMtdData.iopVolume.toLocaleString()}</span>
-                    <span className="font-sans font-medium text-[10px] text-slate-500">(our tills → wakala not in our base)</span>
-                  </span>
-                </div>
+              {/* Base / IOP breakdown with where each figure came from, and Daily MGT beside it */}
+              <div className="pt-3 border-t border-brand-gray-border/60 space-y-2 text-xs font-sans">
+                {([
+                  ['Base', 'bg-indigo-500', 'text-brand-primary', ownerMtdData.baseVolume, ownerMtdData.baseSource, ownerMtdData.dailyBase],
+                  ['IOP', 'bg-purple-500', 'text-purple-700', ownerMtdData.iopVolume, ownerMtdData.iopSource, ownerMtdData.dailyIop],
+                ] as const).map(([label, dot, tone, value, source, daily]) => (
+                  <div key={label} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                    <span className="flex items-center gap-1.5 font-bold text-slate-700">
+                      <span className={`h-2 w-2 rounded-full inline-block ${dot}`} />
+                      {label}: <span className={`font-mono ${tone}`}>TZS {value.toLocaleString()}</span>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">{ownerMtdData.sourceLabel[source]}</span>
+                    </span>
+                    {source !== 'daily' && (
+                      <span className="font-mono text-[11px] text-brand-text-variant">Daily MGT: TZS {daily.toLocaleString()}</span>
+                    )}
+                  </div>
+                ))}
+                <p className="text-[10px] text-brand-text-variant">
+                  Each type is the greater of Daily MGT and the latest weekly report; the month's monthly report is final once uploaded.
+                </p>
               </div>
             </div>
 
@@ -1258,10 +1258,51 @@ export default function OwnerDetailsView({
       )}
 
       {activeTab === 'wakalas' && (
-        <WakalaManagementSection 
-          localOwner={localOwner}
-          onUpdateWakalas={updateWakalasInLocalStorage}
-        />
+        <>
+          {/* Portfolio Snapshot */}
+          <div className="space-y-2">
+            <h3 className="font-sans text-xs font-black uppercase text-brand-text-variant tracking-wider font-mono">
+              Portfolio Snapshot
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <MetricCard
+                title="Wakala"
+                value={priorityWakalaCount + normalWakalaCount}
+                subValue={
+                  hasPriorityData
+                    ? `${priorityWakalaCount} Priority · ${normalWakalaCount} Normal`
+                    : 'Awaiting Ingestion'
+                }
+                icon={Users}
+                variant="blue"
+              />
+              <MetricCard
+                title="Active Wakala"
+                value={latestWeeklyActivity?.active ?? (isSynced ? activeWakalaCount : 'Not yet synced')}
+                subValue={latestWeeklyActivity ? 'LATEST WEEKLY RULE' : (isSynced ? 'DAILY INGESTION' : 'Awaiting Ingestion')}
+                icon={UserCheck}
+                variant="green"
+              />
+              <MetricCard
+                title="Inactive Wakala"
+                value={weeklyInactive ?? (isSynced ? inactiveWakalaCount : 'Not yet synced')}
+                subValue={
+                  latestWeeklyActivity
+                    ? notInReportCount > 0
+                      ? `LATEST WEEKLY RULE · INCL. ${notInReportCount} NOT IN REPORT`
+                      : 'LATEST WEEKLY RULE'
+                    : (isSynced ? 'DAILY INGESTION' : 'Awaiting Ingestion')
+                }
+                icon={UserX}
+                variant="red"
+              />
+            </div>
+          </div>
+          <WakalaManagementSection
+            localOwner={localOwner}
+            onUpdateWakalas={updateWakalasInLocalStorage}
+          />
+        </>
       )}
 
       {activeTab === 'location' && (
