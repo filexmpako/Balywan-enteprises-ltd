@@ -146,7 +146,7 @@ export default function TargetsView() {
   }, [period]);
 
   const kpi1Results: KPI1Result[] = useMemo(() => {
-    return calculateKPI1(classifiedRows, owners, period, manualTargets, readWeeklyStatsHistory(), monthlyKpi?.servedValueByOwner);
+    return calculateKPI1(classifiedRows, owners, period, manualTargets, readWeeklyStatsHistory(), monthlyKpi);
   }, [classifiedRows, owners, period, manualTargets, monthlyKpi]);
 
   const kpi2Results: KPI2Result[] = useMemo(() => {
@@ -327,7 +327,7 @@ export default function TargetsView() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <span className="block font-sans text-[10px] font-bold text-brand-text-variant uppercase tracking-wider">
-                {monthlyKpi ? 'SERVICED VOLUME · MONTHLY' : <>MTD SERVICED VOLUME (BASE + <IopLabel source="daily" />)</>}
+                {monthlyKpi ? 'SERVICED VOLUME (BASE + IOP) · MONTHLY' : 'MTD SERVICED VOLUME (BASE + IOP)'}
               </span>
               <div className="mt-1 flex items-baseline gap-2">
                 <span className="font-sans text-2xl sm:text-3xl font-black text-brand-primary font-mono">
@@ -355,7 +355,7 @@ export default function TargetsView() {
           {k1 && k1.hasTarget ? (
             <div className="space-y-2">
               <div className="flex items-center justify-between font-sans text-xs font-bold">
-                <span className="text-brand-text-variant">Target Fulfillment Progress</span>
+                <span className="text-brand-text-variant">Target Fulfillment Progress · Base 70% + IOP 30%</span>
                 <span className={`font-mono text-sm ${
                   k1.status === 'Green' ? 'text-emerald-700' :
                   k1.status === 'Blue' ? 'text-blue-700' :

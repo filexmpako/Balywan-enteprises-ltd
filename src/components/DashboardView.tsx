@@ -314,8 +314,8 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
 
   const kpis: KPIMetric[] = useMemo(() => {
     return withLiveKpiRows(rawKpis, liveTotals).map(kpi => {
-      const applyLive = (targetVal: number, achievedVal: number, isCurrency: boolean): KPIMetric => {
-        const realPct = targetVal > 0 ? (achievedVal / targetVal) * 100 : 0;
+      const applyLive = (targetVal: number, achievedVal: number, isCurrency: boolean, percent?: number): KPIMetric => {
+        const realPct = percent ?? (targetVal > 0 ? (achievedVal / targetVal) * 100 : 0);
         const performance = Math.round(Math.min(realPct, 100) * 10) / 10;
         return {
           ...kpi,
@@ -328,7 +328,7 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
       };
 
       if (isKpi1RowName(kpi.name) && liveTotals.kpi1) {
-        return applyLive(liveTotals.kpi1.target, liveTotals.kpi1.achieved, true);
+        return applyLive(liveTotals.kpi1.target, liveTotals.kpi1.achieved, true, liveTotals.kpi1.percent);
       }
       if (isKpi2RowName(kpi.name) && liveTotals.kpi2) {
         return applyLive(liveTotals.kpi2.target, liveTotals.kpi2.achieved, false);
@@ -365,6 +365,8 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
   const goalServed = liveTotals.kpi1?.achieved ?? companyKPIs.mtdFloatServed;
   const [dashboardLoadState, setDashboardLoadState] = useState<'loading' | 'empty' | 'ready' | 'error'>('loading');
   const [monthlyGoal, setMonthlyGoal] = useState<{ total: number; hasAny: boolean }>({ total: 0, hasAny: false });
+  // Same weighted achievement (Base 70% + IOP 30%) as the KPI 1 row.
+  const goalPercent = liveTotals.kpi1?.percent ?? (monthlyGoal.total > 0 ? (goalServed / monthlyGoal.total) * 100 : 0);
 
   // Company-wide Served/Unserved wakala drill-down, opened from the
   // Weekly KPI Progression cards below.
@@ -654,11 +656,11 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
                   <div className="w-full h-3 bg-black/15 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-black rounded-full transition-all"
-                      style={{ width: `${Math.min(100, monthlyGoal.total > 0 ? (goalServed / monthlyGoal.total) * 100 : 0)}%` }}
+                      style={{ width: `${Math.min(100, goalPercent)}%` }}
                     />
                   </div>
                   <span className="block text-right font-sans text-xs font-black text-black mt-1.5">
-                    {monthlyGoal.total > 0 ? Math.round((goalServed / monthlyGoal.total) * 100) : 0}% of goal
+                    {Math.round(goalPercent)}% of goal
                   </span>
                 </>
               )}

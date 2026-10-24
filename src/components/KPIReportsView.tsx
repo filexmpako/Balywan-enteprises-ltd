@@ -87,8 +87,8 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
 
   const kpis: KPIMetric[] = useMemo(() => {
     return withLiveKpiRows(rawKpis, liveTotals).map(kpi => {
-      const applyLive = (targetVal: number, achievedVal: number, isCurrency: boolean): KPIMetric => {
-        const realPct = targetVal > 0 ? (achievedVal / targetVal) * 100 : 0;
+      const applyLive = (targetVal: number, achievedVal: number, isCurrency: boolean, percent?: number): KPIMetric => {
+        const realPct = percent ?? (targetVal > 0 ? (achievedVal / targetVal) * 100 : 0);
         const performance = Math.round(Math.min(realPct, 100) * 10) / 10;
         return {
           ...kpi,
@@ -101,7 +101,7 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
       };
 
       if (isKpi1RowName(kpi.name) && liveTotals.kpi1) {
-        return applyLive(liveTotals.kpi1.target, liveTotals.kpi1.achieved, true);
+        return applyLive(liveTotals.kpi1.target, liveTotals.kpi1.achieved, true, liveTotals.kpi1.percent);
       }
       if (isKpi2RowName(kpi.name) && liveTotals.kpi2) {
         return applyLive(liveTotals.kpi2.target, liveTotals.kpi2.achieved, false);

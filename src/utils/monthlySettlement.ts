@@ -36,14 +36,19 @@ export async function loadMonthlyReportStats(monthLabel: string): Promise<Monthl
 export interface MonthlyKpiOverride {
   month: string;
   servedValueByOwner: Map<string, number>;
+  /** Each owner's IOP from the report's IOP column. */
+  iopValueByOwner: Map<string, number>;
   servedByMsisdn: Map<string, boolean>;
   unassignedServed: number;
 }
 
 export function toMonthlyKpiOverride(month: string, stats: MonthlyReportStats): MonthlyKpiOverride {
   const servedValueByOwner = new Map<string, number>();
+  const iopValueByOwner = new Map<string, number>();
   stats.byOwner.forEach(b => {
-    if (b.ownerId) servedValueByOwner.set(b.ownerId, b.value || 0);
+    if (!b.ownerId) return;
+    servedValueByOwner.set(b.ownerId, b.value || 0);
+    iopValueByOwner.set(b.ownerId, b.iopValue || 0);
   });
   const servedByMsisdn = new Map<string, boolean>();
   let unassignedServed = 0;
@@ -52,7 +57,7 @@ export function toMonthlyKpiOverride(month: string, stats: MonthlyReportStats): 
     if (key && e.isServed !== null) servedByMsisdn.set(key, e.isServed);
     if (!e.ownerId && e.isServed) unassignedServed += 1;
   });
-  return { month, servedValueByOwner, servedByMsisdn, unassignedServed };
+  return { month, servedValueByOwner, iopValueByOwner, servedByMsisdn, unassignedServed };
 }
 
 /** The override for `period` when that month's own Monthly report is uploaded, else null. */

@@ -2,11 +2,13 @@ import { ClassifiedRow } from './classification';
 import { Owner, PriorityWakala, BaseWakala, ManualOwnerTarget } from '../types';
 import { calculateKPI1, calculateMtdVolumes, latestWeeklyEntryForPeriod, UNASSIGNED_OWNER_KEY } from './kpiEngine';
 import { calculateKPI2 } from './kpi2Engine';
+import { weightedKpi1 } from './ownerKpiScore';
 import type { WeeklyStatsEntry } from './weeklyKpiEngine';
 import type { MonthlyKpiOverride } from './monthlySettlement';
 
 export interface LiveKpiTotals {
-  kpi1: { target: number; achieved: number } | null;
+  /** `percent`: Base 70% + IOP 30% against the summed Base and IOP targets. */
+  kpi1: { target: number; achieved: number; percent: number } | null;
   kpi2: { target: number; achieved: number } | null;
 }
 
@@ -31,13 +33,23 @@ export function computeLiveKpiTotals(
   monthly?: MonthlyKpiOverride | null,
   weeklyServed?: Map<string, boolean> | null
 ): LiveKpiTotals {
-  const kpi1Results = calculateKPI1(classifiedRows, owners, period, manualTargets, weeklyStats, monthly?.servedValueByOwner);
-  const kpi1Target = kpi1Results.reduce((s, r) => s + (r.hasTarget ? r.monthlyTarget : 0), 0);
-  // Every wakala counts toward the company figure, with or without an owner.
-  let kpi1Achieved = 0;
-  calculateMtdVolumes(classifiedRows, weeklyStats, period, monthly?.servedValueByOwner).forEach(v => {
-    kpi1Achieved += v.servedVolume;
+  const kpi1Results = calculateKPI1(classifiedRows, owners, period, manualTargets, weeklyStats, monthly);
+  let baseTarget = 0;
+  let iopTarget = 0;
+  kpi1Results.forEach(r => {
+    if (!r.hasTarget) return;
+    baseTarget += r.baseTarget;
+    iopTarget += r.iopTarget;
   });
+  const kpi1Target = baseTarget + iopTarget;
+  // Every wakala counts toward the company figure, with or without an owner.
+  let baseAchieved = 0;
+  let iopAchieved = 0;
+  calculateMtdVolumes(classifiedRows, weeklyStats, period, monthly).forEach(v => {
+    baseAchieved += v.baseVolume;
+    iopAchieved += v.iopVolume;
+  });
+  const kpi1Achieved = baseAchieved + iopAchieved;
 
   const weekly = monthly ? null : weeklyServed || null;
   const kpi2Results = calculateKPI2(classifiedRows, owners, period, manualTargets, priorityWakalas, baseWakalaIndex, monthly?.servedByMsisdn ?? weekly ?? undefined);
@@ -51,7 +63,9 @@ export function computeLiveKpiTotals(
         : 0);
 
   return {
-    kpi1: kpi1Target > 0 ? { target: kpi1Target, achieved: kpi1Achieved } : null,
+    kpi1: kpi1Target > 0
+      ? { target: kpi1Target, achieved: kpi1Achieved, percent: weightedKpi1(baseAchieved, baseTarget, iopAchieved, iopTarget) }
+      : null,
     kpi2: kpi2Target > 0 ? { target: kpi2Target, achieved: kpi2Achieved } : null,
   };
 }
