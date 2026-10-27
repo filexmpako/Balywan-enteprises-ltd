@@ -140,6 +140,14 @@ export const fetchTransactions = createServerFn({ method: 'GET' })
     return loadTransactions(context.supabase as any, data?.period);
   });
 
+/** Daily MGT date range and months with data, without the rows. */
+export const fetchDailyDateRange = createServerFn({ method: 'GET' })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { loadDailyDateRange } = await import('./hasidadi/repo.server');
+    return loadDailyDateRange(context.supabase as any);
+  });
+
 /** Classification audit trail read — Postgres is the only store, no local cache. */
 export const fetchClassificationAuditRecords = createServerFn({ method: 'GET' })
   .middleware([requireSupabaseAuth])

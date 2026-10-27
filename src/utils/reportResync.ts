@@ -9,7 +9,7 @@
 import { resyncDailyTransactions, resyncPriorityWakalas, resyncReportOwners } from '../lib/resync.functions';
 import { hydrateFromCloud, whenSynced } from '../lib/cloudSync';
 import { REGISTRIES_CHANGED_EVENT } from '../lib/cloudSyncEvents';
-import { getDailyServicingRows } from './indexedDB';
+import { getDailyDateRange } from './indexedDB';
 import { invalidateClassificationCache } from './classificationCache';
 
 export interface ResyncResult {
@@ -55,10 +55,7 @@ async function run(onProgress?: (message: string) => void): Promise<ResyncResult
   onProgress?.('Priority wakala list…');
   const priority = await resyncPriorityWakalas();
 
-  const rows = await getDailyServicingRows();
-  const months = Array.from(
-    new Set(rows.map(r => String(r?.['Servicing Date'] || '').slice(0, 7)).filter(m => /^\d{4}-\d{2}$/.test(m))),
-  ).sort();
+  const { months } = await getDailyDateRange();
 
   let checked = 0;
   let updated = 0;

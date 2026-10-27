@@ -1169,7 +1169,6 @@ export interface CompanyKPIsResult {
   totalIopVolume: number;
   iopVolumeByOwner: Record<string, number>;
   reportingMonth: string;
-  lastUpload: string;
   latestDay: string;
   earliestDay: string;
 }
@@ -1219,7 +1218,6 @@ export async function calculateCompanyKPIs(realRows: any[], period?: string): Pr
     totalIopVolume: 0,
     iopVolumeByOwner: {},
     reportingMonth: '—',
-    lastUpload: '—',
     latestDay: '',
     earliestDay: ''
   };
@@ -1384,11 +1382,6 @@ export async function calculateCompanyKPIs(realRows: any[], period?: string): Pr
   const reportingMonth = `${months[latestDateObj.getMonth()]} ${latestDateObj.getFullYear()}`;
   const reportingMonthStorageKey = `${fullMonthNames[latestDateObj.getMonth()]} ${latestDateObj.getFullYear()}`;
 
-  // Format Last Upload DD/MM/YY
-  const day = String(latestDateObj.getDate()).padStart(2, '0');
-  const monthNum = String(latestDateObj.getMonth() + 1).padStart(2, '0');
-  const yearTwoDigit = String(latestDateObj.getFullYear()).slice(-2);
-  const lastUpload = `${day}/${monthNum}/${yearTwoDigit}`;
 
   // 3. PHASE 4 DERIVED METRICS (Penalty & IOP Ledger)
   let monthlyServicingRows: any[] = [];
@@ -1473,7 +1466,6 @@ export async function calculateCompanyKPIs(realRows: any[], period?: string): Pr
     totalIopVolume,
     iopVolumeByOwner,
     reportingMonth,
-    lastUpload,
     latestDay: todayDateStr,
     earliestDay
   };

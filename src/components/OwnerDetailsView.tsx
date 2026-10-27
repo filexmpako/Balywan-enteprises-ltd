@@ -3,8 +3,7 @@ import { ViewType, Owner, WakalaEntry, BaseWakala } from '../types';
 import { formatDate } from '../utils/dateFormat';
 import { buildOwnerWakalaMap } from '../utils/wakalaMapping';
 import { getOwnerPortfolio } from '../utils/ownerPortfolio';
-import { getActivityRules, isActiveByRule } from '../utils/activityRules';
-import { getActiveStatusFromColumn, mergeServicedStatus, preferColumnStatus } from '../utils/servicingStatus';
+import { getActivityRules } from '../utils/activityRules';
 import { ownersList } from '../data';
 import WorkLocationSection from './WorkLocationSection';
 import TransactionHistorySection from './TransactionHistorySection';
@@ -50,6 +49,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import FloatManagementPanel from './FloatManagementPanel';
 import { getFloatRequestsForOwner } from '../utils/floatManagement';
 import { getDailyServicingRows } from '../utils/indexedDB';
+import { useClassifiedMonth } from '../hooks/useClassifiedMonth';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
 import {
   calculateOwnerMtdVolume,
@@ -228,14 +228,14 @@ export default function OwnerDetailsView({
 
   const loadData = useCallback(async () => {
     try {
-      const rows = await getDailyServicingRows();
+      const rows = await getDailyServicingRows(currentPeriod);
       setServicingRows(rows || []);
     } catch (e) {
       console.error("Error loading daily servicing rows in OwnerDetailsView:", e);
     } finally {
       setLoadingMetrics(false);
     }
-  }, []);
+  }, [currentPeriod]);
 
   useEffect(() => {
     // Load tills and servicing rows
@@ -462,45 +462,6 @@ export default function OwnerDetailsView({
     }
   };
 
-  const cleanMsisdn = (num: string) => {
-    const cleaned = num.replace(/\D/g, '');
-    return cleaned.slice(-9); // last 9 digits (handles 255... and 0... identically)
-  };
-
-  const getAmountVal = (row: any) => {
-    const val = row['Volume (TZS)'] || row['Volume'] || row['Amount'] || row['value'] || row['volume'] || row['SA_Servicing_Val'] || row['sa_servicing_val'] || 0;
-    if (typeof val === 'number') return val;
-    const cleaned = String(val).replace(/,/g, '').replace(/[^0-9.-]/g, '');
-    const parsed = parseFloat(cleaned);
-    return isNaN(parsed) ? 0 : parsed;
-  };
-
-  // Find rows belonging to this owner
-  const ownerRows = useMemo(() => {
-    if (!localOwner || !localOwner.name || servicingRows.length === 0) return [];
-    
-    const ownerTills = (tillsList || [])
-      .filter((t: any) => t.assignedOwner && t.assignedOwner.toLowerCase() === localOwner.name.toLowerCase())
-      .map((t: any) => (t.transactionTill || t.id || '').trim());
-
-    const allWakalaMsisdns = [
-      ...(localOwner.baseWakalas || []),
-      ...(localOwner.iopWakalas || [])
-    ].map(w => cleanMsisdn(w.msisdn));
-
-    return servicingRows.filter(row => {
-      const rowName = String(row['Wakala Owner'] || row['Wakala Name'] || row['Name'] || row['ownerName'] || '').trim().toLowerCase();
-      const rowTill = String(row['Branch_msisdn'] || row['transactionTill'] || row['Agent ID'] || row['AgentID'] || '').trim();
-      const rowMsisdn = cleanMsisdn(row['Branch_msisdn'] || row['transactionTill'] || row['Agent ID'] || row['AgentID'] || row['MSISDN'] || row['msisdn'] || row['phone'] || row['Phone'] || '');
-      
-      return (
-        rowName === localOwner.name.toLowerCase() ||
-        ownerTills.includes(rowTill) ||
-        (rowMsisdn && allWakalaMsisdns.includes(rowMsisdn))
-      );
-    });
-  }, [servicingRows, tillsList, localOwner]);
-
   // The owner's own transaction till(s), shown in the header for easy identification.
   const ownerTills = useMemo(() => {
     if (!localOwner) return [];
@@ -532,98 +493,6 @@ export default function OwnerDetailsView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [localOwner?.id, floatTick]
   );
-
-  // Derive metrics
-  const { 
-    activeWakalaCount, 
-    inactiveWakalaCount, 
-    isSynced
-  } = useMemo(() => {
-    if (!localOwner || !localOwner.name) {
-      return {
-        totalVolumeServed: 0,
-        activeWakalaCount: 0,
-        inactiveWakalaCount: 0,
-        isSynced: false
-      };
-    }
-    const allWakalas = [...(localOwner.baseWakalas || []), ...(localOwner.iopWakalas || [])];
-    
-    if (allWakalas.length === 0) {
-      return {
-        totalVolumeServed: 0,
-        activeWakalaCount: 0,
-        inactiveWakalaCount: 0,
-        isSynced: false
-      };
-    }
-
-    if (servicingRows.length === 0 || ownerRows.length === 0) {
-      return {
-        totalVolumeServed: 0,
-        activeWakalaCount: 0,
-        inactiveWakalaCount: 0,
-        isSynced: false
-      };
-    }
-
-    // Sum up Volume Served (Math.abs handles negative and positive sheets)
-    const volServed = ownerRows.reduce((sum, r) => sum + Math.abs(getAmountVal(r)), 0);
-
-    // Active/Inactive counts using matching MSISDNs
-    let active = 0;
-    let hasAnyMatch = false;
-
-    allWakalas.forEach(w => {
-      const wClean = cleanMsisdn(w.msisdn);
-      // find rows matching this specific wakala
-      const wRows = ownerRows.filter(row => {
-        const rowMsisdn = cleanMsisdn(row['Branch_msisdn'] || row['transactionTill'] || row['Agent ID'] || row['AgentID'] || row['MSISDN'] || row['msisdn'] || row['phone'] || row['Phone'] || '');
-        return rowMsisdn === wClean;
-      });
-
-      if (wRows.length > 0) {
-        hasAnyMatch = true;
-        // Evaluate the company activity rule: SA_Servicing_Txns > 6 OR SA_Servicing_Val > 600000
-        const totalTxns = wRows.reduce((sum, r) => {
-          const keys = ['SA_Servicing_Txns', 'SA Servicing Txns', 'sa_servicing_txns'];
-          for (const k of keys) {
-            if (r[k] !== undefined) {
-              const val = parseFloat(String(r[k]).replace(/,/g, ''));
-              if (!isNaN(val)) return sum + val;
-            }
-          }
-          return sum + 1; // assume 1 if not specified but row exists
-        }, 0);
-
-        const totalVal = wRows.reduce((sum, r) => Math.abs(getAmountVal(r)), 0);
-
-        const columnActive = wRows.reduce<boolean | null>(
-          (acc, r) => mergeServicedStatus(acc, getActiveStatusFromColumn(r)),
-          null,
-        );
-
-        // Same as weeklyKpiEngine.ts: the uploaded wakala_status column is final
-        // when present; the transaction-count rule only fills a missing reading.
-        const isActive = preferColumnStatus(
-          columnActive,
-          isActiveByRule({ cashIn: 0, cashOut: 0, total: totalTxns, amount: totalVal }, getActivityRules()),
-        );
-        if (isActive) {
-          active++;
-        }
-      }
-    });
-
-    const inactive = allWakalas.length - active;
-
-    return {
-      totalVolumeServed: volServed,
-      activeWakalaCount: active,
-      inactiveWakalaCount: inactive,
-      isSynced: hasAnyMatch
-    };
-  }, [ownerRows, localOwner]);
 
   // Same resolver the owner dashboard and Targets page use, so the Priority /
   // Normal split matches everywhere.
@@ -718,25 +587,20 @@ export default function OwnerDetailsView({
   }, [localOwner, settlementReport, monthlyStats]);
 
   // This owner's Daily MGT IOP over the same month-to-date window as the report.
+  // The settlement's report month can be an earlier month than the selected one.
+  const settlementClassified = useClassifiedMonth(settlement.period);
   const settlementDailyIop = useMemo(() => {
-    if (!localOwner || !settlement.period || servicingRows.length === 0) return 0;
-    const owners: Owner[] = JSON.parse(localStorage.getItem('ownersList') || '[]');
-    const classified = getClassifiedRowsCached(
-      servicingRows,
-      JSON.parse(localStorage.getItem('saTillRegistry') || '[]'),
-      JSON.parse(localStorage.getItem('baseWakalaIndex') || '[]'),
-      tillsList,
-      owners,
-    );
-    let iop = dailyIopForPeriod(classified, settlement.period, localOwner.id, settlement.endDate);
+    if (!localOwner || !settlement.period) return 0;
+    let iop = dailyIopForPeriod(settlementClassified, settlement.period, localOwner.id, settlement.endDate);
     if (iop === 0 && localOwner.name) {
+      const owners: Owner[] = JSON.parse(localStorage.getItem('ownersList') || '[]');
       const matchedId = resolveOwnerMatch(localOwner.name, owners, 'Owner Portal').matchedOwner?.id;
       if (matchedId && matchedId !== localOwner.id) {
-        iop = dailyIopForPeriod(classified, settlement.period, matchedId, settlement.endDate);
+        iop = dailyIopForPeriod(settlementClassified, settlement.period, matchedId, settlement.endDate);
       }
     }
     return iop;
-  }, [localOwner, settlement.period, settlement.endDate, servicingRows, tillsList]);
+  }, [localOwner, settlement.period, settlement.endDate, settlementClassified]);
 
   const [manualTargetsList] = useState<ManualOwnerTarget[]>(() => getSavedManualOwnerTargets());
 
@@ -1250,6 +1114,7 @@ export default function OwnerDetailsView({
           <div className="mt-6">
             <TransactionHistorySection 
               localOwner={localOwner}
+              period={currentPeriod}
               tillsList={tillsList}
               ownersList={fullOwnersList}
             />
@@ -1278,20 +1143,20 @@ export default function OwnerDetailsView({
               />
               <MetricCard
                 title="Active Wakala"
-                value={latestWeeklyActivity?.active ?? (isSynced ? activeWakalaCount : 'Not yet synced')}
-                subValue={latestWeeklyActivity ? 'LATEST WEEKLY RULE' : (isSynced ? 'DAILY INGESTION' : 'Awaiting Ingestion')}
+                value={latestWeeklyActivity?.active ?? '—'}
+                subValue={latestWeeklyActivity ? 'LATEST WEEKLY RULE' : 'AWAITING WEEKLY REPORT'}
                 icon={UserCheck}
                 variant="green"
               />
               <MetricCard
                 title="Inactive Wakala"
-                value={weeklyInactive ?? (isSynced ? inactiveWakalaCount : 'Not yet synced')}
+                value={weeklyInactive ?? '—'}
                 subValue={
                   latestWeeklyActivity
                     ? notInReportCount > 0
                       ? `LATEST WEEKLY RULE · INCL. ${notInReportCount} NOT IN REPORT`
                       : 'LATEST WEEKLY RULE'
-                    : (isSynced ? 'DAILY INGESTION' : 'Awaiting Ingestion')
+                    : 'AWAITING WEEKLY REPORT'
                 }
                 icon={UserX}
                 variant="red"

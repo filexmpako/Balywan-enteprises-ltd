@@ -380,6 +380,48 @@ export async function recordUpload(
   if (error) throw new Error(`file_upload_archives: ${error.message}`);
 }
 
+/**
+ * First and last Daily MGT date and the months that have data, without
+ * downloading the rows (RLS scopes owners to their own).
+ */
+export async function loadDailyDateRange(
+  supabase: DB,
+): Promise<{ earliest: string | null; latest: string | null; months: string[] }> {
+  const edge = async (ascending: boolean): Promise<string | null> => {
+    const { data, error } = await supabase
+      .from('daily_transaction_records')
+      .select('reporting_date')
+      .eq('is_active', true)
+      .not('reporting_date', 'is', null)
+      .order('reporting_date', { ascending })
+      .limit(1);
+    if (error) throw new Error(`daily_transaction_records: ${error.message}`);
+    return data?.[0]?.reporting_date ? String(data[0].reporting_date).slice(0, 10) : null;
+  };
+  const [earliest, latest] = await Promise.all([edge(true), edge(false)]);
+  if (!earliest || !latest) return { earliest, latest, months: [] };
+
+  const candidates: string[] = [];
+  for (let y = Number(earliest.slice(0, 4)), m = Number(earliest.slice(5, 7)); ; ) {
+    const month = `${y}-${String(m).padStart(2, '0')}`;
+    candidates.push(month);
+    if (month >= latest.slice(0, 7)) break;
+    m === 12 ? ((m = 1), y++) : m++;
+  }
+  const counts = await Promise.all(
+    candidates.map(async (month) => {
+      const { count, error } = await supabase
+        .from('daily_transaction_records')
+        .select('record_id', { count: 'exact', head: true })
+        .eq('is_active', true)
+        .eq('reporting_period', month);
+      if (error) throw new Error(`daily_transaction_records: ${error.message}`);
+      return count ?? 0;
+    }),
+  );
+  return { earliest, latest, months: candidates.filter((_, i) => counts[i] > 0) };
+}
+
 /** Owner-scoped MTD transaction read used by the KPI engines. */
 export async function loadTransactions(supabase: DB, period?: string) {
   // RLS scopes owners to their own rows. Pages are fetched in parallel
