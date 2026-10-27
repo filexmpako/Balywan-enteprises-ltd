@@ -15,7 +15,8 @@ import { getDailyServicingRows } from '../utils/indexedDB';
 import { formatDate as formatDateUtil, formatDateTime as formatDateTimeUtil } from '../utils/dateFormat';
 import { resolveOwnerMatch } from '../utils/ownerMatch';
 import { normalizeMsisdn } from '../utils/msisdn';
-import { formatPeriodDisplay } from '../utils/periodUtils';
+import { formatPeriodDisplay, toIsoPeriod } from '../utils/periodUtils';
+import { fetchReceivedTransactions } from '../lib/hasidadi.functions';
 import { buildCounterpartyLookup, ownerTransactions, type TransactionDirection } from '../utils/ownerTransactions';
 import { CLOUD_HYDRATED_EVENT } from '../lib/cloudSyncEvents';
 
@@ -63,14 +64,27 @@ export default function TransactionHistorySection({ localOwner, period, tillsLis
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 25;
 
-  // Load daily servicing rows from IndexedDB
+  // The month's Daily MGT rows plus the rows sent to this owner's tills (an
+  // owner's own read only holds what their tills sent).
   useEffect(() => {
     let isMounted = true;
     const loadData = async () => {
       try {
-        const rows = await getDailyServicingRows(period);
+        const iso = toIsoPeriod(period);
+        const [rows, received] = await Promise.all([
+          getDailyServicingRows(period),
+          localOwner.id && /^\d{4}-\d{2}$/.test(iso)
+            ? fetchReceivedTransactions({ data: { ownerId: localOwner.id, period: iso } }).catch((e) => {
+                console.error('Failed to load received transactions:', e);
+                return [];
+              })
+            : Promise.resolve([]),
+        ]);
+        const key = (r: any) => `${r?._id ?? ''}|${r?.['Transaction ID'] ?? ''}|${r?.['Branch_msisdn'] ?? ''}|${r?.['Dest_MSISDN'] ?? ''}`;
+        const seen = new Set(rows.map(key));
+        const merged = [...rows, ...(Array.isArray(received) ? received : []).filter((r: any) => !seen.has(key(r)))];
         if (isMounted) {
-          setAllRows(rows);
+          setAllRows(merged);
         }
       } catch (e) {
         console.error('Failed to load daily servicing rows in TransactionHistorySection:', e);
@@ -90,7 +104,7 @@ export default function TransactionHistorySection({ localOwner, period, tillsLis
       window.removeEventListener('servicing-rows-updated', loadData);
       window.removeEventListener(CLOUD_HYDRATED_EVENT, reloadRegistries);
     };
-  }, [period]);
+  }, [period, localOwner.id]);
 
   // This owner's tills (normalized numbers)
   const ownTills = useMemo(() => {

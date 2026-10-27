@@ -286,8 +286,6 @@ export const DOCUMENT_KEYS = [
   'activityRules',
 ] as const;
 
-export type DocumentKey = (typeof DOCUMENT_KEYS)[number];
-
 /**
  * Collections the server changes one record at a time (src/lib/float.server.ts).
  * They are downloaded with the workspace but never saved as a whole list: a
@@ -310,6 +308,61 @@ export function collectionIds(key: string, items: unknown): string[] {
     .map((item, i) => (item && typeof item === 'object' ? toRow(mapper, item, i)[mapper.pk] : undefined))
     .filter((id) => id !== undefined && id !== null && String(id) !== '')
     .map(String);
+}
+
+/**
+ * An item's stored id, '' when it has none (never saved), or null when the id
+ * comes from the item's position in the list (e.g. `owner-3`): such a list
+ * can only be saved whole.
+ */
+function stableItemId(mapper: CollectionMapper, item: any, index: number): string | null {
+  if (!item || typeof item !== 'object') return '';
+  const id = (i: number) => {
+    const v = mapper.makeId ? mapper.makeId(item, i) : item.id;
+    return v === undefined || v === null ? '' : String(v);
+  };
+  const here = id(index);
+  return here === id(index + 1) ? here : null;
+}
+
+/**
+ * The items of `next` that are new or differ from `previous`, so a save sends
+ * only what this device changed: a device holding an out-of-date copy can then
+ * never overwrite records it did not touch. Null when ids depend on list
+ * position (the whole list has to be sent).
+ */
+export function changedCollectionItems(key: string, previous: unknown, next: unknown): any[] | null {
+  const mapper = getMapper(key);
+  if (!mapper || !Array.isArray(next)) return null;
+  const before = new Map<string, string>();
+  if (Array.isArray(previous)) {
+    for (let i = 0; i < previous.length; i++) {
+      const id = stableItemId(mapper, previous[i], i);
+      if (id === null) return null;
+      if (id) before.set(id, JSON.stringify(previous[i]));
+    }
+  }
+  const changed: any[] = [];
+  for (let i = 0; i < next.length; i++) {
+    const id = stableItemId(mapper, next[i], i);
+    if (id === null) return null;
+    if (id && before.get(id) !== JSON.stringify(next[i])) changed.push(next[i]);
+  }
+  return changed;
+}
+
+/** Items of two partial saves of one list, by id; `newer` wins. */
+export function mergeCollectionItems(key: string, older: any[], newer: any[]): any[] {
+  const mapper = getMapper(key);
+  if (!mapper) return newer;
+  const byId = new Map<string, any>();
+  for (const list of [older, newer]) {
+    list.forEach((item, i) => {
+      const id = stableItemId(mapper, item, i);
+      if (id) byId.set(id, item);
+    });
+  }
+  return Array.from(byId.values());
 }
 
 export function toRow(mapper: CollectionMapper, obj: any, index: number): Record<string, any> {

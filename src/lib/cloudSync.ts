@@ -6,7 +6,14 @@
  * transactions have no local cache at all and are always read live from the
  * server.
  */
-import { COLLECTION_KEYS, DOCUMENT_KEYS, SERVER_MANAGED_KEYS, collectionIds } from './hasidadi/collections';
+import {
+  COLLECTION_KEYS,
+  DOCUMENT_KEYS,
+  SERVER_MANAGED_KEYS,
+  changedCollectionItems,
+  collectionIds,
+  mergeCollectionItems,
+} from './hasidadi/collections';
 import { fetchWorkspace, saveCollection, saveDocument } from './hasidadi.functions';
 import { CLOUD_HYDRATED_EVENT, REGISTRIES_CHANGED_EVENT } from './cloudSyncEvents';
 
@@ -26,13 +33,26 @@ const timers = new Map<string, ReturnType<typeof setTimeout>>();
 let inFlight = 0;
 /** Rows this device removed from a collection since its last push, per key. */
 const pendingRemovals = new Map<string, Set<string>>();
+/**
+ * Rows this device changed since its last push, per key; null when the list
+ * has position-based ids and must be sent whole.
+ */
+const pendingChanges = new Map<string, any[] | null>();
 
 /**
  * A write that could not be sent yet, and the signed-in user who made it.
  * `removedIds` are the rows this device deleted: the server deletes only
  * those, never rows that are merely missing from an out-of-date copy.
+ * `partial`: `value` holds only the rows this device changed.
  */
-type QueueEntry = { key: string; kind: 'collection' | 'document'; value: string; userId?: string; removedIds?: string[] };
+type QueueEntry = {
+  key: string;
+  kind: 'collection' | 'document';
+  value: string;
+  userId?: string;
+  removedIds?: string[];
+  partial?: boolean;
+};
 
 function readQueue(): QueueEntry[] {
   try {
@@ -54,6 +74,13 @@ function enqueue(entry: QueueEntry) {
   // A newer write of the same list replaces the queued one, but must keep the
   // deletions that one carried (unless the newer list has the row again).
   const older = queue.find((q) => q.key === entry.key);
+  if (older && entry.kind === 'collection' && entry.partial) {
+    // Two partial saves combine row by row; a queued whole list is replaced
+    // by this device's current whole list.
+    entry = older.partial
+      ? { ...entry, value: JSON.stringify(mergeCollectionItems(entry.key, JSON.parse(older.value), JSON.parse(entry.value))) }
+      : { ...entry, value: localStorage.getItem(entry.key) ?? entry.value, partial: false };
+  }
   if (older?.removedIds?.length && entry.kind === 'collection') {
     const kept = new Set(collectionIds(entry.key, JSON.parse(entry.value)));
     const merged = new Set([...(entry.removedIds || []), ...older.removedIds.filter((id) => !kept.has(id))]);
@@ -127,9 +154,11 @@ async function flushQueue(): Promise<void> {
   writeQueue(remaining);
 }
 
-function schedulePush(key: string, value: string, removed: string[]) {
+function schedulePush(key: string, value: string, removed: string[], changed: any[] | null) {
   const kind: QueueEntry['kind'] = COLLECTION_KEYS.includes(key) ? 'collection' : 'document';
   let removedIds: string[] | undefined;
+  let sent = value;
+  let partial = false;
   if (kind === 'collection') {
     // Several quick edits are sent as one push: carry every removal since the
     // last push, minus rows the latest list has again.
@@ -139,8 +168,19 @@ function schedulePush(key: string, value: string, removed: string[]) {
     kept.forEach((id) => pending.delete(id));
     pendingRemovals.set(key, pending);
     removedIds = Array.from(pending);
+
+    // ...and every row changed since the last push, minus rows since removed.
+    const prior = pendingChanges.has(key) ? pendingChanges.get(key)! : [];
+    const rows = prior === null || changed === null ? null : mergeCollectionItems(key, prior, changed);
+    const live = rows && rows.filter((item) => kept.has(collectionIds(key, [item])[0]));
+    pendingChanges.set(key, live);
+    if (live) {
+      if (!live.length && !removedIds.length) return;
+      sent = JSON.stringify(live);
+      partial = true;
+    }
   }
-  const entry: QueueEntry = { key, kind, value, removedIds };
+  const entry: QueueEntry = { key, kind, value: sent, removedIds, partial };
   const existing = timers.get(key);
   if (existing) clearTimeout(existing);
   timers.set(
@@ -148,6 +188,7 @@ function schedulePush(key: string, value: string, removed: string[]) {
     setTimeout(async () => {
       timers.delete(key);
       pendingRemovals.delete(key);
+      pendingChanges.delete(key);
       inFlight++;
       const userId = await currentUserId();
       try {
@@ -185,11 +226,17 @@ export function installCloudSync() {
         // Rows this write took out of this device's own copy: the only rows
         // the server may delete for it.
         let removed: string[] = [];
-        if (COLLECTION_KEYS.includes(key) && previous) {
-          const next = new Set(collectionIds(key, JSON.parse(value)));
-          removed = collectionIds(key, JSON.parse(previous)).filter((id) => !next.has(id));
+        let changed: any[] | null = null;
+        if (COLLECTION_KEYS.includes(key)) {
+          const prev = previous ? JSON.parse(previous) : [];
+          const next = JSON.parse(value);
+          const nextIds = new Set(collectionIds(key, next));
+          removed = collectionIds(key, prev).filter((id) => !nextIds.has(id));
+          // Only the rows this write changed are sent (the whole list when its
+          // ids are position-based).
+          changed = changedCollectionItems(key, prev, next);
         }
-        schedulePush(key, value, removed);
+        schedulePush(key, value, removed, changed);
       } catch {
         /* cache write must never break the UI */
       }

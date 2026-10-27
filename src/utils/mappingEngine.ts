@@ -135,15 +135,16 @@ export interface PersonDailyPerformance {
 }
 
 /**
- * Clean and format any date/timestamp into YYYY-MM-DD
+ * Clean and format any date/timestamp into YYYY-MM-DD; '' when there is no
+ * readable date (a row must not silently count as today).
  */
 export function formatToISODate(dateStr: string): string {
   if (!dateStr || typeof dateStr !== 'string') {
-    return new Date().toISOString().split('T')[0];
+    return '';
   }
   const trimmed = dateStr.trim();
   if (!trimmed) {
-    return new Date().toISOString().split('T')[0];
+    return '';
   }
 
   // Handle YYYY-MM-DD format directly
@@ -179,7 +180,7 @@ export function formatToISODate(dateStr: string): string {
     }
   } catch (e) {}
 
-  return new Date().toISOString().split('T')[0];
+  return '';
 }
 
 /**
@@ -347,7 +348,8 @@ export function mapTransactions(
     const status = (tx.status || 'Completed').trim();
     const rawTimestamp = tx.tranferdate || tx.TranferDate || tx.transferdate || tx.TransferDate || tx.tranferda || tx.transfer_da || tx.transfer_date || tx.timestamp || tx.date || tx.transaction_date || tx['Servicing Timestamp'] || tx['servicing timestamp'] || '';
     const finalTimestamp = rawTimestamp && String(rawTimestamp).trim() ? String(rawTimestamp).trim() : new Date().toISOString();
-    const date = formatToISODate(finalTimestamp);
+    // An upload row with an unreadable date is dated today, as it always was.
+    const date = formatToISODate(finalTimestamp) || formatToISODate(new Date().toISOString());
 
     // Find registered Till using Branch MSISDN
     const matchedTill = branchMsisdn ? tillByMsisdn.get(branchMsisdn) : undefined;
