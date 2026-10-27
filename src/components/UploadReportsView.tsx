@@ -41,6 +41,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { mapTransactions } from '../utils/mappingEngine';
 import { invalidateClassificationCache } from '../utils/classificationCache';
+import { invalidateWeeklyStatsHistory } from '../utils/weeklyHistory';
 import { getServicingRows, getServicingColumns, clearWeeklyServicingData, getDailyServicingRows } from '../utils/indexedDB';
 import { persistWeeklyServicing, listStoredWeeks } from '../utils/weeklyStore';
 import IopLabel from './IopLabel';
@@ -1456,6 +1457,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
             .then(() => persistWeeklyServicing(uploadWeek, uploadMonth, parsedServicing))
             .then((res) => {
               invalidateClassificationCache();
+              invalidateWeeklyStatsHistory();
               window.dispatchEvent(new Event('servicing-rows-updated'));
               window.dispatchEvent(new Event('weekly-kpi-updated'));
               console.log(

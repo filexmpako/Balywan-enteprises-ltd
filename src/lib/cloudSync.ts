@@ -177,7 +177,10 @@ export function installCloudSync() {
     const previous = local && SYNCED.has(key) ? this.getItem(key) : null;
     const registryChanged = local && REGISTRY_KEYS.has(key) && previous !== value;
     original.call(this, key, value);
-    if (local && SYNCED.has(key)) {
+    // A write of the value already stored (a view echoing the list back on
+    // mount) is not an edit: pushing it would overwrite newer server rows with
+    // this device's copy.
+    if (local && SYNCED.has(key) && previous !== value) {
       try {
         // Rows this write took out of this device's own copy: the only rows
         // the server may delete for it.

@@ -15,8 +15,8 @@ import { reresolvePriorityOwners } from '../utils/priorityOwners';
 /**
  * Report resync: brings data that was stamped at upload time in line with
  * today's registries (owners, tills, SA tills, Base Wakala Index), without a
- * re-upload. Weekly and Monthly reports need nothing here — they are
- * attributed from the registries every time they are read.
+ * re-upload. Weekly and Monthly report rows are attributed from the
+ * registries when read; their owner stamps are re-set in reportOwners.server.
  */
 type DB = SupabaseClient<any, any, any>;
 

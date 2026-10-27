@@ -3,7 +3,7 @@ import { Owner } from '../types';
 import { logNameResolution } from './nameResolutionLog';
 import { invalidateClassificationCache } from './classificationCache';
 
-export type OwnerMatchStatus = 'Matched' | 'Unmatched' | 'Unassigned';
+type OwnerMatchStatus = 'Matched' | 'Unmatched' | 'Unassigned';
 
 export interface OwnerMatchResult {
   status: OwnerMatchStatus;
@@ -57,18 +57,22 @@ export function resolveOwnerMatch(
     return { status: 'Matched', matchedOwner: aliasMatch, matchedVia: 'alias' };
   }
 
-  // 2. Fallback heuristic
-  const heuristicMatch = owners.find(o => {
+  // 2. Fallback heuristic: an exact name/id match always wins; a partial
+  // match (one name containing the other) only counts when it points at a
+  // single owner, so list order can never pick between owners.
+  const exactMatch = owners.find(o => {
     if (!o) return false;
     const nameLower = o.name ? o.name.toLowerCase() : '';
     const idLower = o.id ? o.id.toLowerCase() : '';
-    return (
-      (nameLower && nameLower === lowerOwner) ||
-      (idLower && idLower === lowerOwner) ||
-      (nameLower && lowerOwner.includes(nameLower)) ||
-      (nameLower && nameLower.includes(lowerOwner))
-    );
+    return (nameLower && nameLower === lowerOwner) || (idLower && idLower === lowerOwner);
   });
+  const partialMatches = exactMatch
+    ? []
+    : owners.filter(o => {
+        const nameLower = o?.name ? o.name.toLowerCase() : '';
+        return nameLower && (lowerOwner.includes(nameLower) || nameLower.includes(lowerOwner));
+      });
+  const heuristicMatch = exactMatch || (partialMatches.length === 1 ? partialMatches[0] : undefined);
   if (heuristicMatch) {
     logNameResolution({
       timestamp: new Date().toISOString(),

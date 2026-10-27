@@ -2,10 +2,11 @@
  * Builds (and caches) the running weekly stats history that the Admin
  * Dashboard, the KPI Reports page and the Owner dashboard all read.
  *
- * Rows come from Postgres via weeklyStore (IndexedDB is only an offline
- * mirror). The computed series itself is stored under
- * `weeklyWakalaStatsHistory`, a synced document key, so it also persists
- * server-side and survives sign-out.
+ * Rows come from Postgres via weeklyStore. Staff sessions compute the series
+ * from every stored week and store it under `weeklyWakalaStatsHistory`, a
+ * synced document key, so owners read the complete series that staff
+ * computed (an owner can only load their own rows). The computation is
+ * shared: one run per session, repeated only when data or registries change.
  */
 import { BaseWakala, Owner } from '../types';
 import { listStoredWeeks, loadWeeklyRows } from './weeklyStore';
@@ -19,6 +20,7 @@ import {
 
 import { getActivityRules } from './activityRules';
 import { saveWakalaStatusHistory } from '../lib/wakalaStatus.functions';
+import { CLOUD_HYDRATED_EVENT, REGISTRIES_CHANGED_EVENT } from '../lib/cloudSyncEvents';
 
 const WEEKLY_STATS_KEY = 'weeklyWakalaStatsHistory';
 
@@ -84,11 +86,48 @@ function readWeeklyKpiHistory(): any[] {
   }
 }
 
+function isStaffSession(): boolean {
+  try {
+    const role = JSON.parse(localStorage.getItem('hasidadi_current_user') || 'null')?.role;
+    return role === 'Admin' || role === 'FloatManager';
+  } catch {
+    return false;
+  }
+}
+
+let current: Promise<WeeklyStatsEntry[]> | null = null;
+
+/** The next refresh recomputes. Call after weekly data, rules or registries change. */
+export function invalidateWeeklyStatsHistory(): void {
+  current = null;
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener(CLOUD_HYDRATED_EVENT, invalidateWeeklyStatsHistory);
+  window.addEventListener(REGISTRIES_CHANGED_EVENT, invalidateWeeklyStatsHistory);
+}
+
+/**
+ * The weekly series. Staff: computed once and shared by every caller until
+ * invalidated (`force` invalidates first). Owners: the stored series.
+ */
+export function refreshWeeklyStatsHistory(options: { force?: boolean } = {}): Promise<WeeklyStatsEntry[]> {
+  if (options.force) invalidateWeeklyStatsHistory();
+  if (!current) {
+    const run = isStaffSession() ? computeWeeklyStatsHistory() : Promise.resolve(readWeeklyStatsHistory());
+    current = run;
+    run.catch(() => {
+      if (current === run) current = null;
+    });
+  }
+  return current;
+}
+
 /**
  * Recomputes every stored week and merges it into the running series.
  * Append-only: a new week is added, a re-uploaded week replaces only itself.
  */
-export async function refreshWeeklyStatsHistory(): Promise<WeeklyStatsEntry[]> {
+async function computeWeeklyStatsHistory(): Promise<WeeklyStatsEntry[]> {
   const owners: Owner[] = (() => {
     try {
       return JSON.parse(localStorage.getItem('ownersList') || '[]');
