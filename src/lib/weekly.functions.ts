@@ -30,6 +30,36 @@ export const fetchWeeklyServicingRows = createServerFn({ method: 'GET' })
     return { rows: await loadWeeklyRows(context.supabase as any, data?.reportingWeek) };
   });
 
+/**
+ * One week's report rows as the weekly figures count them; all owners for
+ * staff, or one owner's rows for staff or that owner.
+ */
+export const fetchWeeklyReport = createServerFn({ method: 'GET' })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { reportingWeek: string; ownerId?: string }) => {
+    if (!input || typeof input.reportingWeek !== 'string' || !input.reportingWeek.trim()) {
+      throw new Error('reportingWeek is required');
+    }
+    return { reportingWeek: input.reportingWeek, ownerId: input.ownerId || undefined };
+  })
+  .handler(async ({ data, context }) => {
+    const supabase = context.supabase as any;
+    const { data: isStaff } = await supabase.rpc('is_staff', { _user_id: context.userId });
+    if (isStaff !== true) {
+      const { data: ownsOwner } = data.ownerId
+        ? await supabase.rpc('owns_owner', { _owner_id: data.ownerId })
+        : { data: false };
+      if (ownsOwner !== true) throw new Error("Not allowed to read this owner's weekly report.");
+    }
+    // Checked above; the full week and registries are read so each row is
+    // attributed exactly as the weekly figures attribute it.
+    const [{ privilegedClient }, { loadWeeklyReportRows }] = await Promise.all([
+      import('./privilegedClient.server'),
+      import('./weeklyReport.server'),
+    ]);
+    return loadWeeklyReportRows(await privilegedClient(supabase), data.reportingWeek, data.ownerId);
+  });
+
 export const fetchWeeklyWeeks = createServerFn({ method: 'GET' })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {

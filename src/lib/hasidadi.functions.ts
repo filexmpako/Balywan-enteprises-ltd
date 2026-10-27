@@ -159,11 +159,11 @@ export const fetchReceivedTransactions = createServerFn({ method: 'GET' })
       supabase.rpc('owns_owner', { _owner_id: data.ownerId }),
     ]);
     if (isStaff !== true && ownsOwner !== true) throw new Error("Not allowed to read this owner's transactions.");
-    const [{ supabaseAdmin }, { loadReceivedTransactions }] = await Promise.all([
-      import('@/integrations/supabase/client.server'),
+    const [{ privilegedClient }, { loadReceivedTransactions }] = await Promise.all([
+      import('./privilegedClient.server'),
       import('./hasidadi/repo.server'),
     ]);
-    return loadReceivedTransactions(supabaseAdmin as any, data.ownerId, data.period);
+    return loadReceivedTransactions(await privilegedClient(supabase), data.ownerId, data.period);
   });
 
 /** Daily MGT date range and months with data, without the rows. */
