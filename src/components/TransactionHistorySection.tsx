@@ -15,11 +15,14 @@ import { getDailyServicingRows } from '../utils/indexedDB';
 import { formatDate as formatDateUtil, formatDateTime as formatDateTimeUtil } from '../utils/dateFormat';
 import { resolveOwnerMatch } from '../utils/ownerMatch';
 import { normalizeMsisdn } from '../utils/msisdn';
+import { formatPeriodDisplay } from '../utils/periodUtils';
 import { buildCounterpartyLookup, ownerTransactions, type TransactionDirection } from '../utils/ownerTransactions';
 import { CLOUD_HYDRATED_EVENT } from '../lib/cloudSyncEvents';
 
 interface TransactionHistorySectionProps {
   localOwner: Owner;
+  /** Reporting month shown (the owner page's selected month). */
+  period: string;
   tillsList: any[];
   ownersList?: Owner[];
 }
@@ -45,7 +48,7 @@ const DIRECTION_ICON: Record<TransactionDirection, typeof ArrowUpRight> = {
   own: ArrowLeftRight,
 };
 
-export default function TransactionHistorySection({ localOwner, tillsList, ownersList = [] }: TransactionHistorySectionProps) {
+export default function TransactionHistorySection({ localOwner, period, tillsList, ownersList = [] }: TransactionHistorySectionProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [allRows, setAllRows] = useState<any[]>([]);
   const [registries, setRegistries] = useState(() => ({
@@ -65,7 +68,7 @@ export default function TransactionHistorySection({ localOwner, tillsList, owner
     let isMounted = true;
     const loadData = async () => {
       try {
-        const rows = await getDailyServicingRows();
+        const rows = await getDailyServicingRows(period);
         if (isMounted) {
           setAllRows(rows);
         }
@@ -87,7 +90,7 @@ export default function TransactionHistorySection({ localOwner, tillsList, owner
       window.removeEventListener('servicing-rows-updated', loadData);
       window.removeEventListener(CLOUD_HYDRATED_EVENT, reloadRegistries);
     };
-  }, []);
+  }, [period]);
 
   // This owner's tills (normalized numbers)
   const ownTills = useMemo(() => {
@@ -254,6 +257,7 @@ export default function TransactionHistorySection({ localOwner, tillsList, owner
           <div>
             <h3 className="font-sans text-base font-bold text-brand-text flex items-center gap-2">
               Transaction History
+              <span className="font-sans text-xs font-semibold text-brand-text-variant">· {formatPeriodDisplay(period)}</span>
             </h3>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
               <span className="font-sans text-xs text-brand-text-variant">

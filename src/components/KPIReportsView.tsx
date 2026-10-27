@@ -115,7 +115,7 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
     (async () => {
       let rows: any[] = [];
       try {
-        rows = await getDailyServicingRows();
+        rows = await getDailyServicingRows(currentPeriod);
       } catch (e) {
         console.error('Failed to load daily servicing rows in KPIReportsView:', e);
       }

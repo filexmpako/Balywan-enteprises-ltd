@@ -24,6 +24,7 @@ import { isKpi1RowName, isKpi2RowName, withLiveKpiRows } from '../utils/kpiRowMa
 import { formatNumberWithAbbreviation } from '../utils/numberFormat';
 import { getDailyServicingRows } from '../utils/indexedDB';
 import { refreshWeeklyStatsHistory, readWeeklyStatsHistory } from '../utils/weeklyHistory';
+import { useClassifiedMonth } from '../hooks/useClassifiedMonth';
 import {
   withCumulativeValue,
   weekNumberOf,
@@ -190,6 +191,8 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
     () => pickSettlementReport(currentPeriod, monthlyReportMonths, weeklyStats),
     [currentPeriod, monthlyReportMonths, weeklyStats],
   );
+  // The settlement's report month can be an earlier month than the selected one.
+  const settlementClassified = useClassifiedMonth(settlementReport?.iso);
   const [monthlyStats, setMonthlyStats] = useState<{ month: string; stats: MonthlyReportStats | null } | null>(null);
   const monthlyToLoad = settlementReport?.kind === 'monthly' ? settlementReport.month : '';
   useEffect(() => {
@@ -235,7 +238,7 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
     }
     (async () => {
       try {
-        const dailyRows = await getDailyServicingRows();
+        const dailyRows = await getDailyServicingRows(currentPeriod);
         const saTillRegistry = JSON.parse(localStorage.getItem('saTillRegistry') || '[]');
         const baseWakalaIndex: BaseWakala[] = JSON.parse(localStorage.getItem('baseWakalaIndex') || '[]');
         const tillsList = JSON.parse(localStorage.getItem('tillsList') || '[]');
@@ -355,7 +358,6 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
     totalIopVolume: 0,
     iopVolumeByOwner: {},
     reportingMonth: '—',
-    lastUpload: '—',
     latestDay: '',
     earliestDay: ''
   };
@@ -378,7 +380,7 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
     const loadData = async () => {
       let rows: any[] = [];
       try {
-        rows = await getDailyServicingRows();
+        rows = await getDailyServicingRows(currentPeriod);
       } catch (e) {
         console.error("Failed to load daily servicing rows in DashboardView:", e);
       }
@@ -704,7 +706,7 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
                   : null;
             // Same month-to-date window as the report it is compared with.
             const dailyIop = settlement.period
-              ? dailyIopForPeriod(classifiedDaily, settlement.period, undefined, settlement.endDate)
+              ? dailyIopForPeriod(settlementClassified, settlement.period, undefined, settlement.endDate)
               : 0;
             return (
               <div className="space-y-2">

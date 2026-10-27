@@ -13,7 +13,7 @@ import { loadMonthlyKpiOverride, type MonthlyKpiOverride } from '../utils/monthl
 import { loadWeeklyServedMap } from '../utils/weeklyServed';
 import { readWeeklyStatsHistory } from '../utils/weeklyHistory';
 import IopLabel from './IopLabel';
-import { getClassifiedRowsCached } from '../utils/classificationCache';
+import { classifyWithStoredRegistries } from '../utils/classificationCache';
 import { Target, X, ArrowLeft, Loader2, SlidersHorizontal, MoreVertical } from 'lucide-react';
 import PageHeaderBanner from './PageHeaderBanner';
 import PeriodSelector from './PeriodSelector';
@@ -93,31 +93,15 @@ export default function TargetsView() {
     loadStaticData();
     let isMounted = true;
     setIsLoading(true);
-    getDailyServicingRows()
+    getDailyServicingRows(period)
       .then(rows => {
         if (!isMounted) return;
-        const savedSaTill = localStorage.getItem('saTillRegistry');
-        const saTillRegistry = savedSaTill ? JSON.parse(savedSaTill) : [];
-        const savedTills = localStorage.getItem('tillsList');
-        const tillsList = savedTills ? JSON.parse(savedTills) : [];
-        const savedOwners = localStorage.getItem('ownersList');
-        const currentOwners = savedOwners ? JSON.parse(savedOwners) : [];
-        const savedBw = localStorage.getItem('baseWakalaIndex');
-        const currentBw = savedBw ? JSON.parse(savedBw) : [];
-
-        const classified = getClassifiedRowsCached(
-          rows || [],
-          saTillRegistry,
-          currentBw,
-          tillsList,
-          currentOwners
-        );
-        setClassifiedRows(classified);
+        setClassifiedRows(classifyWithStoredRegistries(rows || []));
       })
       .catch(() => { if (isMounted) setClassifiedRows([]); })
       .finally(() => { if (isMounted) setIsLoading(false); });
     return () => { isMounted = false; };
-  }, [loadStaticData]);
+  }, [loadStaticData, period]);
 
   // Weekly servicing rows for the selected month. Where a wakala has a weekly
   // row, its uploaded servicing_status is the authoritative served answer and

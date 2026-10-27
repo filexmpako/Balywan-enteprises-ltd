@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import { calculateCompanyKPIs } from '../utils/mappingEngine';
 import { useAuth } from '../components/AuthContext';
 import { useReportingPeriod } from '../components/ReportingPeriodContext';
-import { getDailyServicingRows } from '../utils/indexedDB';
+import { getDailyDateRange } from '../utils/indexedDB';
 
 export function useReportingMetadata() {
   const { user } = useAuth();
@@ -15,10 +14,10 @@ export function useReportingMetadata() {
 
     const loadMetadata = async () => {
       try {
-        const rows = await getDailyServicingRows();
-        const kpis = await calculateCompanyKPIs(rows);
+        // Last Daily MGT date, DD/MM/YY.
+        const { latest } = await getDailyDateRange();
         if (isMounted) {
-          setLastUpload(kpis.lastUpload || '—');
+          setLastUpload(latest ? `${latest.slice(8, 10)}/${latest.slice(5, 7)}/${latest.slice(2, 4)}` : '—');
         }
       } catch (e) {
         if (isMounted) {

@@ -82,22 +82,15 @@ export const ReportingPeriodProvider: React.FC<{ children: React.ReactNode }> = 
   // months that have a Monthly report.
   const refreshDataPeriod = useCallback(async () => {
     try {
-      const [{ getDailyServicingRows }, { fetchMonthlyMonths }] = await Promise.all([
+      const [{ getDailyDateRange }, { fetchMonthlyMonths }] = await Promise.all([
         import('../utils/indexedDB'),
         import('../lib/monthly.functions'),
       ]);
       // A failed read must not count as "no data" (that would flip the month
       // back); it throws and the last good value is kept.
-      const [rows, monthly] = await Promise.all([getDailyServicingRows(), fetchMonthlyMonths()]);
+      const [range, monthly] = await Promise.all([getDailyDateRange(), fetchMonthlyMonths()]);
       if (!Array.isArray(monthly?.months)) throw new Error('monthly months unavailable');
-      let earliest: string | null = null;
-      let latest: string | null = null;
-      for (const r of rows || []) {
-        const d = String(r?.['Servicing Date'] ?? '').slice(0, 10);
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
-        if (!earliest || d < earliest) earliest = d;
-        if (!latest || d > latest) latest = d;
-      }
+      const { earliest, latest } = range;
       const period = deriveBusinessReportingPeriod(earliest, latest, monthly?.months ?? []);
       setDataDetectedPeriod(period);
       try {
