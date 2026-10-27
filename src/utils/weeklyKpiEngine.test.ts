@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ownerWeeklySeries, type WeeklyStatsEntry } from './weeklyKpiEngine';
+import { buildMsisdnOwnerResolver, ownerWeeklySeries, type WeeklyStatsEntry } from './weeklyKpiEngine';
 
 const entry = (month: string, week: number, value: number): WeeklyStatsEntry => ({
   reportingMonth: `${month} 2026`,
@@ -24,4 +24,20 @@ describe('owner weekly reporting', () => {
     assert.equal(series[0]?.breakdown, null);
     assert.equal(series[0]?.cumulativeValue, 0);
   });
+});
+describe('report owner resolver', () => {
+  const owners = [{ id: 'm', name: 'MWALE' }, { id: 'a', name: 'ABDALLAH' }] as any;
+  const resolve = buildMsisdnOwnerResolver(
+    [
+      { msisdn: '255700000001', altMsisdn: '255762506815', ownerName: 'MWALE' },
+      { msisdn: '255700000002', altMsisdn: '255762506815', ownerName: 'ABDALLAH' },
+      { msisdn: '255700000003', altMsisdn: '255711111111', ownerName: 'MWALE' },
+      { msisdn: '255700000004', altMsisdn: '255711111111', ownerId: 'm', ownerName: 'MWALE' },
+    ] as any,
+    owners,
+  );
+  test('an alternate number shared by different owners attributes to none', () =>
+    assert.equal(resolve('255762506815'), null));
+  test('an alternate number shared within one owner still attributes', () =>
+    assert.equal(resolve('255711111111')?.ownerId, 'm'));
 });

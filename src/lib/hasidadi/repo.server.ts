@@ -9,6 +9,9 @@ import {
   type CollectionMapper,
 } from './collections';
 import type { KvSnapshot } from './kv';
+import { runWithSnapshot } from './engine-context.server';
+import { resolveOwnerMatch } from '../../utils/ownerMatch';
+import { normalizeMsisdn } from '../../utils/msisdn';
 
 type DB = SupabaseClient<any, any, any>;
 
@@ -360,8 +363,16 @@ export async function recordUpload(
     summary?: any;
     uploadedBy?: string;
     uploadedByName?: string;
+    /** The uploaded rows: the archive is filed under the month most of them fall in. */
+    rows?: any[];
   },
 ) {
+  const months = new Map<string, number>();
+  for (const row of upload.rows ?? []) {
+    const date = String(row?.['Servicing Date'] || '').slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) months.set(date.slice(0, 7), (months.get(date.slice(0, 7)) ?? 0) + 1);
+  }
+  const dataMonth = Array.from(months.entries()).sort((a, b) => b[1] - a[1] || b[0].localeCompare(a[0]))[0]?.[0];
   const { error } = await supabase.from('file_upload_archives').upsert(
     {
       upload_id: upload.uploadId,
@@ -370,7 +381,7 @@ export async function recordUpload(
       file_size: upload.fileSize ?? 0,
       status: 'Success',
       import_summary: upload.summary ?? null,
-      reporting_period: new Date().toISOString().slice(0, 7),
+      reporting_period: dataMonth ?? new Date().toISOString().slice(0, 7),
       uploaded_by: upload.uploadedBy ?? null,
       uploaded_by_name: upload.uploadedByName ?? 'System',
 
@@ -420,6 +431,33 @@ export async function loadDailyDateRange(
     }),
   );
   return { earliest, latest, months: candidates.filter((_, i) => counts[i] > 0) };
+}
+
+/**
+ * Daily MGT rows of `period` sent TO one of the owner's tills (float they
+ * received). Owners can read only rows stamped with their own owner id, which
+ * is the sender's, so these are read with the privileged client after the
+ * caller has been checked. Tills are the owner's the same way the app assigns
+ * them (owner id on the till, else the till holder's name).
+ */
+export async function loadReceivedTransactions(admin: DB, ownerId: string, period: string): Promise<any[]> {
+  const tillsMapper = getMapper('tillsList')!;
+  const ownersMapper = getMapper('ownersList')!;
+  const [tills, owners] = await Promise.all([loadCollection(admin, tillsMapper), loadCollection(admin, ownersMapper)]);
+  const msisdns = runWithSnapshot({}, () =>
+    tills
+      .filter((t: any) => {
+        if (t?.ownerId) return t.ownerId === ownerId;
+        return resolveOwnerMatch(t?.assignedOwner, owners, 'Received Transactions').matchedOwner?.id === ownerId;
+      })
+      .map((t: any) => normalizeMsisdn(t.transactionTill))
+      .filter(Boolean),
+  );
+  if (!msisdns.length) return [];
+  const rows = await selectAll(admin, 'daily_transaction_records', 'raw, record_id', 'record_id', (q) =>
+    q.eq('is_active', true).eq('reporting_period', period).in('dest_msisdn', msisdns),
+  );
+  return rows.map((r: any) => r.raw);
 }
 
 /** Owner-scoped MTD transaction read used by the KPI engines. */

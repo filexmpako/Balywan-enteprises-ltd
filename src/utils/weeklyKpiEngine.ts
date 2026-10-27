@@ -198,10 +198,21 @@ export function buildMsisdnOwnerResolver(
     if (key) mainNumbers.add(key);
     if (matched && matched.id) register(w.msisdn, matched.id, matched.name || 'Unknown Owner');
   });
+  // An alternate number listed by wakalas of different owners names no single
+  // owner, so it attributes to none (instead of whichever row came first).
+  const altOwners = new Map<string, Set<string>>();
+  baseOwners.forEach(({ w, matched }) => {
+    const alt = normalizeMsisdn((w as any).altMsisdn || (w as any).alternateNumber);
+    if (!alt) return;
+    const set = altOwners.get(alt) ?? new Set<string>();
+    set.add(matched?.id || String((w as any).ownerName || '').trim().toLowerCase());
+    altOwners.set(alt, set);
+  });
   baseOwners.forEach(({ w, matched }) => {
     if (!matched || !matched.id) return;
     const alt = (w as any).altMsisdn || (w as any).alternateNumber;
-    if (mainNumbers.has(normalizeMsisdn(alt))) return;
+    const altKey = normalizeMsisdn(alt);
+    if (mainNumbers.has(altKey) || (altOwners.get(altKey)?.size ?? 0) > 1) return;
     register(alt, matched.id, matched.name || 'Unknown Owner');
   });
 
@@ -503,7 +514,7 @@ export function parseWeekDateRange(reportingWeek: string): { start: string; end:
   };
 }
 
-export interface WeeklyIopOwnerComparison {
+interface WeeklyIopOwnerComparison {
   ownerId: string;
   ownerName: string;
   reportedIop: number;

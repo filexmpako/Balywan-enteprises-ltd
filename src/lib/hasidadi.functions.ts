@@ -116,6 +116,7 @@ export const ingestServicingRows = createServerFn({ method: 'POST' })
       summary,
       uploadedBy: context.userId,
       uploadedByName: data.uploadedByName,
+      rows: data.rows,
     });
 
     const counts = await persistClassifiedRows(supabase, uploadId, classified as any);
@@ -138,6 +139,31 @@ export const fetchTransactions = createServerFn({ method: 'GET' })
   .handler(async ({ data, context }) => {
     const { loadTransactions } = await import('./hasidadi/repo.server');
     return loadTransactions(context.supabase as any, data?.period);
+  });
+
+/**
+ * Daily MGT rows of a month sent to one owner's tills. Staff, or the owner
+ * themselves: RLS lets an owner read only rows their own tills sent.
+ */
+export const fetchReceivedTransactions = createServerFn({ method: 'GET' })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { ownerId: string; period: string }) => {
+    if (!input?.ownerId || typeof input.ownerId !== 'string') throw new Error('ownerId is required');
+    if (!/^\d{4}-\d{2}$/.test(String(input.period || ''))) throw new Error('period must be YYYY-MM');
+    return { ownerId: input.ownerId, period: input.period };
+  })
+  .handler(async ({ data, context }) => {
+    const supabase = context.supabase as any;
+    const [{ data: isStaff }, { data: ownsOwner }] = await Promise.all([
+      supabase.rpc('is_staff', { _user_id: context.userId }),
+      supabase.rpc('owns_owner', { _owner_id: data.ownerId }),
+    ]);
+    if (isStaff !== true && ownsOwner !== true) throw new Error("Not allowed to read this owner's transactions.");
+    const [{ supabaseAdmin }, { loadReceivedTransactions }] = await Promise.all([
+      import('@/integrations/supabase/client.server'),
+      import('./hasidadi/repo.server'),
+    ]);
+    return loadReceivedTransactions(supabaseAdmin as any, data.ownerId, data.period);
   });
 
 /** Daily MGT date range and months with data, without the rows. */

@@ -23,10 +23,19 @@ export function buildBaseWakalaLookup(baseWakalas: BaseWakala[]): BaseWakalaLook
     if (norm) byMsisdn.set(norm, bw);
   }
   // Alternate numbers only fill numbers that are no wakala's main number,
-  // so another wakala's alternate entry can never take over a main number.
+  // so another wakala's alternate entry can never take over a main number;
+  // one listed by wakalas of different owners names no single wakala.
+  const ownersOfAlt = new Map<string, Set<string>>();
   for (const bw of baseWakalas) {
     const normAlt = normalizeMsisdn(bw?.alternateNumber || bw?.altMsisdn);
-    if (normAlt && !byMsisdn.has(normAlt)) byMsisdn.set(normAlt, bw);
+    if (!normAlt) continue;
+    const set = ownersOfAlt.get(normAlt) ?? new Set<string>();
+    set.add(String(bw.ownerName || bw.ownerId || '').trim().toLowerCase());
+    ownersOfAlt.set(normAlt, set);
+  }
+  for (const bw of baseWakalas) {
+    const normAlt = normalizeMsisdn(bw?.alternateNumber || bw?.altMsisdn);
+    if (normAlt && !byMsisdn.has(normAlt) && ownersOfAlt.get(normAlt)!.size === 1) byMsisdn.set(normAlt, bw);
   }
   return { byCode, byMsisdn };
 }
