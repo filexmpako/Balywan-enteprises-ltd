@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { Fragment, useState, useEffect, useMemo } from 'react';
 import { ViewType, KPIMetric, Owner, ManualOwnerTarget, PriorityWakala, BaseWakala } from '../types';
 import { calculateCompanyKPIs, CompanyKPIsResult } from '../utils/mappingEngine';
 import {
@@ -50,11 +50,13 @@ import {
   UserCheck,
   UserX,
   ChevronDown,
+  ChevronRight,
   Loader2
 } from 'lucide-react';
 import MetricCard from './MetricCard';
 import DailyMgtSummary from './DailyMgtSummary';
-import WakalaStatusDetailModal from './WakalaStatusDetailModal';
+import WeeklyReportTable from './WeeklyReportTable';
+import type { DetailFilter } from '../utils/weeklyReport';
 import {
   ResponsiveContainer,
   BarChart,
@@ -371,8 +373,14 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
   const goalPercent = liveTotals.kpi1?.percent ?? (monthlyGoal.total > 0 ? (goalServed / monthlyGoal.total) * 100 : 0);
 
   // Company-wide Served/Unserved wakala drill-down, opened from the
-  // Weekly KPI Progression cards below.
-  const [wakalaStatusModal, setWakalaStatusModal] = useState<'served' | 'unserved' | null>(null);
+  // Weekly KPI Progression: the week whose report is open, and its filter.
+  const [openWeek, setOpenWeek] = useState<string | null>(null);
+  const [weekFilter, setWeekFilter] = useState<DetailFilter>('all');
+  const openWeekReport = (week: string, filter: DetailFilter) => {
+    setOpenWeek(week);
+    setWeekFilter(filter);
+    requestAnimationFrame(() => document.getElementById(`week-report-${week}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -813,7 +821,7 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
                 subValue={`(${latest.servedPercent}%)`}
                 icon={UserCheck}
                 variant="green"
-                onClick={() => setWakalaStatusModal('served')}
+                onClick={() => openWeekReport(latest.reportingWeek, 'served')}
               />
               <MetricCard
                 title="Unserved Wakalas"
@@ -821,7 +829,7 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
                 subValue={`(${latest.notServedPercent}%)`}
                 icon={UserX}
                 variant="red"
-                onClick={() => setWakalaStatusModal('unserved')}
+                onClick={() => openWeekReport(latest.reportingWeek, 'unserved')}
               />
               <MetricCard
                 title="Cumulative vs Target"
@@ -868,22 +876,55 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {series.map(entry => (
-                    <tr key={entry.reportingWeek} className="border-b border-brand-gray-border/50">
-                      <td className="py-2.5 font-sans text-xs font-bold text-brand-text">{entry.reportingWeek}</td>
-                      <td className="py-2.5 font-sans text-xs text-brand-text">{entry.active}</td>
-                      <td className="py-2.5 font-sans text-xs text-brand-text">{entry.inactive}</td>
-                      <td className="py-2.5 font-sans text-xs font-bold text-brand-success">{entry.served}</td>
-                      <td className="py-2.5 font-sans text-xs font-bold text-brand-error">{entry.notServed}</td>
-                      <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation(entry.totalValue)}</td>
-                      <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation((entry as any).iopValue || 0)}</td>
-                      <td className="py-2.5 font-sans text-xs font-bold text-brand-error">{formatNumberWithAbbreviation((entry as any).penalty || 0)}</td>
-                      <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation(entry.cumulativeValue)}</td>
-                      <td className="py-2.5 font-sans text-xs font-bold text-brand-primary">
-                        {target > 0 ? `${((entry.cumulativeValue / target) * 100).toFixed(1)}%` : '—'}
-                      </td>
-                    </tr>
-                  ))}
+                  {series.map((entry, index) => {
+                    const isOpen = openWeek === entry.reportingWeek;
+                    return (
+                      <Fragment key={entry.reportingWeek}>
+                        <tr
+                          id={`week-report-${entry.reportingWeek}`}
+                          onClick={() => (isOpen ? setOpenWeek(null) : openWeekReport(entry.reportingWeek, 'all'))}
+                          className="border-b border-brand-gray-border/50 cursor-pointer hover:bg-brand-gray-hover/40 transition-colors"
+                          title="Click to open this week's report"
+                        >
+                          <td className="py-2.5 font-sans text-xs font-bold text-brand-text">
+                            <span className="flex items-center gap-1.5">
+                              {isOpen ? (
+                                <ChevronDown className="h-3.5 w-3.5 shrink-0 text-brand-text-variant" />
+                              ) : (
+                                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-brand-text-variant" />
+                              )}
+                              {entry.reportingWeek}
+                            </span>
+                          </td>
+                          <td className="py-2.5 font-sans text-xs text-brand-text">{entry.active}</td>
+                          <td className="py-2.5 font-sans text-xs text-brand-text">{entry.inactive}</td>
+                          <td className="py-2.5 font-sans text-xs font-bold text-brand-success">{entry.served}</td>
+                          <td className="py-2.5 font-sans text-xs font-bold text-brand-error">{entry.notServed}</td>
+                          <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation(entry.totalValue)}</td>
+                          <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation((entry as any).iopValue || 0)}</td>
+                          <td className="py-2.5 font-sans text-xs font-bold text-brand-error">{formatNumberWithAbbreviation((entry as any).penalty || 0)}</td>
+                          <td className="py-2.5 font-sans text-xs text-brand-text">{formatNumberWithAbbreviation(entry.cumulativeValue)}</td>
+                          <td className="py-2.5 font-sans text-xs font-bold text-brand-primary">
+                            {target > 0 ? `${((entry.cumulativeValue / target) * 100).toFixed(1)}%` : '—'}
+                          </td>
+                        </tr>
+                        {isOpen && (
+                          <tr>
+                            <td colSpan={10} className="p-0">
+                              <div className="m-2 rounded-xl border border-brand-gray-border bg-brand-bg p-3">
+                                <WeeklyReportTable
+                                  reportingWeek={entry.reportingWeek}
+                                  filter={weekFilter}
+                                  onFilterChange={setWeekFilter}
+                                  priorWeeks={series.slice(0, index).map(s => s.reportingWeek)}
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1058,12 +1099,6 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
               </div>
             )}
 
-            <WakalaStatusDetailModal
-              isOpen={wakalaStatusModal !== null}
-              reportingWeek={latest.reportingWeek}
-              status={wakalaStatusModal || 'served'}
-              onClose={() => setWakalaStatusModal(null)}
-            />
           </motion.div>
         );
       })()}
