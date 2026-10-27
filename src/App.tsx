@@ -135,7 +135,7 @@ function AppContent() {
           "weeklyWakalaStatsHistory",
           JSON.stringify(stats.filter((h: any) => h?.reportingWeek !== report.reportingWeek)),
         );
-        await refreshWeeklyStatsHistory().catch(() => undefined);
+        await refreshWeeklyStatsHistory({ force: true }).catch(() => undefined);
         window.dispatchEvent(new Event("weekly-kpi-updated"));
       } else if (report.reportingMonth) {
         // Removes the month from Postgres and from the offline mirror.

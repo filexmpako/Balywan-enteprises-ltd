@@ -2,11 +2,11 @@
  * Report resync, client side. Uploaded reports keep working off the data
  * already stored: after owners, tills, SA tills or the Base Wakala Index
  * change, this re-attributes what was stamped at upload time (Daily MGT
- * transaction owners and buckets, priority wakala owners) so no file has to
- * be uploaded again. Runs on its own after staff edit those registries, and
+ * transaction owners and buckets, priority wakala owners, Weekly and Monthly
+ * report row owners) so no file has to be uploaded again. Runs on its own after staff edit those registries, and
  * from the "Resync now" button.
  */
-import { resyncDailyTransactions, resyncPriorityWakalas } from '../lib/resync.functions';
+import { resyncDailyTransactions, resyncPriorityWakalas, resyncReportOwners } from '../lib/resync.functions';
 import { hydrateFromCloud, whenSynced } from '../lib/cloudSync';
 import { REGISTRIES_CHANGED_EVENT } from '../lib/cloudSyncEvents';
 import { getDailyServicingRows } from './indexedDB';
@@ -19,6 +19,9 @@ export interface ResyncResult {
   transactionsUpdated: number;
   priorityChecked: number;
   priorityUpdated: number;
+  reportRowsChecked: number;
+  reportRowsUpdated: number;
+  indexOwnersLinked: number;
 }
 
 export const RESYNC_DONE_EVENT = 'reports-resynced';
@@ -44,6 +47,10 @@ async function run(onProgress?: (message: string) => void): Promise<ResyncResult
   // Registry edits are pushed to the server shortly after they are made;
   // re-attributing before they land would use the old registries.
   await whenSynced();
+
+  // Index owners first: priority wakalas and report rows are attributed from them.
+  onProgress?.('Weekly and Monthly report owners…');
+  const reports = await resyncReportOwners();
 
   onProgress?.('Priority wakala list…');
   const priority = await resyncPriorityWakalas();
@@ -73,11 +80,14 @@ async function run(onProgress?: (message: string) => void): Promise<ResyncResult
     transactionsUpdated: updated,
     priorityChecked: priority.checked,
     priorityUpdated: priority.updated,
+    reportRowsChecked: reports.checked,
+    reportRowsUpdated: reports.updated,
+    indexOwnersLinked: reports.linked,
   };
 
-  // Pull the re-attributed priority list into the cache, then let every
+  // Pull the re-attributed priority list and index into the cache, then let every
   // view (and the weekly history) recompute.
-  if (priority.updated > 0) await hydrateFromCloud();
+  if (priority.updated > 0 || reports.linked > 0) await hydrateFromCloud();
   invalidateClassificationCache();
   window.dispatchEvent(new Event('servicing-rows-updated'));
   window.dispatchEvent(new Event('weekly-kpi-updated'));

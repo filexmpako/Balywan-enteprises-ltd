@@ -36,14 +36,16 @@ export default function ReportResyncPanel() {
       <div className="space-y-1">
         <p className="font-sans text-sm font-bold text-brand-text">Resync uploaded reports</p>
         <p className="font-sans text-xs text-brand-text-variant">
-          Re-applies today's owners, tills and Base Wakala Index to the Daily MGT transactions and priority wakala
-          already uploaded — no re-upload needed. Runs on its own after those lists change.
+          Re-applies today's owners, tills and Base Wakala Index to the Daily MGT transactions, priority wakala and
+          Weekly / Monthly reports already uploaded — no re-upload needed. Runs on its own after those lists change.
         </p>
         {last && !progress && (
           <p className="font-sans text-xs font-semibold text-brand-text-variant">
             Last run {formatDateTime(last.at)}: {last.transactionsUpdated.toLocaleString()} of{' '}
-            {last.transactionsChecked.toLocaleString()} transactions and {last.priorityUpdated.toLocaleString()} of{' '}
-            {last.priorityChecked.toLocaleString()} priority wakala updated.
+            {last.transactionsChecked.toLocaleString()} transactions, {last.priorityUpdated.toLocaleString()} of{' '}
+            {last.priorityChecked.toLocaleString()} priority wakala and {(last.reportRowsUpdated ?? 0).toLocaleString()} of{' '}
+            {(last.reportRowsChecked ?? 0).toLocaleString()} report rows updated
+            {last.indexOwnersLinked ? `; ${last.indexOwnersLinked.toLocaleString()} index rows linked to their owner` : ''}.
           </p>
         )}
         {progress && <p className="font-sans text-xs font-semibold text-brand-primary">Resyncing {progress}</p>}

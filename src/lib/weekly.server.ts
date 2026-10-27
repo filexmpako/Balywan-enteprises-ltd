@@ -6,6 +6,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { normalizeMsisdn } from '../utils/msisdn';
+import { loadReportOwnerResolver } from './reportOwners.server';
 
 type DB = SupabaseClient<any, any, any>;
 
@@ -120,34 +121,10 @@ export async function saveWeeklyRows(supabase: DB, input: WeeklyRowInput): Promi
 
   const records = Array.from(byMsisdn.values());
 
-  // Attribute rows to owners through the Base Wakala index so owner-scoped RLS
-  // reads (and the Owner dashboard) work without a second pass.
-  // Page through the index: a single Data API response is capped at 1000 rows.
-  const baseRows: any[] = [];
-  for (let from = 0; ; from += 1000) {
-    const { data } = await supabase
-      .from('base_wakala_index')
-      .select('msisdn, alt_msisdn, owner_id')
-      .range(from, from + 999);
-    const page = data ?? [];
-    baseRows.push(...page);
-    if (page.length < 1000) break;
-  }
-
-  // Main numbers first (ownerless ones included, so they stay unassigned);
-  // an alternate number only fills a number that is no wakala's main number.
-  const ownerByMsisdn = new Map<string, string | null>();
-  for (const b of baseRows) {
-    if (b.msisdn) ownerByMsisdn.set(String(b.msisdn).replace(/\D/g, ''), b.owner_id ?? null);
-  }
-  for (const b of baseRows) {
-    const alt = b.alt_msisdn ? String(b.alt_msisdn).replace(/\D/g, '') : '';
-    if (alt && !ownerByMsisdn.has(alt)) ownerByMsisdn.set(alt, b.owner_id ?? null);
-  }
-  for (const r of records) {
-    const key = r.msisdn.replace(/\D/g, '');
-    r.owner_id = ownerByMsisdn.get(key) ?? ownerByMsisdn.get(key.replace(/^0/, '255')) ?? null;
-  }
+  // Stamp each row with the owner the app attributes it to (same resolver),
+  // so owner-scoped RLS reads match what the app shows.
+  const ownerOf = await loadReportOwnerResolver(supabase);
+  for (const r of records) r.owner_id = ownerOf(r.msisdn);
 
   const { error: delError } = await supabase.from(TABLE).delete().eq('reporting_week', week);
   if (delError) throw new Error(`${TABLE} clear: ${delError.message}`);
@@ -165,7 +142,7 @@ export async function loadWeeklyRows(supabase: DB, reportingWeek?: string): Prom
   const PAGE = 1000;
   const data: any[] = [];
   for (let from = 0; ; from += PAGE) {
-    let query = supabase.from(TABLE).select('*').range(from, from + PAGE - 1);
+    let query = supabase.from(TABLE).select('*').order('id', { ascending: true }).range(from, from + PAGE - 1);
     if (reportingWeek) query = query.eq('reporting_week', reportingWeek);
     const { data: page, error } = await query;
     if (error) throw new Error(`${TABLE} read: ${error.message}`);
@@ -192,6 +169,7 @@ export async function listWeeklyWeeks(supabase: DB): Promise<string[]> {
     const { data, error } = await supabase
       .from(TABLE)
       .select('reporting_week')
+      .order('id', { ascending: true })
       .range(from, from + PAGE - 1);
     if (error) throw new Error(`${TABLE} weeks: ${error.message}`);
     (data ?? []).forEach((r: any) => r.reporting_week && weeks.add(r.reporting_week));

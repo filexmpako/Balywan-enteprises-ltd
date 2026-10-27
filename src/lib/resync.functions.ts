@@ -18,6 +18,35 @@ export const resyncPriorityWakalas = createServerFn({ method: 'POST' })
     return resyncPriorityList(supabase);
   });
 
+/**
+ * Links Base Wakala rows that carry only an owner name to that registered
+ * owner, then re-stamps stored Weekly and Monthly report rows with today's
+ * owner (owners read those rows by that stamp).
+ */
+export const resyncReportOwners = createServerFn({ method: 'POST' })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const supabase = context.supabase as any;
+    await assertStaff(supabase, context.userId);
+    const [{ linkBaseWakalaOwners, restampReportOwners }, { loadWorkspace, appendAuditLog }] = await Promise.all([
+      import('./reportOwners.server'),
+      import('./hasidadi/repo.server'),
+    ]);
+    let workspace = await loadWorkspace(supabase);
+    const linked = await linkBaseWakalaOwners(supabase, workspace);
+    if (linked > 0) workspace = await loadWorkspace(supabase);
+    const { checked, updated } = await restampReportOwners(supabase, workspace);
+    if (linked > 0 || updated > 0) {
+      await appendAuditLog(supabase, {
+        userId: context.userId,
+        action: 'RESYNC_REPORT_OWNERS',
+        entity: 'weekly_servicing_records, monthly_servicing_records, base_wakala_index',
+        details: { indexOwnersLinked: linked, reportRowsChecked: checked, reportRowsUpdated: updated },
+      });
+    }
+    return { linked, checked, updated };
+  });
+
 /** Re-classifies one page of a month ("YYYY-MM") of stored Daily MGT transactions against today's registries. */
 export const resyncDailyTransactions = createServerFn({ method: 'POST' })
   .middleware([requireSupabaseAuth])

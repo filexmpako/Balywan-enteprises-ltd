@@ -107,7 +107,7 @@ export default function SettingsView({
       });
       setRules(next);
       // Re-run every stored week so recorded statuses follow the new rule.
-      await refreshWeeklyStatsHistory();
+      await refreshWeeklyStatsHistory({ force: true });
       window.dispatchEvent(new Event('weekly-kpi-updated'));
       setRulesSaved(true);
       setTimeout(() => setRulesSaved(false), 3500);

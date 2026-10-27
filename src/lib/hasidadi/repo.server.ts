@@ -24,12 +24,20 @@ export interface Workspace {
  */
 const PAGE_SIZE = 1000;
 
-async function selectAll(supabase: DB, table: string, columns: string, filter?: (q: any) => any): Promise<any[]> {
+async function selectAll(
+  supabase: DB,
+  table: string,
+  columns: string,
+  orderBy: string,
+  filter?: (q: any) => any,
+): Promise<any[]> {
   const out: any[] = [];
   for (let from = 0; ; from += PAGE_SIZE) {
     let query = supabase.from(table).select(columns);
     if (filter) query = filter(query);
-    const { data, error } = await query.range(from, from + PAGE_SIZE - 1);
+    // Pages are only consistent in a fixed order: without one, Postgres may
+    // return a row on two pages and skip another.
+    const { data, error } = await query.order(orderBy, { ascending: true }).range(from, from + PAGE_SIZE - 1);
     if (error) throw new Error(`${table}: ${error.message}`);
     const page = data ?? [];
     out.push(...page);
@@ -39,7 +47,7 @@ async function selectAll(supabase: DB, table: string, columns: string, filter?: 
 }
 
 export async function loadCollection(supabase: DB, mapper: CollectionMapper): Promise<any[]> {
-  const rows = await selectAll(supabase, mapper.table, '*');
+  const rows = await selectAll(supabase, mapper.table, '*', mapper.pk);
   return rows.map((row: any) => fromRow(mapper, row));
 }
 
@@ -91,7 +99,7 @@ async function fillOwnerIdsFromNames(supabase: DB, rows: Record<string, any>[]):
   });
   if (!needsFill) return;
 
-  const owners = await selectAll(supabase, 'owners', 'owner_id, name, name_aliases');
+  const owners = await selectAll(supabase, 'owners', 'owner_id, name, name_aliases', 'owner_id');
   const idByName = new Map<string, string>();
   const norm = (v: unknown) => String(v ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
   for (const owner of owners) {
@@ -314,6 +322,7 @@ export async function replaceAuditRecords(supabase: DB, uploadId: string | strin
       supabase,
       'classification_audit_records',
       'id, transaction_ref, branch_msisdn',
+      'id',
       (q) => q.in('transaction_ref', refs).in('branch_msisdn', branches),
     );
     const staleIds = existing
@@ -410,6 +419,7 @@ export async function loadClassificationAuditRecords(supabase: DB, period?: stri
     supabase,
     'classification_audit_records',
     'details, reporting_period',
+    'id',
     (q) => (period ? q.eq('reporting_period', period) : q),
   );
   return rows.map((r: any) => r.details);
