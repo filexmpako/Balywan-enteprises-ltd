@@ -177,8 +177,10 @@ export function calculateMtdVolumes(
   } else if (weeklyStats?.length && period) {
     const entry = latestWeeklyEntryForPeriod(weeklyStats, period);
     if (entry) source = 'weekly';
+    // The weekly IOP column covers in-base wakalas serviced elsewhere, so it
+    // never feeds KPI 1 IOP (off-base wakalas served by our owners = Daily MGT).
     (entry?.byOwner || []).forEach(b => {
-      if (b.ownerId) report.set(b.ownerId, { base: b.value || 0, iop: b.iopValue || 0 });
+      if (b.ownerId) report.set(b.ownerId, { base: b.value || 0, iop: 0 });
     });
   }
   report.forEach((_, ownerId) => get(ownerId));
@@ -191,9 +193,9 @@ export function calculateMtdVolumes(
       v.baseSource = v.iopSource = 'monthly';
     } else {
       v.baseVolume = Math.max(v.dailyBase, r.base);
-      v.iopVolume = Math.max(v.dailyIop, r.iop);
+      v.iopVolume = v.dailyIop;
       v.baseSource = r.base > v.dailyBase ? 'weekly' : 'daily';
-      v.iopSource = r.iop > v.dailyIop ? 'weekly' : 'daily';
+      v.iopSource = 'daily';
     }
     v.servedVolume = v.baseVolume + v.iopVolume;
   });
