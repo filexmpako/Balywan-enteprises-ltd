@@ -141,10 +141,10 @@ function mtdOwnerKey(cr: ClassifiedRow): string {
 /**
  * Month-to-date Base and IOP served per owner, plus volume with no owner under
  * UNASSIGNED_OWNER_KEY (counted in company totals). Only rows dated in
- * `period` count. Each type is the greater of Daily MGT and the latest weekly
- * report for the month (Base = the report's SA servicing value, IOP = its IOP
- * column); the telco weekly report is itself month-to-date, so weeks are never
- * added together. The month's own Monthly report (`monthly`) is final for both.
+ * `period` count. Base is the greater of Daily MGT and the latest weekly
+ * report's SA servicing value (month-to-date, so weeks are never added). IOP is
+ * Daily MGT only: owners' tills paying wakalas outside the Base Wakala Index.
+ * The month's own Monthly report (`monthly`) is final for both.
  * servedVolume, the KPI 1 served value, is Base + IOP.
  */
 export function calculateMtdVolumes(
