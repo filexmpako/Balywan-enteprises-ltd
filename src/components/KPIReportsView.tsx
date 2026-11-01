@@ -13,6 +13,7 @@ import PageHeaderBanner from './PageHeaderBanner';
 import { getServicingRows, getDailyServicingRows } from '../utils/indexedDB';
 import { formatShortDate } from '../utils/dateFormat';
 import { refreshWeeklyStatsHistory, readWeeklyStatsHistory } from '../utils/weeklyHistory';
+import { iopRewardByOwner, loadIopReport } from '../utils/iopReportClient';
 import {
   getActiveStatusFromColumn,
   getServicedStatusFromColumn,
@@ -138,7 +139,9 @@ export default function KPIReportsView({ onNavigate }: KPIReportsViewProps) {
           console.error('Failed to load weekly served status for KPI totals:', e);
           return null;
         });
-        const totals = computeLiveKpiTotals(classified, owners, currentPeriod, manualTargets, priorityWakalas, baseWakalaIndex, readWeeklyStatsHistory(), monthly, weeklyServed);
+        // The month-end IOP report, when uploaded, is final for KPI 1 IOP.
+        const iopReward = iopRewardByOwner(await loadIopReport(currentPeriod).catch(() => null));
+        const totals = computeLiveKpiTotals(classified, owners, currentPeriod, manualTargets, priorityWakalas, baseWakalaIndex, readWeeklyStatsHistory(), monthly, weeklyServed, iopReward);
         if (isMounted) setLiveTotals(totals);
       } catch (e) {
         console.error('Failed to compute live KPI1/KPI2 totals in KPIReportsView:', e);

@@ -25,6 +25,9 @@ import { formatNumberWithAbbreviation } from '../utils/numberFormat';
 import { getDailyServicingRows } from '../utils/indexedDB';
 import { refreshWeeklyStatsHistory, readWeeklyStatsHistory } from '../utils/weeklyHistory';
 import { useClassifiedMonth } from '../hooks/useClassifiedMonth';
+import { useIopReport } from '../hooks/useIopReport';
+import { IopReportSummary } from './IopReportCards';
+import { iopRewardByOwner } from '../utils/iopReportClient';
 import {
   withCumulativeValue,
   weekNumberOf,
@@ -306,16 +309,19 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
     return () => { cancelled = true; };
   }, [weeklyServedPeriod]);
   const weeklyServedMap = weeklyServedPeriod && weeklyServed?.period === weeklyServedPeriod ? weeklyServed.map : null;
+  // The month-end IOP report, when uploaded, is final for KPI 1 IOP.
+  const iopReport = useIopReport(currentPeriod);
+  const iopReward = useMemo(() => iopRewardByOwner(iopReport ?? null), [iopReport]);
   const liveTotals: LiveKpiTotals = useMemo(() => {
     if (!liveInputs) return { kpi1: null, kpi2: null };
     try {
       const { classified, owners, manualTargets, priorityWakalas, baseWakalaIndex, weekly } = liveInputs;
-      return computeLiveKpiTotals(classified, owners, currentPeriod, manualTargets, priorityWakalas, baseWakalaIndex, weekly, monthlyKpi, weeklyServedMap);
+      return computeLiveKpiTotals(classified, owners, currentPeriod, manualTargets, priorityWakalas, baseWakalaIndex, weekly, monthlyKpi, weeklyServedMap, iopReward);
     } catch (e) {
       console.error('Failed to compute live KPI1/KPI2 totals:', e);
       return { kpi1: null, kpi2: null };
     }
-  }, [liveInputs, currentPeriod, monthlyKpi, weeklyServedMap]);
+  }, [liveInputs, currentPeriod, monthlyKpi, weeklyServedMap, iopReward]);
 
   const kpis: KPIMetric[] = useMemo(() => {
     return withLiveKpiRows(rawKpis, liveTotals).map(kpi => {
@@ -768,6 +774,9 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
           })()}
         </>
       )}
+
+      {/* Month-end IOP report: REWARD on our tills, CLAWBACK on our base wakalas */}
+      <IopReportSummary report={iopReport} periodLabel={displayPeriod} />
 
       {/* Weekly KPI Progression — appended per uploaded weekly workbook */}
       {monthWeeklyStats.length === 0 && (

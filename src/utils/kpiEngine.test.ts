@@ -19,4 +19,13 @@ describe('KPI 1 IOP', () => {
     assert.equal(v.iopSource, 'daily');
     assert.equal(v.baseVolume, 1000);
   });
+  test("the month-end IOP report's REWARD is final for IOP; Base is unchanged", () => {
+    const monthly = { servedValueByOwner: new Map([['petro', 2000]]), iopValueByOwner: new Map([['petro', 900]]) };
+    const v = calculateOwnerMtdVolume([row('BASE', 1000), row('IOP', 100)], 'petro', [weekly], '2026-10', monthly, new Map([['petro', 70]]));
+    assert.equal(v.iopVolume, 70);
+    assert.equal(v.iopSource, 'iop');
+    assert.equal(v.baseVolume, 2000);
+    const absent = calculateOwnerMtdVolume([row('IOP', 100)], 'petro', [], '2026-10', null, new Map([['other', 5]]));
+    assert.equal(absent.iopVolume, 0);
+  });
 });

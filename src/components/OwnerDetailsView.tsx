@@ -50,6 +50,10 @@ import FloatManagementPanel from './FloatManagementPanel';
 import { getFloatRequestsForOwner } from '../utils/floatManagement';
 import { getDailyServicingRows } from '../utils/indexedDB';
 import { useClassifiedMonth } from '../hooks/useClassifiedMonth';
+import { useIopReport } from '../hooks/useIopReport';
+import { IopReportCard } from './IopReportCards';
+import { iopRewardByOwner } from '../utils/iopReportClient';
+import { formatPeriodDisplay } from '../utils/periodUtils';
 import { getClassifiedRowsCached } from '../utils/classificationCache';
 import {
   calculateOwnerMtdVolume,
@@ -604,6 +608,10 @@ export default function OwnerDetailsView({
 
   const [manualTargetsList] = useState<ManualOwnerTarget[]>(() => getSavedManualOwnerTargets());
 
+  // The month-end IOP report, when uploaded, is final for KPI 1 IOP.
+  const iopReport = useIopReport(currentPeriod, localOwner?.id);
+  const iopReward = useMemo(() => iopRewardByOwner(iopReport ?? null), [iopReport]);
+
   // The selected month's own Monthly report, when uploaded, is final for KPI 1.
   const monthlyKpi = useMemo(
     () =>
@@ -623,7 +631,7 @@ export default function OwnerDetailsView({
         iopSource: 'daily' as MtdSource,
         dailyBase: 0,
         dailyIop: 0,
-        sourceLabel: { daily: 'Daily MGT', weekly: '', monthly: '' } as Record<MtdSource, string>,
+        sourceLabel: { daily: 'Daily MGT', weekly: '', monthly: '', iop: '' } as Record<MtdSource, string>,
         monthlyTarget: 0,
         baseTarget: 0,
         iopTarget: 0,
@@ -648,13 +656,13 @@ export default function OwnerDetailsView({
     const weeklyStats = readWeeklyStatsHistory();
 
     let targetOwnerId = localOwner.id;
-    let vols = calculateOwnerMtdVolume(classified, localOwner.id, weeklyStats, currentPeriod, monthlyKpi);
+    let vols = calculateOwnerMtdVolume(classified, localOwner.id, weeklyStats, currentPeriod, monthlyKpi, iopReward);
 
     if (vols.servedVolume === 0 && localOwner.name) {
       const matched = resolveOwnerMatch(localOwner.name, owners, 'Owner Portal');
       if (matched.matchedOwner?.id) {
         targetOwnerId = matched.matchedOwner.id;
-        vols = calculateOwnerMtdVolume(classified, matched.matchedOwner.id, weeklyStats, currentPeriod, monthlyKpi);
+        vols = calculateOwnerMtdVolume(classified, matched.matchedOwner.id, weeklyStats, currentPeriod, monthlyKpi, iopReward);
       }
     }
 
@@ -703,6 +711,7 @@ export default function OwnerDetailsView({
         daily: 'Daily MGT',
         weekly: latestWeek ? `Weekly · ${latestWeek}` : 'Weekly report',
         monthly: monthlyKpi ? `Monthly · ${monthlyKpi.month}` : 'Monthly report',
+        iop: `IOP Report · ${formatPeriodDisplay(currentPeriod)}`,
       } as Record<MtdSource, string>,
       monthlyTarget,
       baseTarget: targetRes.baseTarget,
@@ -714,7 +723,7 @@ export default function OwnerDetailsView({
       ownerId: effectiveOwnerId,
       classified,
     };
-  }, [localOwner, servicingRows, tillsList, manualTargetsList, currentPeriod, monthlyKpi]);
+  }, [localOwner, servicingRows, tillsList, manualTargetsList, currentPeriod, monthlyKpi, iopReward]);
 
   const { user } = useAuth();
   const isAdmin = user?.role === 'Admin';
@@ -1124,6 +1133,10 @@ export default function OwnerDetailsView({
 
       {activeTab === 'wakalas' && (
         <>
+          {localOwner?.id && (
+            <IopReportCard report={iopReport} ownerId={ownerMtdData.ownerId || localOwner.id} periodLabel={formatPeriodDisplay(currentPeriod)} />
+          )}
+
           {/* Portfolio Snapshot */}
           <div className="space-y-2">
             <h3 className="font-sans text-xs font-black uppercase text-brand-text-variant tracking-wider font-mono">

@@ -31,9 +31,10 @@ export function computeLiveKpiTotals(
   baseWakalaIndex: BaseWakala[],
   weeklyStats?: WeeklyStatsEntry[],
   monthly?: MonthlyKpiOverride | null,
-  weeklyServed?: Map<string, boolean> | null
+  weeklyServed?: Map<string, boolean> | null,
+  iopReward?: Map<string, number> | null
 ): LiveKpiTotals {
-  const kpi1Results = calculateKPI1(classifiedRows, owners, period, manualTargets, weeklyStats, monthly);
+  const kpi1Results = calculateKPI1(classifiedRows, owners, period, manualTargets, weeklyStats, monthly, iopReward);
   let baseTarget = 0;
   let iopTarget = 0;
   kpi1Results.forEach(r => {
@@ -45,7 +46,7 @@ export function computeLiveKpiTotals(
   // Every wakala counts toward the company figure, with or without an owner.
   let baseAchieved = 0;
   let iopAchieved = 0;
-  calculateMtdVolumes(classifiedRows, weeklyStats, period, monthly).forEach(v => {
+  calculateMtdVolumes(classifiedRows, weeklyStats, period, monthly, iopReward).forEach(v => {
     baseAchieved += v.baseVolume;
     iopAchieved += v.iopVolume;
   });
