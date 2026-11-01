@@ -14,6 +14,8 @@ import { loadWeeklyServedMap } from '../utils/weeklyServed';
 import { readWeeklyStatsHistory } from '../utils/weeklyHistory';
 import IopLabel from './IopLabel';
 import { classifyWithStoredRegistries } from '../utils/classificationCache';
+import { useIopReport } from '../hooks/useIopReport';
+import { iopRewardByOwner } from '../utils/iopReportClient';
 import { Target, X, ArrowLeft, Loader2, SlidersHorizontal, MoreVertical } from 'lucide-react';
 import PageHeaderBanner from './PageHeaderBanner';
 import PeriodSelector from './PeriodSelector';
@@ -129,9 +131,13 @@ export default function TargetsView() {
     return () => { isMounted = false; };
   }, [period]);
 
+  // The month-end IOP report, when uploaded, is final for KPI 1 IOP.
+  const iopReport = useIopReport(period);
+  const iopReward = useMemo(() => iopRewardByOwner(iopReport ?? null), [iopReport]);
+
   const kpi1Results: KPI1Result[] = useMemo(() => {
-    return calculateKPI1(classifiedRows, owners, period, manualTargets, readWeeklyStatsHistory(), monthlyKpi);
-  }, [classifiedRows, owners, period, manualTargets, monthlyKpi]);
+    return calculateKPI1(classifiedRows, owners, period, manualTargets, readWeeklyStatsHistory(), monthlyKpi, iopReward);
+  }, [classifiedRows, owners, period, manualTargets, monthlyKpi, iopReward]);
 
   const kpi2Results: KPI2Result[] = useMemo(() => {
     return calculateKPI2(classifiedRows, owners, period, manualTargets, priorityWakalas, baseWakalaIndex, monthlyKpi?.servedByMsisdn ?? weeklyServedMap);

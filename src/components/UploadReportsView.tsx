@@ -11,6 +11,9 @@ import OwnerSyncDashboard from './OwnerSyncDashboard';
 import DailyMgtMappingEngine from './DailyMgtMappingEngine';
 import { useReportingPeriod } from './ReportingPeriodContext';
 import { toIsoPeriod } from '../utils/periodUtils';
+import { parseIopReportRows } from '../utils/iopReport';
+import { uploadIopReport } from '../lib/iopReport.functions';
+import { IOP_REPORT_EVENT } from '../utils/iopReportClient';
 import { 
   UploadCloud, 
   X, 
@@ -56,8 +59,8 @@ import KPIInteractiveCharts from './kpi-engine/KPIInteractiveCharts';
 import KPIHistoryArchive from './kpi-engine/KPIHistoryArchive';
 import KPIComparisonStudio from './kpi-engine/KPIComparisonStudio';
 
-export interface ReportTypeConfig {
-  id: 'till_sync' | 'mgt' | 'kpi' | 'weekly_kpi' | 'base_wakala_list' | 'priority_wakala';
+interface ReportTypeConfig {
+  id: 'till_sync' | 'mgt' | 'kpi' | 'weekly_kpi' | 'base_wakala_list' | 'priority_wakala' | 'iop_report';
   title: string;
   description: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -100,6 +103,12 @@ const REPORT_TYPES: ReportTypeConfig[] = [
     description: 'Upload the monthly list of priority wakala (least-served in the prior month) used to weight KPI 2\'s Normal/Priority target split.',
     icon: Flag,
   },
+  {
+    id: 'iop_report',
+    title: 'IOP Report (Month-end)',
+    description: 'Upload the month-end IOP report (TRANSACTION TILL, RETAIL AGENT MSISDN, SERV_STATUS, REVISED AMOUNT, ...). REWARD rows go to the till owner, CLAWBACK rows to the wakala owner; REWARD becomes the final KPI 1 IOP served for the month.',
+    icon: Layers,
+  },
 ];
 
 const UPLOAD_MONTH_NAMES = [
@@ -112,7 +121,7 @@ function buildUploadMonthOptions(): string[] {
   const now = new Date();
   const options: string[] = [];
   for (let offset = 1; offset >= -5; offset--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
     options.push(`${UPLOAD_MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`);
   }
   return options;
@@ -159,7 +168,7 @@ interface UploadReportsViewProps {
 export default function UploadReportsView({ onNavigate, onAddAuditReport }: UploadReportsViewProps) {
 
   // Report selection state
-  const [reportType, setReportType] = useState<'kpi' | 'weekly_kpi' | 'mgt' | 'till_sync' | 'base_wakala_list' | 'priority_wakala' | null>(null);
+  const [reportType, setReportType] = useState<'kpi' | 'weekly_kpi' | 'mgt' | 'till_sync' | 'base_wakala_list' | 'priority_wakala' | 'iop_report' | null>(null);
   const uploadMonthOptions = useMemo(buildUploadMonthOptions, []);
   const [uploadMonth, setUploadMonthState] = useState(currentUploadMonthLabel);
   const [uploadWeek, setUploadWeek] = useState(() => defaultUploadWeek(currentUploadMonthLabel(), buildUploadWeekOptions(currentUploadMonthLabel())));
@@ -434,6 +443,64 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
     }
   };
 
+  /** Month-end IOP report: stored for the month picked above (re-uploading replaces it). */
+  const parseIopReportFile = async (data: any, fileName: string) => {
+    try {
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = parseIopReportRows(XLSX.utils.sheet_to_json(sheet, { defval: '' }) as Record<string, unknown>[]);
+      if (!rows.length) {
+        alert('No REWARD or CLAWBACK rows were found in this file.');
+        setSelectedFile(null);
+        return;
+      }
+      const month = toIsoPeriod(uploadMonth);
+      // MAX_DATE (an Excel date number or text) names the month the bank closed.
+      const maxDates = (XLSX.utils.sheet_to_json(sheet, { defval: '', raw: true }) as Record<string, unknown>[])
+        .map(r => Object.entries(r).find(([k]) => k.replace(/[^a-z]/gi, '').toLowerCase() === 'maxdate')?.[1])
+        .filter(v => v !== undefined && v !== '');
+      const fileMonths = new Set(maxDates.map(v => {
+        if (typeof v === 'number') {
+          const d = XLSX.SSF.parse_date_code(v);
+          return d ? `${d.y}-${String(d.m).padStart(2, '0')}` : '';
+        }
+        return String(v).slice(0, 7);
+      }).filter(Boolean));
+      if (fileMonths.size && !fileMonths.has(month)) {
+        const ok = window.confirm(`This file's MAX_DATE is in ${Array.from(fileMonths).join(', ')}, but you picked ${uploadMonth}. Save it for ${uploadMonth} anyway?`);
+        if (!ok) {
+          setSelectedFile(null);
+          return;
+        }
+      }
+      const reward = rows.filter(r => r.status === 'REWARD');
+      const clawback = rows.filter(r => r.status === 'CLAWBACK');
+      const sum = (list: typeof rows) => list.reduce((s, r) => s + r.revisedAmount, 0);
+      await uploadIopReport({ data: { month, fileName, rows } });
+      window.dispatchEvent(new Event(IOP_REPORT_EVENT));
+      onAddAuditReport?.({
+        id: `iop_report_${Date.now()}`,
+        fileName,
+        type: 'IOP Report',
+        uploadedBy: lastUploadedBy,
+        date: formatDateTime(new Date()),
+        size: `${rows.length} rows`,
+        status: 'Success',
+        iopMonth: month,
+      });
+      alert(
+        `IOP report saved for ${uploadMonth}.\n` +
+        `REWARD: ${reward.length} rows · TZS ${sum(reward).toLocaleString()}\n` +
+        `CLAWBACK: ${clawback.length} rows · TZS ${sum(clawback).toLocaleString()}`,
+      );
+    } catch (err) {
+      console.error('IOP report upload failed:', err);
+      alert(`The IOP report could not be saved: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setSelectedFile(null);
+    }
+  };
+
   const parsePriorityWakalaFile = (data: any) => {
     try {
       const workbook = XLSX.read(data, { type: 'array' });
@@ -609,6 +676,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
       base_wakala_list: 'Base_Wakala_List_Template.xlsx',
       priority_wakala: 'Priority_Wakala_List_Template.xlsx',
       till_sync: 'Till_Name_Sync_Template.xlsx',
+      iop_report: 'IOP_Report_Template.xlsx',
     };
 
     if (reportType === 'kpi' || reportType === 'weekly_kpi') {
@@ -669,6 +737,13 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
         ['255711223344', 'Kariakoo Retail', 'Abubakar Khalid', 'MFS', 'Dar es Salaam', 'Active'],
       ]);
       XLSX.utils.book_append_sheet(wb, sheet, 'Till Name Sync');
+    } else if (reportType === 'iop_report') {
+      const sheet = XLSX.utils.aoa_to_sheet([
+        ['TRANSACTION TILL', 'RETAIL AGENT MSISDN', 'SERV_STATUS', 'MAX_DATE', 'MGT_TILL_Name', 'CICO VALUE', 'CICO RATIO', 'REVISED AMOUNT'],
+        ['255716251310', '255652163346', 'REWARD', '2026-09-30', 'BALWYN INVESTMENT MGT', 6651700, 2.52, 2640000],
+        ['255711934395', '255716253667', 'CLAWBACK', '2026-09-30', 'MGT_LUKSA FINANCIAL SE', 221016400, 40.18, 5500000],
+      ]);
+      XLSX.utils.book_append_sheet(wb, sheet, 'IOP Report');
     } else {
       return;
     }
@@ -1379,6 +1454,14 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
         }, 80);
       };
       reader.readAsArrayBuffer(file);
+    } else if (reportType === 'iop_report') {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setUploadProgress(100);
+        setIsUploading(false);
+        void parseIopReportFile(e.target?.result, file.name);
+      };
+      reader.readAsArrayBuffer(file);
     }
   };
 
@@ -1757,12 +1840,14 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
                         ? 'Drag-and-drop or select an aggregate enterprise KPI Target workbook (.xlsx) to parse.' 
                         : reportType === 'weekly_kpi'
                           ? 'Drag-and-drop or select a Weekly KPI checkpoint workbook (.xlsx) to parse.'
-                          : 'Drag-and-drop or select an operational MGT CSV file to parse.'}
+                          : reportType === 'iop_report'
+                            ? 'Drag-and-drop or select the month-end IOP report workbook (.xlsx).'
+                            : 'Drag-and-drop or select an operational MGT CSV file to parse.'}
                     </p>
                   </div>
 
                   {/* Reporting Period Selections */}
-                  {(reportType === 'kpi' || reportType === 'weekly_kpi') && (
+                  {(reportType === 'kpi' || reportType === 'weekly_kpi' || reportType === 'iop_report') && (
                     <div className="bg-brand-card border border-brand-gray-border rounded-2xl p-5 grid grid-cols-1 md:grid-cols-2 gap-5 mb-4 shadow-xs">
                       <div>
                         <label className="block text-xs font-bold text-brand-text-variant uppercase tracking-wider mb-2">
@@ -1778,7 +1863,9 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
                           ))}
                         </select>
                         <p className="text-[10px] text-brand-text-variant mt-1.5 leading-relaxed">
-                          This associates the KPI upload with the monthly target framework of the selected month.
+                          {reportType === 'iop_report'
+                            ? 'The month this IOP report closes. Uploading again for the same month replaces it.'
+                            : 'This associates the KPI upload with the monthly target framework of the selected month.'}
                         </p>
                       </div>
 
@@ -1849,7 +1936,9 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
                                 ? 'Drag and drop your Base Wakala List file here'
                                 : reportType === 'priority_wakala'
                                   ? 'Drag and drop your Priority Wakala List file here'
-                                  : 'Drag and drop your Monthly KPI report file here'}
+                                  : reportType === 'iop_report'
+                                    ? 'Drag and drop your month-end IOP report file here'
+                                    : 'Drag and drop your Monthly KPI report file here'}
                         </h4>
                         <p className="text-xs text-brand-text-variant mt-1.5 font-sans">
                           Supported formats: .CSV, .XLSX, .XLS, .XLX (Maximum file size: 50 MB)

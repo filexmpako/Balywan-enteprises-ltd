@@ -29,21 +29,6 @@ export interface KPIMetric {
   status: 'ON TRACK' | 'ACHIEVED' | 'NEEDS ATTENTION' | 'CRITICAL';
 }
 
-export interface TopOwner {
-  rank: number;
-  name: string;
-  zone: string;
-  percentage: number;
-  amount: string;
-}
-
-export interface RecentReport {
-  name: string;
-  time: string;
-  zone: string;
-  status: 'success' | 'warning' | 'error';
-}
-
 export interface WakalaEntry {
   id: string;
   name: string;
@@ -106,29 +91,6 @@ export interface ManualOwnerTarget {
   kpi2PriorityPercent?: number;  // % of owner's own priority wakala to serve this period
   setBy: string;
   setAt: string;
-}
-
-export interface AgentTarget {
-  ownerName: string;          // raw name as it appeared in the source file
-  location?: string;          // e.g. "KITANGARI", "NDANDA" — the block's location label
-  monthlyTarget: number;      // "TOTAL MONTHLY TARGET" value
-  achievedValue: number;      // "TOTAL ACTUAL" value
-  achievementPercentage: number; // pre-capped percentage from the source (0-1 range)
-  period: string;             // e.g. "2026-07", derived from the report's stated date range
-  importedAt: string;
-  ownerId?: string;
-  rawMsisdn?: string;
-  matchedTillMsisdn?: string;
-}
-
-export interface MonthlyTargetUpload {
-  msisdn: string;         // normalized till MSISDN
-  ownerId: string;
-  ownerName: string;
-  displayName?: string;   // optional "Name" column from file — display only, never used for matching
-  monthlyTarget: number;
-  period: string;
-  importedAt: string;
 }
 
 export const FLOAT_RETURN_CHANNELS = ['M-Pesa', 'Yas', 'Airtel Money', 'HaloPesa', 'T-Pesa', 'NMB', 'CRDB', 'NBC', 'Other'] as const;
@@ -219,14 +181,6 @@ export interface Owner {
   nameAliases?: string[];
 }
 
-export interface ReportSubmission {
-  id: string;
-  type: string;
-  amount: string;
-  timestamp: string;
-  status: 'Verified' | 'Pending Audit' | 'Failed';
-}
-
 export interface AuditReport {
   id: string;
   fileName: string;
@@ -240,8 +194,9 @@ export interface AuditReport {
   uploadId?: string | null;
   reportingWeek?: string;
   reportingMonth?: string;
+  /** "YYYY-MM" of a month-end IOP report (deleted through its own path). */
+  iopMonth?: string;
 }
-
 
 export interface Personnel {
   id: string;
@@ -256,4 +211,3 @@ export interface Personnel {
   lastSyncDate?: string;
 }
 
-export type { ServicingRow } from './utils/mappingEngine';

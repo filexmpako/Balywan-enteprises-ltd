@@ -27,7 +27,7 @@ export function filterClassifiedRowsToPeriod(rows: ClassifiedRow[], period?: str
 export type KPI1Status = 'Green' | 'Blue' | 'Yellow' | 'Red';
 
 /** Where a served figure came from. */
-export type MtdSource = 'daily' | 'weekly' | 'monthly';
+export type MtdSource = 'daily' | 'weekly' | 'monthly' | 'iop';
 
 export interface OwnerMtdVolumeResult {
   /** Base + IOP: the KPI 1 served value. */
@@ -144,14 +144,16 @@ function mtdOwnerKey(cr: ClassifiedRow): string {
  * `period` count. Base is the greater of Daily MGT and the latest weekly
  * report's SA servicing value (month-to-date, so weeks are never added). IOP is
  * Daily MGT only: owners' tills paying wakalas outside the Base Wakala Index.
- * The month's own Monthly report (`monthly`) is final for both.
+ * The month's own Monthly report (`monthly`) is final for both, and the
+ * month-end IOP report (`iopReward`: each owner's REWARD) is final for IOP.
  * servedVolume, the KPI 1 served value, is Base + IOP.
  */
 export function calculateMtdVolumes(
   allClassifiedRows: ClassifiedRow[],
   weeklyStats?: WeeklyStatsEntry[],
   period?: string,
-  monthly?: MonthlyServedValues | null
+  monthly?: MonthlyServedValues | null,
+  iopReward?: Map<string, number> | null
 ): Map<string, OwnerMtdVolumeResult> {
   const result = new Map<string, OwnerMtdVolumeResult>();
   const get = (ownerId: string) => {
@@ -184,6 +186,7 @@ export function calculateMtdVolumes(
     });
   }
   report.forEach((_, ownerId) => get(ownerId));
+  iopReward?.forEach((_, ownerId) => get(ownerId));
 
   result.forEach((v, ownerId) => {
     const r = report.get(ownerId) || { base: 0, iop: 0 };
@@ -196,6 +199,10 @@ export function calculateMtdVolumes(
       v.iopVolume = v.dailyIop;
       v.baseSource = r.base > v.dailyBase ? 'weekly' : 'daily';
       v.iopSource = 'daily';
+    }
+    if (iopReward) {
+      v.iopVolume = iopReward.get(ownerId) || 0;
+      v.iopSource = 'iop';
     }
     v.servedVolume = v.baseVolume + v.iopVolume;
   });
@@ -213,7 +220,8 @@ export function calculateOwnerMtdVolume(
   ownerId?: string,
   weeklyStats?: WeeklyStatsEntry[],
   period?: string,
-  monthly?: MonthlyServedValues | null
+  monthly?: MonthlyServedValues | null,
+  iopReward?: Map<string, number> | null
 ): OwnerMtdVolumeResult {
   if (!ownerId) {
     const total = emptyVolume();
@@ -229,7 +237,7 @@ export function calculateOwnerMtdVolume(
     return total;
   }
 
-  return calculateMtdVolumes(classifiedRows, weeklyStats, period, monthly).get(ownerId) || emptyVolume();
+  return calculateMtdVolumes(classifiedRows, weeklyStats, period, monthly, iopReward).get(ownerId) || emptyVolume();
 }
 
 export interface KPI1Result {
@@ -300,13 +308,14 @@ export function calculateKPI1(
   period: string,
   manualTargets?: ManualOwnerTarget[],
   weeklyStats?: WeeklyStatsEntry[],
-  monthly?: MonthlyServedValues | null
+  monthly?: MonthlyServedValues | null,
+  iopReward?: Map<string, number> | null
 ): KPI1Result[] {
   const results: KPI1Result[] = [];
   const actualManualTargets = manualTargets || getSavedManualOwnerTargets();
 
   // Aggregate served volume (BASE + IOP combined) per owner
-  const mtdVolumes = calculateMtdVolumes(classifiedRows, weeklyStats, period, monthly);
+  const mtdVolumes = calculateMtdVolumes(classifiedRows, weeklyStats, period, monthly, iopReward);
 
   for (const owner of owners) {
     if (!owner) continue;

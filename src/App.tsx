@@ -35,6 +35,8 @@ import { clearWeeklyServicingData, deleteDailyServicingRowsByRefs } from "./util
 import { removeMonth } from "./utils/monthlyStore";
 import { invalidateClassificationCache } from "./utils/classificationCache";
 import { refreshWeeklyStatsHistory } from "./utils/weeklyHistory";
+import { removeIopReport } from "./lib/iopReport.functions";
+import { IOP_REPORT_EVENT } from "./utils/iopReportClient";
 
 function AppContent() {
   // Theme state
@@ -108,6 +110,17 @@ function AppContent() {
    * clears the matching offline mirrors and local archive entries.
    */
   const handleDeleteAuditReport = async (report: AuditReport) => {
+    // A month-end IOP report is one stored month, separate from every other upload.
+    if (report.iopMonth) {
+      await removeIopReport({ data: { month: report.iopMonth } });
+      window.dispatchEvent(new Event(IOP_REPORT_EVENT));
+      setReportsList((prev) => {
+        const updated = prev.filter((r) => r.id !== report.id);
+        localStorage.setItem("auditHistoryReports", JSON.stringify(updated));
+        return updated;
+      });
+      return;
+    }
     const result = await deleteUploadedReport({
       data: {
         uploadId: report.uploadId ?? null,
