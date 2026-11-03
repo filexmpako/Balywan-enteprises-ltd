@@ -108,6 +108,12 @@ export const markLoanPaid = (loanId: string, managerId: string, managerName: str
 export const rejectLoanRepayment = (loanId: string, managerId: string, managerName: string) =>
   run({ type: 'rejectRepayment', loanId, managerId, managerName });
 
+export const grantFloatRequestException = (requestId: string, managerId: string, managerName: string) =>
+  run({ type: 'grantException', requestId, managerId, managerName });
+
+export const remindFloatReturn = (requestId: string, managerId: string, managerName: string) =>
+  run({ type: 'remind', requestId, managerId, managerName });
+
 /** Uploads a return receipt photo (data URL) to cloud storage; returns its receipt id. */
 export async function uploadReceipt(requestId: string, dataUrl: string): Promise<string> {
   const { receiptId } = await uploadFloatReceipt({ data: { requestId, dataUrl } });
