@@ -9,7 +9,7 @@ import { loadCollection } from './hasidadi/repo.server';
 import { normalizeMsisdn } from '../utils/msisdn';
 import {
   classifyCashierVolume, summarizeCashierMonth,
-  type CashierExpense, type CashierMonthSettings, type CashierMonthView, type CashierPerson, type CashierReport,
+  type CashierExpense, type CashierMonthSettings, type CashierMonthView, type CashierPerson, type CashierReport, type CashierStatementView,
 } from '../utils/cashier';
 
 type DB = SupabaseClient<any, any, any>;
@@ -141,6 +141,7 @@ export async function loadCashierMonth(db: DB, registries: Registries, person: C
   }));
   const expenses: CashierExpense[] = (expensesRes.data ?? []).map((e: any) => ({
     expenseId: e.expense_id,
+    kind: e.kind === 'income' ? 'income' : 'expense',
     expenseDate: e.expense_date,
     description: e.description,
     amount: num(e.amount),
@@ -148,4 +149,53 @@ export async function loadCashierMonth(db: DB, registries: Registries, person: C
   }));
   const volume = classifyCashierVolume(sends, registries);
   return { person, period, settings, reports, expenses, volume, summary: summarizeCashierMonth(settings, reports, expenses, volume) };
+}
+
+const STATEMENT_MAX_MONTHS = 24;
+
+/** Today in Tanzania (UTC+3), YYYY-MM-DD. */
+const tanzaniaToday = () => new Date(Date.now() + 3 * 3600_000).toISOString().slice(0, 10);
+
+const addMonths = (period: string, n: number) => {
+  const [y, m] = period.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + n, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+};
+
+/** The month of the cashier's first record (month settings, report or entry), or null. */
+async function firstActivityPeriod(db: DB, personnelId: string): Promise<string | null> {
+  const first = (table: string, column: string) =>
+    db.from(table).select(column).eq('personnel_id', personnelId).order(column, { ascending: true }).limit(1).maybeSingle();
+  const [m, r, e] = await Promise.all([
+    first('cashier_months', 'period'),
+    first('cashier_daily_reports', 'report_date'),
+    first('cashier_expenses', 'expense_date'),
+  ]);
+  check(m.error, 'Cashier month');
+  check(r.error, 'Cashier reports');
+  check(e.error, 'Cashier expenses');
+  const periods = [(m.data as any)?.period, (r.data as any)?.report_date, (e.data as any)?.expense_date]
+    .filter(Boolean)
+    .map((v: string) => v.slice(0, 7))
+    .sort();
+  return periods[0] ?? null;
+}
+
+/**
+ * Everything the cashier did from `fromPeriod` (default: their first record)
+ * up to today, month by month. At most two years.
+ */
+export async function loadCashierStatement(db: DB, registries: Registries, person: CashierPerson, fromPeriod?: string): Promise<CashierStatementView> {
+  const toDate = tanzaniaToday();
+  const current = toDate.slice(0, 7);
+  const firstPeriod = (await firstActivityPeriod(db, person.personnelId)) ?? current;
+  let start = fromPeriod && fromPeriod > firstPeriod ? fromPeriod : firstPeriod;
+  if (start > current) start = current;
+  const earliest = addMonths(current, -(STATEMENT_MAX_MONTHS - 1));
+  if (start < earliest) start = earliest;
+  const periods: string[] = [];
+  for (let p = start; p <= current; p = addMonths(p, 1)) periods.push(p);
+  const months: CashierMonthView[] = [];
+  for (const p of periods) months.push(await loadCashierMonth(db, registries, person, p));
+  return { person, fromPeriod: start, toDate, firstPeriod, months };
 }

@@ -5,8 +5,9 @@ import { useCompany } from './CompanyContext';
 import {
   CashierExpenseForm, CashierHistory, CashierReportForm, CashierSummary, MonthSelect, SetupNotice, recentMonths, useCashierMonth,
 } from './CashierPanels';
+import { CashierStatementButton } from './CashierStatement';
 
-/** The cashier's own page: volume vs target, daily cash report, expenses. */
+/** The cashier's own page: volume vs target, daily cash report, expenses and income, statement. */
 export default function CashierPortalView({ onLogout }: { onLogout: () => void }) {
   const { user } = useAuth();
   const { companyName } = useCompany();
@@ -17,12 +18,13 @@ export default function CashierPortalView({ onLogout }: { onLogout: () => void }
   return (
     <div className="min-h-screen bg-brand-bg font-sans">
       <header className="sticky top-0 z-10 border-b border-brand-gray-border bg-brand-card/95 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-2 px-4 py-3 sm:gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-700"><Wallet className="h-5 w-5" /></div>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-black text-brand-text">{user?.name}</p>
             <p className="truncate text-[11px] text-brand-text-variant">Cashier · {companyName}</p>
           </div>
+          <CashierStatementButton />
           <MonthSelect value={period} onChange={setPeriod} months={months} />
           <button type="button" onClick={onLogout} className="rounded-xl p-2 text-rose-600 hover:bg-rose-50 cursor-pointer" aria-label="Sign out">
             <Power className="h-5 w-5" />
