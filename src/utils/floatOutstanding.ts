@@ -15,6 +15,12 @@ export const floatReturned = (r: FloatRequest) => (r.returnEntries || []).reduce
 /** Amount still missing after the owner's return (0 when fully returned). */
 export const floatShortfall = (r: FloatRequest) => Math.max(0, floatOwed(r) - floatReturned(r));
 
+/** Confirmed loan repayments so far. */
+export const loanPaid = (l: LoanRecord) => (l.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+
+/** What is still owed on a loan. */
+export const loanBalance = (l: LoanRecord) => Math.max(0, l.amount - loanPaid(l));
+
 export type OutstandingKind = 'float' | 'shortReturn' | 'loan';
 
 export interface OutstandingItem {
@@ -22,6 +28,11 @@ export interface OutstandingItem {
   /** The float request id, or the loan id for a loan. */
   id: string;
   ownerId: string;
+  /** What was given / lent. */
+  given: number;
+  /** Paid back so far (returned float, confirmed loan repayments). */
+  paid: number;
+  /** Still owed: given − paid. */
   amount: number;
   /** When it became owed: float confirmed (else requested), return made, loan created. */
   since: string;
@@ -32,6 +43,9 @@ export interface OutstandingItem {
 
 export interface OwnerOutstanding {
   ownerId: string;
+  given: number;
+  paid: number;
+  /** Still owed. */
   total: number;
   items: OutstandingItem[];
   /** The oldest item's date. */
@@ -48,15 +62,18 @@ export function outstandingItems(requests: FloatRequest[], loans: LoanRecord[]):
   for (const r of requests) {
     if (r.loanId) continue;
     if (r.status === 'Confirmed') {
-      items.push({ kind: 'float', id: r.id, ownerId: r.ownerId, amount: floatOwed(r), since: r.confirmedAt || r.requestedAt, reminder: r.reminder });
+      items.push({ kind: 'float', id: r.id, ownerId: r.ownerId, given: floatOwed(r), paid: 0, amount: floatOwed(r), since: r.confirmedAt || r.requestedAt, reminder: r.reminder });
     } else if (r.status === 'Returned' && floatShortfall(r) > 0) {
-      items.push({ kind: 'shortReturn', id: r.id, ownerId: r.ownerId, amount: floatShortfall(r), since: r.returnedAt || r.requestedAt, reminder: r.reminder });
+      items.push({
+        kind: 'shortReturn', id: r.id, ownerId: r.ownerId, given: floatOwed(r), paid: floatReturned(r), amount: floatShortfall(r),
+        since: r.returnedAt || r.requestedAt, reminder: r.reminder,
+      });
     }
   }
   for (const l of loans) {
-    if (l.status === 'Paid') continue;
+    if (l.status === 'Paid' || loanBalance(l) <= 0) continue;
     items.push({
-      kind: 'loan', id: l.id, ownerId: l.ownerId, amount: l.amount, since: l.createdAt, reminder: l.reminder,
+      kind: 'loan', id: l.id, ownerId: l.ownerId, given: l.amount, paid: loanPaid(l), amount: loanBalance(l), since: l.createdAt, reminder: l.reminder,
       repaymentSubmitted: l.status === 'Repayment Submitted',
     });
   }
@@ -69,9 +86,11 @@ export function outstandingByOwner(requests: FloatRequest[], loans: LoanRecord[]
   for (const item of outstandingItems(requests, loans)) {
     let o = byOwner.get(item.ownerId);
     if (!o) {
-      o = { ownerId: item.ownerId, total: 0, items: [], since: item.since };
+      o = { ownerId: item.ownerId, given: 0, paid: 0, total: 0, items: [], since: item.since };
       byOwner.set(item.ownerId, o);
     }
+    o.given += item.given;
+    o.paid += item.paid;
     o.total += item.amount;
     o.items.push(item);
     if (item.reminder && (!o.lastReminder || item.reminder.at > o.lastReminder.at)) o.lastReminder = item.reminder;

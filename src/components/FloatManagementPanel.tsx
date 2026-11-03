@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FloatRequest, FloatReturnEntry, FloatReturnChannel, FLOAT_RETURN_CHANNELS, Personnel, LoanRecord } from '../types';
 import { formatDate } from '../utils/dateFormat';
-import { outstandingByOwner } from '../utils/floatOutstanding';
+import { loanBalance, loanPaid, outstandingByOwner } from '../utils/floatOutstanding';
 import {
   getFloatRequestsForOwner, createFloatRequest, confirmFloatRequest,
   submitFloatReturn, completeFloatRequest, rejectFloatReturn, getPendingDays,
@@ -237,7 +237,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
 
   const handleOpenRepayModal = (loan: LoanRecord) => {
     setRepayingLoan(loan);
-    setRepaymentAmountInput(loan.repaidAmount !== undefined ? String(loan.repaidAmount) : String(loan.amount));
+    setRepaymentAmountInput(loan.repaidAmount !== undefined ? String(loan.repaidAmount) : String(loanBalance(loan)));
     setRepaymentDescriptionInput(loan.repaymentDescription || '');
     setRepaymentError('');
   };
@@ -257,7 +257,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
       return;
     }
 
-    if (amt > repayingLoan.amount && !repaymentDescriptionInput.trim()) {
+    if (amt > loanBalance(repayingLoan) && !repaymentDescriptionInput.trim()) {
       setRepaymentError('A description is required when repaying more than the outstanding loan amount.');
       return;
     }
@@ -819,7 +819,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                       <DollarSign className="h-3.5 w-3.5 text-indigo-600" /> Active Loans ({unpaidLoans.length})
                     </h5>
                     <span className="text-[11px] font-black text-indigo-700">
-                      Total: TZS {unpaidLoans.reduce((sum, l) => sum + l.amount, 0).toLocaleString()}
+                      Still owed: TZS {unpaidLoans.reduce((sum, l) => sum + loanBalance(l), 0).toLocaleString()}
                     </span>
                   </div>
 
@@ -831,8 +831,11 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <span className="font-mono font-black text-indigo-900 text-sm">
-                                TZS {loan.amount.toLocaleString()}
+                                TZS {loanBalance(loan).toLocaleString()}
                               </span>
+                              {loanPaid(loan) > 0 && (
+                                <span className="text-[10px] text-indigo-700">of {loan.amount.toLocaleString()} · paid {loanPaid(loan).toLocaleString()}</span>
+                              )}
                               {isSubmitted ? (
                                 <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
                                   <Clock className="h-3 w-3 text-amber-600" /> Repayment Submitted
