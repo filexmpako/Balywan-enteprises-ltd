@@ -3,7 +3,7 @@ import { FLOAT_RETURN_CHANNELS, type FloatRequest, type FloatReturnEntry, type L
 import { fromRow, getMapper, toRow, type CollectionMapper } from './hasidadi/collections';
 import { loadCollection } from './hasidadi/repo.server';
 import { ensurePrivateBucket, ImageUploadError, parseImageDataUrl } from './storageImages.server';
-import { isOpenRequest, ownerFloatBlock } from '../utils/floatBlock';
+import { floatOwed, floatReturned, outstandingItems } from '../utils/floatOutstanding';
 
 /**
  * Float requests and loans, written one record at a time.
@@ -43,8 +43,7 @@ export type FloatAction =
   | { type: 'submitRepayment'; loanId: string; amount: number; description?: string }
   | { type: 'markLoanPaid'; loanId: string; managerId: string; managerName: string }
   | { type: 'rejectRepayment'; loanId: string; managerId: string; managerName: string }
-  | { type: 'grantException'; requestId: string; managerId: string; managerName: string }
-  | { type: 'remind'; requestId: string; managerId: string; managerName: string };
+  | { type: 'remind'; ownerId: string; managerId: string; managerName: string };
 
 const STAFF_ACTIONS = new Set<FloatAction['type']>([
   'confirm',
@@ -54,7 +53,6 @@ const STAFF_ACTIONS = new Set<FloatAction['type']>([
   'approveLoan',
   'markLoanPaid',
   'rejectRepayment',
-  'grantException',
   'remind',
 ]);
 
@@ -106,9 +104,6 @@ function expectStatus(current: string, allowed: string[], what: string) {
   }
 }
 
-const totalReturned = (r: FloatRequest) => (r.returnEntries || []).reduce((s, e) => s + (Number(e.amount) || 0), 0);
-/** The amount the owner owes back: what was sent, else what was requested. */
-const owedAmount = (r: FloatRequest) => (Number(r.sentAmount) > 0 ? Number(r.sentAmount) : r.requestedAmount);
 
 const CHANNELS = new Set<string>(FLOAT_RETURN_CHANNELS);
 
@@ -149,11 +144,7 @@ export async function runFloatAction(
       const amount = Number(action.amount);
       if (!(amount > 0)) throw new FloatActionError('Enter an amount greater than 0.');
       if (!ownsRecord(action.ownerId)) throw new FloatActionError('You can only request float for your own account.');
-      const existing = await loadOwnerRequests(userDb, action.ownerId);
-      const block = ownerFloatBlock(existing, action.ownerId);
-      if (!block.canRequest) {
-        throw new FloatActionError('Return your previous float before requesting again, or ask the float manager for an exception.');
-      }
+      // An outstanding balance does not stop a new request; the owner is reminded to pay instead.
       const request: FloatRequest = {
         id: newId('float'),
         ownerId: action.ownerId,
@@ -163,22 +154,24 @@ export async function runFloatAction(
       };
       const { error } = await userDb.from(FLOAT.table).insert(fullRow(FLOAT, request));
       if (error) throw new Error(`float_requests insert: ${error.message}`);
-      if (block.exceptionOn) {
-        // Exception is single-use. Owners have no UPDATE right, so clear it with the server client.
-        const { requestException: _used, ...rest } = block.exceptionOn;
-        await writeOne(actor.isStaff ? userDb : await getAdminDb(), FLOAT, rest);
-      }
       return;
     }
-    case 'grantException':
     case 'remind': {
-      const r = await readOne<FloatRequest>(userDb, FLOAT, action.requestId);
-      if (!isOpenRequest(r)) throw new FloatActionError('This float is no longer outstanding. The list has been refreshed.');
-      const next: FloatRequest =
-        action.type === 'grantException'
-          ? { ...r, requestException: { byId: action.managerId, byName: action.managerName, at } }
-          : { ...r, reminder: { byName: action.managerName, at } };
-      await writeOne(userDb, FLOAT, next);
+      // Marks every outstanding item of the owner (float not returned, short return, unpaid loan).
+      const [requests, loans] = await Promise.all([
+        loadOwnerRequests(userDb, action.ownerId),
+        loadCollection(userDb, LOANS).then(all => (all as LoanRecord[]).filter(l => l.ownerId === action.ownerId)),
+      ]);
+      const items = outstandingItems(requests, loans);
+      if (!items.length) throw new FloatActionError('This owner has nothing outstanding. The list has been refreshed.');
+      const reminder = { byName: action.managerName, at };
+      for (const item of items) {
+        if (item.kind === 'loan') {
+          await writeOne(userDb, LOANS, { ...loans.find(l => l.id === item.id)!, reminder });
+        } else {
+          await writeOne(userDb, FLOAT, { ...requests.find(r => r.id === item.id)!, reminder });
+        }
+      }
       return;
     }
 
@@ -219,7 +212,7 @@ export async function runFloatAction(
       expectStatus(r.status, ['Confirmed'], 'request');
       const entries = cleanEntries(action.entries);
       const returned = entries.reduce((s, e) => s + e.amount, 0);
-      const shortfallReason = returned < owedAmount(r) ? action.shortfallReason?.trim() || '' : undefined;
+      const shortfallReason = returned < floatOwed(r) ? action.shortfallReason?.trim() || '' : undefined;
       if (shortfallReason === '') throw new FloatActionError('Please explain why this return is short.');
       await writeOne(db, FLOAT, { ...r, status: 'Returned', returnEntries: entries, returnedAt: at, shortfallReason });
       return;
@@ -228,7 +221,7 @@ export async function runFloatAction(
     case 'complete': {
       const r = await readOne<FloatRequest>(userDb, FLOAT, action.requestId);
       expectStatus(r.status, ['Returned'], 'request');
-      if (totalReturned(r) !== owedAmount(r)) {
+      if (floatReturned(r) !== floatOwed(r)) {
         throw new FloatActionError('The returned amount does not match the amount sent.');
       }
       await writeOne(userDb, FLOAT, {
@@ -260,7 +253,7 @@ export async function runFloatAction(
       const r = await readOne<FloatRequest>(userDb, FLOAT, action.requestId);
       expectStatus(r.status, ['Returned'], 'request');
       if (r.loanId) throw new FloatActionError('A loan already exists for this request.');
-      const shortfall = owedAmount(r) - totalReturned(r);
+      const shortfall = floatOwed(r) - floatReturned(r);
       if (shortfall <= 0) throw new FloatActionError('This return is not short, so no loan is needed.');
       const loan: LoanRecord = {
         id: newId('loan'),
