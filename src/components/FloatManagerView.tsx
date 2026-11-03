@@ -24,9 +24,12 @@ import {
   startFloatAutoRefresh,
   getFloatLastRefreshed,
   loadReceiptImage,
+  grantFloatRequestException,
+  remindFloatReturn,
   type FloatResult
 } from '../utils/floatManagement';
 import { ownersList } from '../data';
+import { floatViewStatus, isOpenRequest, type FloatViewStatus } from '../utils/floatBlock';
 import { 
   Banknote, 
   Search, 
@@ -63,7 +66,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
   const [selectedManagerId, setSelectedManagerId] = useState<string>('');
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'All' | 'Pending' | 'Confirmed' | 'Returned' | 'Completed' | 'Rejected'>('All');
+  const [statusFilter, setStatusFilter] = useState<'All' | FloatViewStatus>('All');
   
   // Date filter state (YYYY-MM-DD)
   const [startDate, setStartDate] = useState<string>('');
@@ -230,14 +233,34 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
     return true;
   };
 
-  /**
-   * "Returned" lists every request with a return recorded — awaiting the
-   * manager or already completed / turned into a loan — so a return stays
-   * visible after the manager acts on it. Other filters match the status.
-   */
-  const hasReturn = (r: FloatRequest) => Boolean(r.returnedAt || (r.returnEntries && r.returnEntries.length > 0));
-  const matchesStatusFilter = (r: FloatRequest, st: typeof statusFilter) =>
-    st === 'All' || (st === 'Returned' ? hasReturn(r) : r.status === st);
+  /** Each filter has one meaning: a request appears under exactly one status. */
+  const matchesStatusFilter = (r: FloatRequest, st: typeof statusFilter) => st === 'All' || floatViewStatus(r) === st;
+
+  const managerIdentity = () => {
+    const manager = personnelList.find(p => p.id === selectedManagerId);
+    return {
+      mId: manager ? manager.id : (user?.email || 'float_manager'),
+      mName: manager ? manager.name : (user?.name || 'Float Manager'),
+    };
+  };
+  const handleGrantException = (r: FloatRequest) => {
+    if (!confirm(`Allow ${getOwnerName(r.ownerId)} ONE new float request while ${formatCurrency(getFloatAmount(r))} is still not returned?`)) return;
+    const { mId, mName } = managerIdentity();
+    void act(r.id, () => grantFloatRequestException(r.id, mId, mName));
+  };
+  const handleRemind = (r: FloatRequest) => {
+    const { mId, mName } = managerIdentity();
+    void act(r.id, () => remindFloatReturn(r.id, mId, mName));
+  };
+  /** Owners who can't request new float: the oldest open (sent, not returned or awaiting check) request each. */
+  const blockedOwners = Object.values(
+    requests
+      .filter(r => isOpenRequest(r) && r.status !== 'Pending')
+      .reduce<Record<string, FloatRequest>>((acc, r) => {
+        if (!acc[r.ownerId] || r.requestedAt < acc[r.ownerId].requestedAt) acc[r.ownerId] = r;
+        return acc;
+      }, {}),
+  ).sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
 
   // Requests filtered by active date filter
   const dateFilteredRequests = requests.filter(isWithinDateRange);
@@ -578,17 +601,15 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
 
                   {/* Status Filter */}
                   <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
-                    {(['All', 'Pending', 'Confirmed', 'Returned', 'Completed', 'Rejected'] as const).map((st) => (
+                    {(['All', 'Pending', 'Not returned', 'Returned', 'Completed', 'Loan', 'Rejected'] as const).map((st) => (
                       <button
                         key={st}
                         onClick={() => setStatusFilter(st)}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                          statusFilter === st
-                            ? 'bg-brand-primary text-white shadow-sm'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          statusFilter === st ? FILTER_STYLE[st].on : FILTER_STYLE[st].off
                         }`}
                       >
-                        {st} ({dateFilteredRequests.filter(r => matchesStatusFilter(r, st)).length})
+                        {FILTER_STYLE[st].label} ({dateFilteredRequests.filter(r => matchesStatusFilter(r, st)).length})
                       </button>
                     ))}
                   </div>
@@ -713,6 +734,42 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
 
             {/* Requests List Cards */}
             <div className="space-y-3">
+              {blockedOwners.length > 0 && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50/60 p-4 shadow-ambient space-y-3">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <h3 className="font-bold text-sm text-rose-900">Blocked owners: can't request until previous float is returned</h3>
+                    <span className="text-xs font-bold text-rose-800">
+                      {blockedOwners.length} owner(s) · {formatCurrency(blockedOwners.reduce((s, r) => s + getFloatAmount(r), 0))}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {blockedOwners.map(r => (
+                      <div key={r.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl bg-white border border-rose-100 p-3">
+                        <div className="text-xs">
+                          <p className="font-bold text-brand-text">{getOwnerName(r.ownerId)}</p>
+                          <p className="text-brand-text-variant">
+                            {formatCurrency(getFloatAmount(r))} · {getPendingDays(r)} day(s) ·{' '}
+                            {r.status === 'Returned' ? 'return awaiting your check' : 'not returned'}
+                          </p>
+                          {r.requestException && (
+                            <p className="text-emerald-700 font-semibold">One request allowed by {r.requestException.byName}</p>
+                          )}
+                          {r.reminder && <p className="text-rose-700">Reminded {formatDate(r.reminder.at)}</p>}
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          <button onClick={() => { setStatusFilter(floatViewStatus(r)); setSearchTerm(r.ownerId); }} className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 cursor-pointer">View request</button>
+                          {!readOnly && r.status === 'Confirmed' && (
+                            <button disabled={busyId === r.id} onClick={() => handleRemind(r)} className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-rose-100 hover:bg-rose-200 text-rose-800 cursor-pointer disabled:opacity-50">Send reminder</button>
+                          )}
+                          {!readOnly && !r.requestException && (
+                            <button disabled={busyId === r.id} onClick={() => handleGrantException(r)} className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer disabled:opacity-50">Allow one new request</button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="rounded-2xl border border-brand-gray-border bg-white px-6 py-4 shadow-ambient flex items-center justify-between">
                 <h3 className="font-bold text-sm text-brand-text">Float Request Management Ledger</h3>
                 <span className="text-xs font-semibold text-brand-text-variant">{filteredRequests.length} record(s)</span>
@@ -1336,3 +1393,13 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
   );
 }
 
+
+const FILTER_STYLE: Record<'All' | FloatViewStatus, { label: string; on: string; off: string }> = {
+  All: { label: 'All', on: 'bg-brand-primary text-white shadow-sm', off: 'bg-slate-100 text-slate-600 hover:bg-slate-200' },
+  Pending: { label: 'Pending', on: 'bg-amber-500 text-white shadow-sm', off: 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100' },
+  'Not returned': { label: 'Not returned', on: 'bg-rose-600 text-white shadow-sm', off: 'bg-rose-50 text-rose-800 border border-rose-200 hover:bg-rose-100' },
+  Returned: { label: 'Returned – to check', on: 'bg-sky-600 text-white shadow-sm', off: 'bg-sky-50 text-sky-800 border border-sky-200 hover:bg-sky-100' },
+  Completed: { label: 'Completed', on: 'bg-emerald-600 text-white shadow-sm', off: 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100' },
+  Loan: { label: 'Converted to loan', on: 'bg-indigo-600 text-white shadow-sm', off: 'bg-indigo-50 text-indigo-800 border border-indigo-200 hover:bg-indigo-100' },
+  Rejected: { label: 'Rejected', on: 'bg-slate-600 text-white shadow-sm', off: 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200' },
+};
