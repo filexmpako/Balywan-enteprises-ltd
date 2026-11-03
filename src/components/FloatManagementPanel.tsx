@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FloatRequest, FloatReturnEntry, FloatReturnChannel, FLOAT_RETURN_CHANNELS, Personnel, LoanRecord } from '../types';
 import { formatDate } from '../utils/dateFormat';
+import { ownerFloatBlock } from '../utils/floatBlock';
 import {
   getFloatRequestsForOwner, createFloatRequest, confirmFloatRequest,
   submitFloatReturn, completeFloatRequest, rejectFloatReturn, getPendingDays,
@@ -121,7 +122,8 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
 
   const pendingRequest = requests.find(r => r.status === 'Pending');
   const confirmedRequest = requests.find(r => r.status === 'Confirmed');
-  const hasActiveRequest = requests.some(r => r.status !== 'Completed' && r.status !== 'Rejected');
+  const floatBlock = ownerFloatBlock(requests, ownerId);
+  const reminder = floatBlock.blocking.find(r => r.reminder)?.reminder;
   const unpaidLoans = loans.filter(l => l.status !== 'Paid');
   // Short returns count as this owner's loan, awaiting the Float Manager's approval.
   const pendingLoanRequests = requests.filter(isLoanPendingApproval);
@@ -354,7 +356,17 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
           {/* TAB 1: Request Float */}
           {activeFloatTab === 'request' && (
             <div className="space-y-4">
-              {!hasActiveRequest ? (
+              {floatBlock.exceptionOn && (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-900">
+                  Exception granted by {floatBlock.exceptionOn.requestException!.byName}: you may submit one new request while your previous float is still open.
+                </div>
+              )}
+              {reminder && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-900">
+                  {reminder.byName} reminded you on {formatDate(reminder.at)} to return your float.
+                </div>
+              )}
+              {floatBlock.canRequest ? (
                 <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
                   <div>
                     <label className="text-xs font-bold text-brand-text block mb-1">Requested Amount (TZS)</label>
