@@ -24,7 +24,6 @@ export default function CashierPortalView({ onLogout }: { onLogout: () => void }
             <p className="truncate text-sm font-black text-brand-text">{user?.name}</p>
             <p className="truncate text-[11px] text-brand-text-variant">Cashier · {companyName}</p>
           </div>
-          <CashierStatementButton />
           <MonthSelect value={period} onChange={setPeriod} months={months} />
           <button type="button" onClick={onLogout} className="rounded-xl p-2 text-rose-600 hover:bg-rose-50 cursor-pointer" aria-label="Sign out">
             <Power className="h-5 w-5" />
@@ -48,6 +47,9 @@ export default function CashierPortalView({ onLogout }: { onLogout: () => void }
           </>
         )}
       </main>
+      <footer className="mx-auto flex max-w-5xl justify-center px-4 pb-8">
+        <CashierStatementButton />
+      </footer>
     </div>
   );
 }
