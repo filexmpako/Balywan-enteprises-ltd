@@ -7,14 +7,16 @@ import {
   Briefcase,
   ChevronRight,
   LogIn,
-  Banknote
+  Banknote,
+  Wallet
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useCompany } from './CompanyContext';
 import InstallAppButton from './InstallAppButton';
+import type { PortalType } from './AuthContext';
 
 interface GatewayViewProps {
-  onSelectPortal: (portal: 'admin' | 'owner' | 'float-manager') => void;
+  onSelectPortal: (portal: PortalType) => void;
 }
 
 export default function GatewayView({ onSelectPortal }: GatewayViewProps) {
@@ -154,6 +156,30 @@ export default function GatewayView({ onSelectPortal }: GatewayViewProps) {
           </button>
         </motion.div>
       </div>
+
+      {/* Portal 4: Cashier Portal */}
+      <motion.div
+        initial={{ y: 10, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.4 }}
+        className="max-w-6xl w-full mx-auto -mt-6 mb-10 rounded-3xl border border-brand-gray-border bg-brand-card px-6 py-5 shadow-ambient flex flex-col sm:flex-row sm:items-center gap-4 hover:border-amber-500/40 transition-all"
+      >
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-700 ring-4 ring-amber-500/10">
+          <Wallet className="h-6 w-6" />
+        </div>
+        <div className="flex-1">
+          <h3 className="text-base font-bold text-brand-text">Cashier Portal</h3>
+          <p className="text-xs text-brand-text-variant mt-1">Write the daily cash report, record expenses and follow your volume target.</p>
+        </div>
+        <button
+          onClick={() => onSelectPortal('cashier')}
+          className="rounded-xl bg-amber-500 hover:bg-amber-600 px-5 py-3 text-sm font-bold text-white shadow-ambient transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+          id="cashier-portal-btn"
+        >
+          Cashier Login
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </motion.div>
 
       {/* Sovereign Footers list (Image 4 details) */}
       <div className="text-center space-y-4">

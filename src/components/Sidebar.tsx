@@ -16,6 +16,7 @@ import {
   Building2,
   Target,
   Banknote,
+  Wallet,
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
@@ -61,6 +62,7 @@ export default function Sidebar({
     { view: ViewType.KPI_REPORTS, label: 'KPI Reports', icon: TrendingUp },
     { view: ViewType.TARGETS, label: 'Targets', icon: Target },
     { view: ViewType.FLOAT_MANAGEMENT, label: 'Float Management', icon: Banknote },
+    { view: ViewType.CASHIERS, label: 'Cashiers', icon: Wallet },
     { view: ViewType.UPLOAD_REPORTS, label: 'Upload Reports', icon: UploadCloud },
     { view: ViewType.REPORT_HISTORY, label: 'Report History', icon: History },
   ];

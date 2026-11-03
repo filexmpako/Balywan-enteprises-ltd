@@ -344,7 +344,7 @@ export default function PeopleManagementView({
   const [showDeleteUserConfirmModal, setShowDeleteUserConfirmModal] = useState<any | null>(null);
 
   const [createUserForm, setCreateUserForm] = useState({
-    selectedRole: 'Owner' as 'Owner' | 'FloatManager',
+    selectedRole: 'Owner' as 'Owner' | 'FloatManager' | 'Cashier',
     selectedEntityId: '',
     selectedEntityType: 'Owner' as 'Owner' | 'Personnel',
     username: '',
@@ -365,6 +365,7 @@ export default function PeopleManagementView({
     const { selectedRole, selectedEntityId, username, email, password } = createUserForm;
     if (!username.trim() || !email.trim()) return;
     if (selectedRole === 'Owner' && !selectedEntityId) return; // Owner accounts must link to a real Owner
+    if (selectedRole === 'Cashier' && !selectedEntityId) return; // Cashier accounts must link to their personnel profile
 
     const cleanUsername = username.trim().toLowerCase();
     const cleanEmail = email.trim().toLowerCase();
@@ -2393,7 +2394,7 @@ export default function PeopleManagementView({
                     required
                     value={createUserForm.selectedRole}
                     onChange={(e) => {
-                      const role = e.target.value as 'Owner' | 'FloatManager';
+                      const role = e.target.value as 'Owner' | 'FloatManager' | 'Cashier';
                       setCreateUserForm(prev => ({
                         ...prev,
                         selectedRole: role,
@@ -2407,13 +2408,14 @@ export default function PeopleManagementView({
                   >
                     <option value="Owner">Owner</option>
                     <option value="FloatManager">Float Manager</option>
+                    <option value="Cashier">Cashier</option>
                   </select>
                 </div>
 
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider">Select Business Profile</label>
                   <select
-                    required={createUserForm.selectedRole === 'Owner'}
+                    required={createUserForm.selectedRole !== 'FloatManager'}
                     value={createUserForm.selectedEntityId ? `${createUserForm.selectedEntityType}:${createUserForm.selectedEntityId}` : ''}
                     onChange={(e) => {
                       const val = e.target.value;
@@ -2437,6 +2439,8 @@ export default function PeopleManagementView({
                   >
                     {createUserForm.selectedRole === 'Owner' ? (
                       <option value="">-- Choose an Owner --</option>
+                    ) : createUserForm.selectedRole === 'Cashier' ? (
+                      <option value="">-- Choose the cashier's personnel profile --</option>
                     ) : (
                       <option value="">-- No linked profile (system account) --</option>
                     )}

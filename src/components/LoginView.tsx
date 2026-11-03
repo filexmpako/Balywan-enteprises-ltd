@@ -10,12 +10,12 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useAuth } from './AuthContext';
+import { useAuth, type PortalType } from './AuthContext';
 import { useCompany } from './CompanyContext';
 
 interface LoginViewProps {
   onBackToGateway: () => void;
-  portalType?: 'admin' | 'owner' | 'float-manager';
+  portalType?: PortalType;
 }
 
 export default function LoginView({ 
@@ -26,17 +26,22 @@ export default function LoginView({
   const { companyName } = useCompany();
   const isFloatManager = portalType === 'float-manager';
   const isOwner = portalType === 'owner';
+  const isCashier = portalType === 'cashier';
 
   const portalHeading = isFloatManager
     ? 'Float Manager Portal'
     : isOwner
     ? 'Agent Access Portal'
+    : isCashier
+    ? 'Cashier Portal'
     : 'Executive Access Portal';
 
   const targetHash = isFloatManager
     ? '#/float-manager/dashboard'
     : isOwner
     ? '#/owner/dashboard'
+    : isCashier
+    ? '#/cashier/dashboard'
     : '#/admin/dashboard';
 
   // Credentials are never pre-filled for any portal.
