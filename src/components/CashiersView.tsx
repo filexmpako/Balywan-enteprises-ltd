@@ -21,16 +21,16 @@ function CashierDetail({ personnelId, period, onBack, onChanged }: { personnelId
       {state.status === 'error' && <p className="rounded-xl bg-rose-50 p-3 text-xs font-semibold text-rose-700">{state.error}</p>}
       {state.status === 'ready' && (
         <>
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <h2 className="text-lg font-black text-brand-text">{state.month.person.name}</h2>
-              <p className="text-xs text-brand-text-variant">{[state.month.person.title, state.month.person.location].filter(Boolean).join(' · ')}</p>
-            </div>
-            <CashierStatementButton personnelId={personnelId} />
+          <div>
+            <h2 className="text-lg font-black text-brand-text">{state.month.person.name}</h2>
+            <p className="text-xs text-brand-text-variant">{[state.month.person.title, state.month.person.location].filter(Boolean).join(' · ')}</p>
           </div>
           <CashierSummary month={state.month} />
           <CashierSettingsForm key={`${personnelId}|${period}`} month={state.month} onSaved={changed} />
           <CashierHistory month={state.month} mode="staff" onChanged={changed} />
+          <footer className="flex justify-center pt-2 pb-4">
+            <CashierStatementButton personnelId={personnelId} />
+          </footer>
         </>
       )}
     </div>
