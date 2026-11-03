@@ -103,11 +103,16 @@ export const approveLoanForShortfall = (requestId: string, managerId: string, ma
 export const submitLoanRepayment = (loanId: string, amount: number, description?: string) =>
   run({ type: 'submitRepayment', loanId, amount, description });
 
-export const markLoanPaid = (loanId: string, managerId: string, managerName: string) =>
-  run({ type: 'markLoanPaid', loanId, managerId, managerName });
+/** Confirms the owner's submitted repayment; the loan is Paid once repayments cover it. */
+export const acceptLoanRepayment = (loanId: string, managerId: string, managerName: string) =>
+  run({ type: 'acceptRepayment', loanId, managerId, managerName });
 
 export const rejectLoanRepayment = (loanId: string, managerId: string, managerName: string) =>
   run({ type: 'rejectRepayment', loanId, managerId, managerName });
+
+/** Reminds every owner who owes anything. */
+export const remindAllToPay = (managerId: string, managerName: string) =>
+  run({ type: 'remindAll', managerId, managerName });
 
 /** Reminds the owner to return / pay everything they still owe. */
 export const remindOwnerToPay = (ownerId: string, managerId: string, managerName: string) =>

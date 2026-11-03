@@ -3,7 +3,7 @@ import { FLOAT_RETURN_CHANNELS, type FloatRequest, type FloatReturnEntry, type L
 import { fromRow, getMapper, toRow, type CollectionMapper } from './hasidadi/collections';
 import { loadCollection } from './hasidadi/repo.server';
 import { ensurePrivateBucket, ImageUploadError, parseImageDataUrl } from './storageImages.server';
-import { floatOwed, floatReturned, outstandingItems } from '../utils/floatOutstanding';
+import { floatOwed, floatReturned, loanBalance, outstandingItems } from '../utils/floatOutstanding';
 
 /**
  * Float requests and loans, written one record at a time.
@@ -41,9 +41,10 @@ export type FloatAction =
   | { type: 'rejectReturn'; requestId: string; managerId: string; managerName: string }
   | { type: 'approveLoan'; requestId: string; managerId: string; managerName: string }
   | { type: 'submitRepayment'; loanId: string; amount: number; description?: string }
-  | { type: 'markLoanPaid'; loanId: string; managerId: string; managerName: string }
+  | { type: 'acceptRepayment'; loanId: string; managerId: string; managerName: string }
   | { type: 'rejectRepayment'; loanId: string; managerId: string; managerName: string }
-  | { type: 'remind'; ownerId: string; managerId: string; managerName: string };
+  | { type: 'remind'; ownerId: string; managerId: string; managerName: string }
+  | { type: 'remindAll'; managerId: string; managerName: string };
 
 const STAFF_ACTIONS = new Set<FloatAction['type']>([
   'confirm',
@@ -51,9 +52,10 @@ const STAFF_ACTIONS = new Set<FloatAction['type']>([
   'complete',
   'rejectReturn',
   'approveLoan',
-  'markLoanPaid',
+  'acceptRepayment',
   'rejectRepayment',
   'remind',
+  'remindAll',
 ]);
 
 async function loadOwnerRequests(db: DB, ownerId: string): Promise<FloatRequest[]> {
@@ -156,14 +158,16 @@ export async function runFloatAction(
       if (error) throw new Error(`float_requests insert: ${error.message}`);
       return;
     }
-    case 'remind': {
-      // Marks every outstanding item of the owner (float not returned, short return, unpaid loan).
+    case 'remind':
+    case 'remindAll': {
+      // Marks every outstanding item (float not returned, short return, unpaid loan) of one owner, or of everyone.
+      const forOwner = action.type === 'remind' ? action.ownerId : null;
       const [requests, loans] = await Promise.all([
-        loadOwnerRequests(userDb, action.ownerId),
-        loadCollection(userDb, LOANS).then(all => (all as LoanRecord[]).filter(l => l.ownerId === action.ownerId)),
+        forOwner ? loadOwnerRequests(userDb, forOwner) : (loadCollection(userDb, FLOAT) as Promise<FloatRequest[]>),
+        loadCollection(userDb, LOANS).then(all => (all as LoanRecord[]).filter(l => !forOwner || l.ownerId === forOwner)),
       ]);
       const items = outstandingItems(requests, loans);
-      if (!items.length) throw new FloatActionError('This owner has nothing outstanding. The list has been refreshed.');
+      if (!items.length) throw new FloatActionError('Nothing is outstanding. The list has been refreshed.');
       const reminder = { byName: action.managerName, at };
       for (const item of items) {
         if (item.kind === 'loan') {
@@ -280,7 +284,7 @@ export async function runFloatAction(
       const amount = Number(action.amount);
       if (!(amount > 0)) throw new FloatActionError('Enter a repayment amount greater than 0.');
       const description = action.description?.trim() || undefined;
-      if (amount > l.amount && !description) {
+      if (amount > loanBalance(l) && !description) {
         throw new FloatActionError('A description is required when repaying more than the outstanding loan amount.');
       }
       await writeOne(userDb, LOANS, {
@@ -293,15 +297,21 @@ export async function runFloatAction(
       return;
     }
 
-    case 'markLoanPaid': {
+    case 'acceptRepayment': {
+      // The confirmed amount is added to the loan's payments; the loan is Paid only once they cover it.
       const l = await readOne<LoanRecord>(userDb, LOANS, action.loanId);
       expectStatus(l.status, ['Repayment Submitted'], 'loan');
+      const amount = Number(l.repaidAmount) > 0 ? Number(l.repaidAmount) : loanBalance(l);
+      const payments = [...(l.payments || []), { amount, at, byName: action.managerName }];
+      const settled = loanBalance({ ...l, payments }) <= 0;
       await writeOne(userDb, LOANS, {
         ...l,
-        status: 'Paid',
-        paidAt: at,
-        markedPaidByManagerId: action.managerId,
-        markedPaidByManagerName: action.managerName,
+        payments,
+        status: settled ? 'Paid' : 'Outstanding',
+        repaidAmount: undefined,
+        repaymentDescription: undefined,
+        repaymentSubmittedAt: undefined,
+        ...(settled ? { paidAt: at, markedPaidByManagerId: action.managerId, markedPaidByManagerName: action.managerName } : {}),
       });
       return;
     }

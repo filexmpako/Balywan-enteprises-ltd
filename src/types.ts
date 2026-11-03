@@ -152,6 +152,8 @@ export interface LoanRecord {
   repaymentRejectedByManagerName?: string;
   /** Last time a float manager reminded the owner to pay this loan. */
   reminder?: { byName: string; at: string };
+  /** Repayments the float manager has confirmed; the loan is Paid once they cover the amount. */
+  payments?: { amount: number; at: string; byName: string }[];
 }
 
 export interface Owner {

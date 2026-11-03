@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { floatViewStatus, outstandingByOwner } from './floatOutstanding';
+import { floatViewStatus, loanBalance, outstandingByOwner } from './floatOutstanding';
 import type { FloatRequest, LoanRecord } from '../types';
 
 const req = (o: Partial<FloatRequest>): FloatRequest => ({ id: 'r', ownerId: 'A', requestedAmount: 100, requestedAt: '2026-11-01', status: 'Confirmed', ...o });
@@ -27,6 +27,13 @@ test('outstanding = float not returned + short return + unpaid loans, per owner'
   assert.equal(list[0].since, '2026-10-01');
   assert.deepEqual(list[0].lastReminder, { byName: 'ASIA', at: '2026-11-04' });
   assert.equal(list[0].items[1].repaymentSubmitted, true);
+  assert.deepEqual([list[0].given, list[0].paid], [30 + 5 + 80 + 100, 60]);
+});
+test('confirmed loan repayments reduce what is still owed', () => {
+  const l = loan({ amount: 100, payments: [{ amount: 40, at: '2026-11-01', byName: 'ASIA' }] });
+  assert.equal(loanBalance(l), 60);
+  const [o] = outstandingByOwner([], [l, loan({ id: 'done', amount: 50, payments: [{ amount: 50, at: 'x', byName: 'M' }] })]);
+  assert.deepEqual([o.given, o.paid, o.total, o.items.length], [100, 40, 60, 1]);
 });
 test('confirmed float shows as Not returned; loan wins over status', () => {
   assert.equal(floatViewStatus(req({})), 'Not returned');

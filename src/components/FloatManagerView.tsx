@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { useCompany } from './CompanyContext';
 import { FloatRequest, Owner, Personnel, LoanRecord } from '../types';
@@ -11,7 +11,7 @@ import {
   rejectFloatRequest,
   approveLoanForShortfall,
   getLoanRecords,
-  markLoanPaid,
+  acceptLoanRepayment,
   rejectLoanRepayment,
   getPendingDays,
   getResolutionDays,
@@ -25,10 +25,11 @@ import {
   getFloatLastRefreshed,
   loadReceiptImage,
   remindOwnerToPay,
+  remindAllToPay,
   type FloatResult
 } from '../utils/floatManagement';
 import { ownersList } from '../data';
-import { floatViewStatus, outstandingByOwner, type FloatViewStatus, type OutstandingKind } from '../utils/floatOutstanding';
+import { floatViewStatus, loanBalance, loanPaid, outstandingByOwner, type FloatViewStatus, type OutstandingKind } from '../utils/floatOutstanding';
 import { 
   Banknote, 
   Search, 
@@ -246,6 +247,12 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
     const { mId, mName } = managerIdentity();
     void act(`remind-${ownerId}`, () => remindOwnerToPay(ownerId, mId, mName));
   };
+  const handleRemindAll = () => {
+    if (!confirm(`Send a reminder to all ${owing.length} owner(s) who owe?`)) return;
+    const { mId, mName } = managerIdentity();
+    void act('remind-all', () => remindAllToPay(mId, mName));
+  };
+  const [openOwing, setOpenOwing] = useState<string | null>(null);
   /** Everyone who owes: float not returned, short returns and unpaid loans. It never blocks new requests. */
   const owing = outstandingByOwner(requests, loans);
   const OWED_LABEL: Record<OutstandingKind, string> = { float: 'Float not returned', shortReturn: 'Short return', loan: 'Loan' };
@@ -340,7 +347,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
     const mId = manager ? manager.id : (user?.email || 'float_manager');
     const mName = manager ? manager.name : (user?.name || 'Float Manager');
 
-    void act(loan.id, () => markLoanPaid(loan.id, mId, mName));
+    void act(loan.id, () => acceptLoanRepayment(loan.id, mId, mName));
   };
 
   // View receipt photo
@@ -379,7 +386,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
     .reduce((sum, r) => sum + (getFloatAmount(r) || 0), 0);
   const totalLoansOutstandingFinancial = loans
     .filter(l => l.status !== 'Paid')
-    .reduce((sum, l) => sum + (l.amount || 0), 0);
+    .reduce((sum, l) => sum + loanBalance(l), 0);
 
   // Short returns: counted as the owner's loan, awaiting the manager's approval.
   const pendingLoanRequests = getPendingLoanRequests(requests).filter(r => {
@@ -1011,50 +1018,82 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
 
             {/* Everyone with an outstanding balance (does not block new float) */}
             <div className="rounded-2xl border border-rose-200 bg-white shadow-ambient overflow-hidden">
-              <div className="px-6 py-4 border-b border-rose-100 bg-rose-50/60 flex items-center justify-between gap-2 flex-wrap">
+              <div className="px-4 sm:px-6 py-4 border-b border-rose-100 bg-rose-50/60 flex items-center justify-between gap-3 flex-wrap">
                 <div>
                   <h3 className="font-bold text-sm text-rose-900">Outstanding balances</h3>
-                  <p className="text-[11px] text-rose-800">Owners can still receive float; send a reminder to pay.</p>
+                  <p className="text-xs font-bold text-rose-800 mt-0.5">
+                    {owing.length} owner(s) · {formatCurrency(owing.reduce((sum, o) => sum + o.total, 0))} owed
+                  </p>
                 </div>
-                <span className="text-xs font-bold text-rose-800">
-                  {owing.length} owner(s) · {formatCurrency(owing.reduce((sum, o) => sum + o.total, 0))}
-                </span>
+                {!readOnly && owing.length > 0 && (
+                  <button
+                    disabled={busyId === 'remind-all'}
+                    onClick={handleRemindAll}
+                    className="px-3.5 py-2 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white cursor-pointer disabled:opacity-50"
+                  >
+                    Remind all
+                  </button>
+                )}
               </div>
               {owing.length === 0 ? (
                 <p className="px-6 py-5 text-xs text-brand-text-variant">Nobody owes anything right now.</p>
               ) : (
-                <div className="divide-y divide-slate-100">
-                  {owing.map(o => (
-                    <div key={o.ownerId} className="px-6 py-4 flex flex-col md:flex-row md:items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1 space-y-1.5">
-                        <div className="flex items-baseline gap-2 flex-wrap">
-                          <span className="font-bold text-sm text-brand-text">{getOwnerName(o.ownerId)}</span>
-                          <span className="text-sm font-black text-rose-700">{formatCurrency(o.total)}</span>
-                          <span className="text-[11px] text-brand-text-variant">oldest {daysSince(o.since)} day(s)</span>
-                        </div>
-                        <ul className="space-y-0.5 text-[11px] text-brand-text-variant">
-                          {o.items.map(i => (
-                            <li key={`${i.kind}-${i.id}`}>
-                              <span className="font-semibold text-brand-text">{OWED_LABEL[i.kind]}</span> · {formatCurrency(i.amount)} · since {formatDate(i.since)} ({daysSince(i.since)} day(s))
-                              {i.repaymentSubmitted && <span className="text-indigo-700 font-semibold"> · repayment sent, check it below</span>}
-                            </li>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[480px] text-left text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      <tr>
+                        <th className="px-3 py-2.5">Owner</th>
+                        <th className="px-3 py-2.5 text-right">Still owed (TZS)</th>
+                        <th className="px-3 py-2.5 text-right">Paid</th>
+                        <th className="px-3 py-2.5 text-right">Given</th>
+                        <th className="px-3 py-2.5 text-right">Days</th>
+                        <th className="px-3 py-2.5">Reminded</th>
+                        {!readOnly && <th className="px-3 py-2.5" />}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {owing.map(o => (
+                        <Fragment key={o.ownerId}>
+                          <tr onClick={() => setOpenOwing(openOwing === o.ownerId ? null : o.ownerId)} className="cursor-pointer hover:bg-slate-50">
+                            <td className="px-3 py-2.5">
+                              <p className="font-bold text-brand-text">{getOwnerName(o.ownerId)}</p>
+                              <p className="text-[10px] text-slate-400">{o.items.length} item(s) {openOwing === o.ownerId ? '▲' : '▼'}</p>
+                            </td>
+                            <td className="px-3 py-2.5 text-right whitespace-nowrap tabular-nums font-black text-rose-700">{o.total.toLocaleString()}</td>
+                            <td className="px-3 py-2.5 text-right whitespace-nowrap tabular-nums text-emerald-700">{o.paid.toLocaleString()}</td>
+                            <td className="px-3 py-2.5 text-right whitespace-nowrap tabular-nums">{o.given.toLocaleString()}</td>
+                            <td className="px-3 py-2.5 text-right tabular-nums">{daysSince(o.since)}</td>
+                            <td className="px-3 py-2.5 whitespace-nowrap text-slate-500">{o.lastReminder ? formatDate(o.lastReminder.at) : '—'}</td>
+                            {!readOnly && (
+                              <td className="px-3 py-2.5 text-right">
+                                <button
+                                  disabled={busyId === `remind-${o.ownerId}`}
+                                  onClick={e => { e.stopPropagation(); handleRemind(o.ownerId); }}
+                                  className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-rose-100 hover:bg-rose-200 text-rose-800 cursor-pointer disabled:opacity-50"
+                                >
+                                  Remind
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                          {openOwing === o.ownerId && o.items.map(i => (
+                            <tr key={`${i.kind}-${i.id}`} className="bg-slate-50/70 text-[11px] text-slate-600">
+                              <td className="px-3 py-1.5 pl-6">
+                                {OWED_LABEL[i.kind]} · {formatDate(i.since)}
+                                {i.repaymentSubmitted && <span className="block text-indigo-700 font-semibold">Repayment sent, confirm it below</span>}
+                              </td>
+                              <td className="px-3 py-1.5 text-right whitespace-nowrap tabular-nums font-bold">{i.amount.toLocaleString()}</td>
+                              <td className="px-3 py-1.5 text-right whitespace-nowrap tabular-nums">{i.paid.toLocaleString()}</td>
+                              <td className="px-3 py-1.5 text-right whitespace-nowrap tabular-nums">{i.given.toLocaleString()}</td>
+                              <td className="px-3 py-1.5 text-right tabular-nums">{daysSince(i.since)}</td>
+                              <td className="px-3 py-1.5 whitespace-nowrap">{i.reminder ? `${i.reminder.byName}` : '—'}</td>
+                              {!readOnly && <td />}
+                            </tr>
                           ))}
-                        </ul>
-                        {o.lastReminder && (
-                          <p className="text-[11px] text-rose-700">Reminded by {o.lastReminder.byName} on {formatDate(o.lastReminder.at)}</p>
-                        )}
-                      </div>
-                      {!readOnly && (
-                        <button
-                          disabled={busyId === `remind-${o.ownerId}`}
-                          onClick={() => handleRemind(o.ownerId)}
-                          className="shrink-0 px-3 py-2 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white cursor-pointer disabled:opacity-50"
-                        >
-                          {o.lastReminder ? 'Remind again' : 'Send reminder'}
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                        </Fragment>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
@@ -1170,6 +1209,11 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap font-black text-indigo-700">
                               {formatCurrency(loan.amount)}
+                              {loanPaid(loan) > 0 && (
+                                <p className="text-[10px] font-semibold text-slate-500">
+                                  Paid {formatCurrency(loanPaid(loan))} · Owed {formatCurrency(loanBalance(loan))}
+                                </p>
+                              )}
                             </td>
                             <td className="px-6 py-4 max-w-xs italic text-slate-600">
                               "{loan.reason || 'No explanation provided'}"
@@ -1223,9 +1267,9 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                             <td className="px-6 py-4 whitespace-nowrap text-right">
                               {!readOnly && status === 'Repayment Submitted' && (
                                 <div className="flex flex-col items-end gap-1">
-                                  {loan.repaidAmount !== undefined && loan.repaidAmount < loan.amount && (
+                                  {loan.repaidAmount !== undefined && loan.repaidAmount < loanBalance(loan) && (
                                     <span className="text-[10px] font-bold text-amber-700">
-                                      Reported amount is less than the outstanding balance
+                                      Part payment: {formatCurrency(loanBalance(loan) - loan.repaidAmount)} will still be owed
                                     </span>
                                   )}
                                   <div className="flex items-center gap-1.5">
@@ -1239,11 +1283,11 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                                     </button>
                                     <button
                                       onClick={() => handleMarkLoanPaid(loan)}
-                                      title="Confirm submitted repayment and mark loan as settled"
+                                      title="Add the submitted repayment to the loan; it is settled once fully paid"
                                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
                                     >
                                       <Check className="h-3.5 w-3.5" />
-                                      Confirm Repayment & Mark Paid
+                                      Confirm repayment
                                     </button>
                                   </div>
                                 </div>
