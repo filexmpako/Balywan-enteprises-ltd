@@ -116,7 +116,7 @@ export function CashierSummary({ month }: { month: CashierMonthView }) {
         <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-brand-gray-hover" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
           <div className={`h-full rounded-full ${pct >= 100 ? 'bg-emerald-500' : 'bg-brand-primary'}`} style={{ width: `${Math.min(100, pct)}%` }} />
         </div>
-        <p className="mt-1 text-[11px] text-brand-text-variant">{s.volumeTarget ? `${pct}% of target · Base + IOP` : 'Base + IOP served this month'}</p>
+        {s.volumeTarget > 0 && <p className="mt-1 text-[11px] text-brand-text-variant">{pct}% of target</p>}
         <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
           {([['Base', v.base, v.txns.base], ['IOP', v.iop, v.txns.iop], ['Internal', v.internal, v.txns.internal]] as const).map(([label, amount, txns]) => (
             <div key={label} className="rounded-xl bg-brand-gray-hover/50 p-2.5">
@@ -126,14 +126,13 @@ export function CashierSummary({ month }: { month: CashierMonthView }) {
             </div>
           ))}
         </div>
-        <p className="mt-2 text-[10px] text-brand-text-variant">Internal = sends to our own tills; not counted toward the target.</p>
       </div>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <Tile label="Capital given" value={tzs(s.capital)} note={month.settings?.returnedAmount != null ? `Returned ${tzs(month.settings.returnedAmount)}` : 'Returned at month end'} />
-        <Tile label="Cash held" value={tzs(s.held)} note={s.heldDate ? `Report of ${formatDate(`${s.heldDate}T00:00:00`)}` : 'No report yet'} />
+        <Tile label="Capital given" value={tzs(s.capital)} note={month.settings?.returnedAmount != null ? `Returned ${tzs(month.settings.returnedAmount)}` : undefined} />
+        <Tile label="Cash held" value={tzs(s.held)} note={s.heldDate ? `Report of ${formatDate(`${s.heldDate}T00:00:00`)}` : undefined} />
         <Tile label="Expenses" value={tzs(s.expenses)} />
-        <Tile label="Income" value={tzs(s.income)} note="Brought in for the company" tone="text-emerald-700" />
-        <Tile label="Profit" value={signedTzs(s.profit)} note="Held + expenses + income − capital" tone={s.profit >= 0 ? 'text-emerald-700' : 'text-rose-700'} className="col-span-2 lg:col-span-1" />
+        <Tile label="Income" value={tzs(s.income)} tone="text-emerald-700" />
+        <Tile label="Profit" value={signedTzs(s.profit)} tone={s.profit >= 0 ? 'text-emerald-700' : 'text-rose-700'} className="col-span-2 lg:col-span-1" />
       </div>
     </div>
   );
