@@ -3,7 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { bootstrapSeedAccounts } from '@/lib/bootstrap.functions';
 import { hydrateFromCloud, installCloudSync, subscribeToDailyTransactions } from '@/lib/cloudSync';
 
-export type UserRole = 'Admin' | 'Owner' | 'FloatManager';
+export type UserRole = 'Admin' | 'Owner' | 'FloatManager' | 'Cashier';
+export type PortalType = 'admin' | 'owner' | 'float-manager' | 'cashier';
 
 export interface UserSession {
   username: string;
@@ -23,11 +24,11 @@ export interface StoredUser extends UserSession {
 
 interface AuthContextType {
   user: UserSession | null;
-  portalType: 'admin' | 'owner' | 'float-manager' | null;
-  setPortalType: (type: 'admin' | 'owner' | 'float-manager' | null) => void;
+  portalType: PortalType | null;
+  setPortalType: (type: PortalType | null) => void;
   login: (
     username: string,
-    requestedPortal: 'admin' | 'owner' | 'float-manager',
+    requestedPortal: PortalType,
     password?: string,
   ) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
@@ -43,19 +44,22 @@ const ROLE_MAP: Record<string, UserRole> = {
   admin: 'Admin',
   owner: 'Owner',
   float_manager: 'FloatManager',
+  cashier: 'Cashier',
 };
 
-const PORTAL_ROLE: Record<'admin' | 'owner' | 'float-manager', UserRole> = {
+const PORTAL_ROLE: Record<PortalType, UserRole> = {
   admin: 'Admin',
   owner: 'Owner',
   'float-manager': 'FloatManager',
+  cashier: 'Cashier',
 };
 
 async function buildSession(userId: string, email: string): Promise<UserSession | null> {
-  const [{ data: profile }, { data: roles }, { data: owner }] = await Promise.all([
+  const [{ data: profile }, { data: roles }, { data: owner }, { data: personnel }] = await Promise.all([
     supabase.from('profiles').select('username, full_name, email, avatar').eq('user_id', userId).maybeSingle(),
     supabase.from('user_roles').select('role').eq('user_id', userId),
     supabase.from('owners').select('owner_id, avatar_photo_id').eq('user_id', userId).maybeSingle(),
+    supabase.from('personnel').select('personnel_id').eq('user_id', userId).maybeSingle(),
   ]);
 
   const roleKey = roles?.[0]?.role as string | undefined;
@@ -67,13 +71,14 @@ async function buildSession(userId: string, email: string): Promise<UserSession 
     name: profile?.full_name || email.split('@')[0],
     role: ROLE_MAP[roleKey] ?? 'Owner',
     ownerId: owner?.owner_id ?? undefined,
+    personnelId: personnel?.personnel_id ?? undefined,
     avatarPhotoId: owner?.avatar_photo_id ?? undefined,
   };
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserSession | null>(null);
-  const [portalType, setPortalState] = useState<'admin' | 'owner' | 'float-manager' | null>(null);
+  const [portalType, setPortalState] = useState<PortalType | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -96,7 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (sessionUser && active) {
           const session = await buildSession(sessionUser.id, sessionUser.email || '');
           if (session && active) {
-            await hydrateFromCloud();
+            if (session.role !== 'Cashier') await hydrateFromCloud();
             if (!active) return;
             setUser(session);
             localStorage.setItem('hasidadi_current_user', JSON.stringify(session));
@@ -153,7 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [isStaff, user?.username]);
 
-  const setPortalType = (type: 'admin' | 'owner' | 'float-manager' | null) => {
+  const setPortalType = (type: PortalType | null) => {
     setPortalState(type);
     if (type) localStorage.setItem('hasidadi_portal_type', type);
     else localStorage.removeItem('hasidadi_portal_type');
@@ -161,7 +166,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (
     username: string,
-    requestedPortal: 'admin' | 'owner' | 'float-manager',
+    requestedPortal: PortalType,
     password?: string,
   ): Promise<{ success: boolean; error?: string }> => {
     if (!password) {
@@ -217,7 +222,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setUser(session);
       localStorage.setItem('hasidadi_current_user', JSON.stringify(session));
-      await hydrateFromCloud();
+      // A cashier's portal reads only their own month from the server.
+      if (session.role !== 'Cashier') await hydrateFromCloud();
       return { success: true };
     } catch {
       return { success: false, error: 'An unexpected error occurred during security validation.' };

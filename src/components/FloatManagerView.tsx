@@ -41,7 +41,9 @@ import {
   X,
   XCircle,
   FileText,
-  Calendar} from 'lucide-react';
+  Calendar,
+  Wallet} from 'lucide-react';
+import CashiersView from './CashiersView';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface FloatManagerViewProps {
@@ -53,7 +55,7 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
   const { user } = useAuth();
   const { companyName } = useCompany();
 
-  const [activeTab, setActiveTab] = useState<'ledger' | 'loans'>('ledger');
+  const [activeTab, setActiveTab] = useState<'ledger' | 'loans' | 'cashiers'>('ledger');
   const [requests, setRequests] = useState<FloatRequest[]>([]);
   const [loans, setLoans] = useState<LoanRecord[]>([]);
   const [owners, setOwners] = useState<Owner[]>([]);
@@ -461,6 +463,19 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
             <FileText className="h-4 w-4" />
             Loans ({loans.length}){getPendingLoanRequests(requests).length > 0 ? ` · ${getPendingLoanRequests(requests).length} awaiting approval` : ''}
           </button>
+          {!readOnly && (
+            <button
+              onClick={() => setActiveTab('cashiers')}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'cashiers'
+                  ? 'bg-brand-primary text-white shadow-md'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-brand-gray-border'
+              }`}
+            >
+              <Wallet className="h-4 w-4" />
+              Cashiers
+            </button>
+          )}
           <div className="ml-auto flex items-center gap-2">
             {busyId && <span className="text-xs font-semibold text-brand-text-variant">Saving…</span>}
             <span className="hidden sm:inline text-[11px] text-brand-text-variant">
@@ -478,7 +493,9 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
           </div>
         </div>
 
-        {activeTab === 'ledger' ? (
+        {activeTab === 'cashiers' ? (
+          <CashiersView />
+        ) : activeTab === 'ledger' ? (
           <>
             {/* Top Summary Stats (6 Cards) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">

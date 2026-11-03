@@ -16,6 +16,7 @@ export enum ViewType {
   WAKALA_ISSUES = 'WAKALA_ISSUES',
   TARGETS = 'TARGETS',
   FLOAT_MANAGEMENT = 'FLOAT_MANAGEMENT',
+  CASHIERS = 'CASHIERS',
 }
 
 export interface KPIMetric {

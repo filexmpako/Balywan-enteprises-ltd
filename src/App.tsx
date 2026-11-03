@@ -29,6 +29,8 @@ import ClassificationAuditLogView from "./components/ClassificationAuditLogView"
 import WakalaIssuesPanel from "./components/WakalaIssuesPanel";
 import TargetsView from "./components/TargetsView";
 import FloatManagerView from "./components/FloatManagerView";
+import CashiersView from "./components/CashiersView";
+import CashierPortalView from "./components/CashierPortalView";
 import { deleteUploadedReport } from "./lib/uploads.functions";
 import { hydrateFromCloud } from "./lib/cloudSync";
 import { clearWeeklyServicingData, deleteDailyServicingRowsByRefs } from "./utils/indexedDB";
@@ -255,8 +257,8 @@ function AppContent() {
 
   // ROLE: OWNER
   if (user.role === "Owner") {
-    // If attempting to access admin or float manager views
-    if (hash.startsWith("#/admin/") || hash.startsWith("#/float-manager/")) {
+    // If attempting to access admin, float manager or cashier views
+    if (hash.startsWith("#/admin/") || hash.startsWith("#/float-manager/") || hash.startsWith("#/cashier/")) {
       return (
         <ForbiddenView
           onBackToSafeRoute={() => {
@@ -296,8 +298,8 @@ function AppContent() {
 
   // ROLE: FLOAT MANAGER
   if (user.role === "FloatManager") {
-    // If attempting to access admin or owner views
-    if (hash.startsWith("#/admin/") || hash.startsWith("#/owner/")) {
+    // If attempting to access admin, owner or cashier views
+    if (hash.startsWith("#/admin/") || hash.startsWith("#/owner/") || hash.startsWith("#/cashier/")) {
       return (
         <ForbiddenView
           onBackToSafeRoute={() => {
@@ -325,10 +327,37 @@ function AppContent() {
     );
   }
 
+  // ROLE: CASHIER
+  if (user.role === "Cashier") {
+    if (hash.startsWith("#/admin/") || hash.startsWith("#/owner/") || hash.startsWith("#/float-manager/")) {
+      return (
+        <ForbiddenView
+          onBackToSafeRoute={() => {
+            window.location.hash = "#/cashier/dashboard";
+          }}
+        />
+      );
+    }
+    if (hash === "#/cashier/dashboard" || hash === "#/" || hash === "#/login") {
+      return (
+        <ProtectedRoute allowedRoles={["Cashier"]}>
+          <CashierPortalView onLogout={logout} />
+        </ProtectedRoute>
+      );
+    }
+    return (
+      <NotFoundView
+        onBackToSafeRoute={() => {
+          window.location.hash = "#/cashier/dashboard";
+        }}
+      />
+    );
+  }
+
   // ROLE: ADMIN
   if (user.role === "Admin") {
-    // If attempting to access owner or float manager views
-    if (hash.startsWith("#/owner/") || hash.startsWith("#/float-manager/")) {
+    // If attempting to access owner, float manager or cashier views
+    if (hash.startsWith("#/owner/") || hash.startsWith("#/float-manager/") || hash.startsWith("#/cashier/")) {
       return (
         <ForbiddenView
           onBackToSafeRoute={() => {
@@ -515,6 +544,9 @@ function AppContent() {
     } else if (hash === "#/admin/float") {
       currentView = ViewType.FLOAT_MANAGEMENT;
       contentNode = <FloatManagerView readOnly={true} />;
+    } else if (hash === "#/admin/cashiers") {
+      currentView = ViewType.CASHIERS;
+      contentNode = <CashiersView />;
     } else {
       // Admin invalid route
       return (
@@ -538,6 +570,7 @@ function AppContent() {
             else if (view === ViewType.WAKALA_ISSUES) window.location.hash = "#/admin/issues";
             else if (view === ViewType.TARGETS) window.location.hash = "#/admin/targets";
             else if (view === ViewType.FLOAT_MANAGEMENT) window.location.hash = "#/admin/float";
+            else if (view === ViewType.CASHIERS) window.location.hash = "#/admin/cashiers";
             else if (view === ViewType.FIELD_MAP) window.location.hash = "#/admin/map";
             else if (view === ViewType.KPI_REPORTS) window.location.hash = "#/admin/kpi-reports";
             else if (view === ViewType.UPLOAD_REPORTS) window.location.hash = "#/admin/upload";

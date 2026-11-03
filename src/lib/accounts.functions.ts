@@ -9,18 +9,20 @@
 import { createServerFn } from '@tanstack/react-start';
 import { requireSupabaseAuth } from '@/integrations/supabase/auth-middleware';
 
-export type PortalRole = 'Owner' | 'FloatManager' | 'Admin';
+export type PortalRole = 'Owner' | 'FloatManager' | 'Admin' | 'Cashier';
 
-const ROLE_TO_DB: Record<PortalRole, 'owner' | 'float_manager' | 'admin'> = {
+const ROLE_TO_DB: Record<PortalRole, 'owner' | 'float_manager' | 'admin' | 'cashier'> = {
   Owner: 'owner',
   FloatManager: 'float_manager',
   Admin: 'admin',
+  Cashier: 'cashier',
 };
 
 const DB_TO_ROLE: Record<string, PortalRole> = {
   owner: 'Owner',
   float_manager: 'FloatManager',
   admin: 'Admin',
+  cashier: 'Cashier',
 };
 
 /** Cryptographically random, human-transferable password. */
@@ -141,6 +143,7 @@ export const createUserAccount = createServerFn({ method: 'POST' })
       if (!input?.email?.trim()) throw new Error('An email address is required');
       if (!input?.username?.trim()) throw new Error('A username is required');
       if (!ROLE_TO_DB[input.role]) throw new Error('Unknown role');
+      if (input.role === 'Cashier' && !input.personnelId) throw new Error('A cashier account must be linked to a personnel profile');
       if (input.password && input.password.length < 8) {
         throw new Error('Password must be at least 8 characters');
       }
@@ -155,6 +158,12 @@ export const createUserAccount = createServerFn({ method: 'POST' })
     const username = data.username.trim().toLowerCase();
     const password = data.password?.trim() || generatePassword();
     const name = data.name?.trim() || username;
+
+    if (data.role === 'Cashier') {
+      const { isMissingSetup, SETUP_REQUIRED } = await import('./cashier.server');
+      const { error: setupError } = await supabaseAdmin.rpc('is_cashier' as any, { _user_id: context.userId } as any);
+      if (isMissingSetup(setupError)) throw new Error(SETUP_REQUIRED);
+    }
 
     const { data: usernameTaken } = await supabaseAdmin
       .from('profiles')
@@ -179,7 +188,8 @@ export const createUserAccount = createServerFn({ method: 'POST' })
       .upsert({ user_id: userId, email, full_name: name, username }, { onConflict: 'user_id' });
     await supabaseAdmin
       .from('user_roles')
-      .upsert({ user_id: userId, role: ROLE_TO_DB[data.role] }, { onConflict: 'user_id,role' });
+      // `as any`: 'cashier' joins app_role with the cashier_accounts migration.
+      .upsert({ user_id: userId, role: ROLE_TO_DB[data.role] as any }, { onConflict: 'user_id,role' });
 
     if (data.ownerId) {
       const { error: linkError } = await supabaseAdmin
