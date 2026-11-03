@@ -1,4 +1,5 @@
 import { BaseWakala, Owner, WakalaEntry } from '../types';
+import { normalizeMsisdn } from './msisdn';
 import { resolveOwnerMatch } from './ownerMatch';
 
 export interface OwnerWakalaMapping {
@@ -19,9 +20,43 @@ function toWakalaEntry(record: BaseWakala): WakalaEntry {
     siteId: record.siteId,
     siteWard: record.siteWard,
     district: record.district,
-    alternateNumber: record.alternateNumber,
+    alternateNumber: record.alternateNumber || record.altMsisdn,
     ownerMatchStatus: 'Matched',
+    location: (record as any).location,
+    photoId: (record as any).photoId,
+    photoUrl: (record as any).photoUrl,
   };
+}
+
+/**
+ * A Base Wakala Index record with the edits made to its owner-page entry
+ * (see toWakalaEntry), or null when nothing changed. The number itself is
+ * the record's key and is not edited here.
+ */
+export function applyWakalaEntryEdits(record: BaseWakala, entry: WakalaEntry): BaseWakala | null {
+  const before = toWakalaEntry(record);
+  const next: Record<string, unknown> = { ...record };
+  let changed = false;
+  const edit = <K extends keyof WakalaEntry>(field: K, apply: (value: WakalaEntry[K]) => void) => {
+    if (JSON.stringify(entry[field] ?? null) === JSON.stringify(before[field] ?? null)) return;
+    apply(entry[field]);
+    changed = true;
+  };
+  edit('name', v => { next.fullName = v; });
+  edit('code', v => { next.code = v; });
+  edit('siteId', v => { next.siteId = v; });
+  edit('siteWard', v => { next.siteWard = v; });
+  edit('district', v => { next.district = v; });
+  edit('alternateNumber', v => {
+    const alt = normalizeMsisdn(v) || undefined;
+    next.alternateNumber = alt;
+    next.altMsisdn = alt;
+  });
+  edit('dateAdded', v => { next.creationDate = v; });
+  edit('location', v => { next.location = v; });
+  edit('photoId', v => { next.photoId = v; });
+  edit('photoUrl', v => { next.photoUrl = v; });
+  return changed ? (next as unknown as BaseWakala) : null;
 }
 
 /**

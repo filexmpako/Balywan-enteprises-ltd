@@ -46,3 +46,21 @@ export function formatMonthYear(value: Date | string | number): string {
   if (isNaN(d.getTime())) return '—';
   return d.toLocaleDateString('en-GB', MONTH_YEAR_OPTS);
 }
+
+/**
+ * "2026-09-16" for a date input. Reads Dates, ISO and display strings and
+ * Excel serial day numbers (as the Base Wakala file carries them); '' when unreadable.
+ */
+export function toIsoDay(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  const text = String(value).trim();
+  if (!text) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  if (/^\d+(\.\d+)?$/.test(text)) {
+    const d = new Date(Math.round((Number(text) - 25569) * 86400000));
+    return isNaN(d.getTime()) ? '' : `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+  }
+  const d = value instanceof Date ? value : new Date(text);
+  return isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}

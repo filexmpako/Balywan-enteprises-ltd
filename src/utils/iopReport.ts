@@ -105,8 +105,11 @@ export interface IopRegistries {
   baseWakalas: BaseWakala[];
 }
 
-/** Attributes each row to an owner with today's registries and totals it. */
-export function summarizeIopReport(rows: IopReportRow[], { owners, tills, baseWakalas }: IopRegistries): IopReportSummary {
+/**
+ * Who each row belongs to with today's registries ('' = no owner): REWARD →
+ * the transaction till's owner, CLAWBACK → the wakala's owner in our base.
+ */
+function iopRowOwner({ owners, tills, baseWakalas }: IopRegistries): (r: IopReportRow) => string {
   const ownersById = new Map(owners.map(o => [o.id, o]));
   const tillOwner = new Map<string, string>();
   for (const t of tills) {
@@ -117,6 +120,13 @@ export function summarizeIopReport(rows: IopReportRow[], { owners, tills, baseWa
     tillOwner.set(msisdn, id);
   }
   const wakalaOwner = buildMsisdnOwnerResolver(baseWakalas, owners, tills);
+  return r => (r.status === 'REWARD' ? tillOwner.get(r.till) : wakalaOwner(r.agent)?.ownerId) || '';
+}
+
+/** Attributes each row to an owner with today's registries and totals it. */
+export function summarizeIopReport(rows: IopReportRow[], registries: IopRegistries): IopReportSummary {
+  const ownersById = new Map(registries.owners.map(o => [o.id, o]));
+  const ownerOf = iopRowOwner(registries);
 
   const byOwner = new Map<string, IopOwnerTotals>();
   const entry = (ownerId: string) => {
@@ -134,13 +144,13 @@ export function summarizeIopReport(rows: IopReportRow[], { owners, tills, baseWa
   const summary: IopReportSummary = { reward: 0, clawback: 0, companyReward: 0, unassignedClawback: 0, rows: rows.length, byOwner: [] };
   for (const r of rows) {
     if (r.status === 'REWARD') {
-      const e = entry(tillOwner.get(r.till) || IOP_UNASSIGNED);
+      const e = entry(ownerOf(r) || IOP_UNASSIGNED);
       e.reward += r.revisedAmount;
       e.rewardRows++;
       summary.reward += r.revisedAmount;
       if (e.ownerId === IOP_UNASSIGNED) summary.companyReward += r.revisedAmount;
     } else {
-      const e = entry(wakalaOwner(r.agent)?.ownerId || IOP_UNASSIGNED);
+      const e = entry(ownerOf(r) || IOP_UNASSIGNED);
       e.clawback += r.revisedAmount;
       e.clawbackRows++;
       summary.clawback += r.revisedAmount;
@@ -151,4 +161,80 @@ export function summarizeIopReport(rows: IopReportRow[], { owners, tills, baseWa
     (a, b) => Number(a.ownerId === IOP_UNASSIGNED) - Number(b.ownerId === IOP_UNASSIGNED) || b.reward - a.reward,
   );
   return summary;
+}
+
+/** One agent (wakala) on an owner's REWARD or CLAWBACK side of the report. */
+export interface IopAgentLine {
+  agent: string;
+  /** From our Base Wakala Index or the owners' wakala lists; '' when unknown. */
+  name: string;
+  /** The transaction tills that served it (till name, or number when unnamed). */
+  tills: string[];
+  servicings: number;
+  revised: number;
+  /** The agent's CICO VALUE for the month (the same on each of its rows). */
+  cicoValue: number;
+}
+
+export interface IopOwnerAgents {
+  reward: IopAgentLine[];
+  clawback: IopAgentLine[];
+}
+
+/**
+ * The agents behind one owner's REWARD (wakala their tills served outside
+ * the base) and CLAWBACK (their base wakala served by other companies), one
+ * line per agent, largest REVISED first.
+ */
+export function iopAgentsForOwner(rows: IopReportRow[], registries: IopRegistries, ownerId: string): IopOwnerAgents {
+  const ownerOf = iopRowOwner(registries);
+  const names = new Map<string, string>();
+  for (const o of registries.owners) {
+    for (const w of [...(o.baseWakalas ?? []), ...(o.iopWakalas ?? [])]) {
+      const m = normalizeMsisdn(w?.msisdn);
+      if (m && w.name) names.set(m, w.name);
+    }
+  }
+  for (const w of registries.baseWakalas) {
+    const name = w.fullName || w.wakalaName || w.code;
+    if (w.msisdn && name) names.set(w.msisdn, name);
+  }
+
+  const sides = { REWARD: new Map<string, IopAgentLine>(), CLAWBACK: new Map<string, IopAgentLine>() };
+  for (const r of rows) {
+    if (ownerOf(r) !== ownerId) continue;
+    const side = sides[r.status];
+    let line = side.get(r.agent);
+    if (!line) {
+      line = { agent: r.agent, name: names.get(r.agent) || '', tills: [], servicings: 0, revised: 0, cicoValue: 0 };
+      side.set(r.agent, line);
+    }
+    const till = r.tillName || r.till;
+    if (till && !line.tills.includes(till)) line.tills.push(till);
+    line.servicings++;
+    line.revised += r.revisedAmount;
+    line.cicoValue = Math.max(line.cicoValue, r.cicoValue);
+  }
+  const sorted = (m: Map<string, IopAgentLine>) => Array.from(m.values()).sort((a, b) => b.revised - a.revised);
+  return { reward: sorted(sides.REWARD), clawback: sorted(sides.CLAWBACK) };
+}
+
+export interface IopAgentHistoryLine extends IopAgentLine {
+  /** CICO VALUE in earlier months' reports, by YYYY-MM (absent = not in that report). */
+  cicoHistory: Record<string, number>;
+}
+
+export interface IopOwnerAgentsView {
+  month: string;
+  /** Earlier months with a stored report, newest first (at most five). */
+  earlierMonths: string[];
+  reward: IopAgentHistoryLine[];
+  clawback: IopAgentHistoryLine[];
+}
+
+/** Each agent's CICO VALUE in a month's report. */
+export function iopCicoByAgent(rows: IopReportRow[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const r of rows) out.set(r.agent, Math.max(out.get(r.agent) ?? 0, r.cicoValue));
+  return out;
 }
