@@ -3,6 +3,7 @@ import { FLOAT_RETURN_CHANNELS, type FloatRequest, type FloatReturnEntry, type L
 import { fromRow, getMapper, toRow, type CollectionMapper } from './hasidadi/collections';
 import { loadCollection } from './hasidadi/repo.server';
 import { ensurePrivateBucket, ImageUploadError, parseImageDataUrl } from './storageImages.server';
+import { isOpenRequest, ownerFloatBlock } from '../utils/floatBlock';
 
 /**
  * Float requests and loans, written one record at a time.
@@ -41,7 +42,9 @@ export type FloatAction =
   | { type: 'approveLoan'; requestId: string; managerId: string; managerName: string }
   | { type: 'submitRepayment'; loanId: string; amount: number; description?: string }
   | { type: 'markLoanPaid'; loanId: string; managerId: string; managerName: string }
-  | { type: 'rejectRepayment'; loanId: string; managerId: string; managerName: string };
+  | { type: 'rejectRepayment'; loanId: string; managerId: string; managerName: string }
+  | { type: 'grantException'; requestId: string; managerId: string; managerName: string }
+  | { type: 'remind'; requestId: string; managerId: string; managerName: string };
 
 const STAFF_ACTIONS = new Set<FloatAction['type']>([
   'confirm',
@@ -51,7 +54,15 @@ const STAFF_ACTIONS = new Set<FloatAction['type']>([
   'approveLoan',
   'markLoanPaid',
   'rejectRepayment',
+  'grantException',
+  'remind',
 ]);
+
+async function loadOwnerRequests(db: DB, ownerId: string): Promise<FloatRequest[]> {
+  const { data, error } = await db.from(FLOAT.table).select('*').eq('owner_id', ownerId);
+  if (error) throw new Error(`float_requests read: ${error.message}`);
+  return (data || []).map(row => fromRow(FLOAT, row) as FloatRequest);
+}
 
 export async function resolveActor(supabase: DB, userId: string): Promise<FloatActor> {
   const [staff, owner] = await Promise.all([
@@ -138,6 +149,11 @@ export async function runFloatAction(
       const amount = Number(action.amount);
       if (!(amount > 0)) throw new FloatActionError('Enter an amount greater than 0.');
       if (!ownsRecord(action.ownerId)) throw new FloatActionError('You can only request float for your own account.');
+      const existing = await loadOwnerRequests(userDb, action.ownerId);
+      const block = ownerFloatBlock(existing, action.ownerId);
+      if (!block.canRequest) {
+        throw new FloatActionError('Return your previous float before requesting again, or ask the float manager for an exception.');
+      }
       const request: FloatRequest = {
         id: newId('float'),
         ownerId: action.ownerId,
@@ -147,6 +163,22 @@ export async function runFloatAction(
       };
       const { error } = await userDb.from(FLOAT.table).insert(fullRow(FLOAT, request));
       if (error) throw new Error(`float_requests insert: ${error.message}`);
+      if (block.exceptionOn) {
+        // Exception is single-use. Owners have no UPDATE right, so clear it with the server client.
+        const { requestException: _used, ...rest } = block.exceptionOn;
+        await writeOne(actor.isStaff ? userDb : await getAdminDb(), FLOAT, rest);
+      }
+      return;
+    }
+    case 'grantException':
+    case 'remind': {
+      const r = await readOne<FloatRequest>(userDb, FLOAT, action.requestId);
+      if (!isOpenRequest(r)) throw new FloatActionError('This float is no longer outstanding. The list has been refreshed.');
+      const next: FloatRequest =
+        action.type === 'grantException'
+          ? { ...r, requestException: { byId: action.managerId, byName: action.managerName, at } }
+          : { ...r, reminder: { byName: action.managerName, at } };
+      await writeOne(userDb, FLOAT, next);
       return;
     }
 
