@@ -6,6 +6,7 @@ import { useReportingPeriod } from './ReportingPeriodContext';
 import {
   CashierHistory, CashierSettingsForm, CashierSummary, MonthSelect, SetupNotice, monthLabel, recentMonths, signedTzs, tzs, useCashierMonth,
 } from './CashierPanels';
+import { CashierStatementButton } from './CashierStatement';
 
 function CashierDetail({ personnelId, period, onBack, onChanged }: { personnelId: string; period: string; onBack: () => void; onChanged: () => void }) {
   const { state, reload } = useCashierMonth(period, personnelId);
@@ -20,9 +21,12 @@ function CashierDetail({ personnelId, period, onBack, onChanged }: { personnelId
       {state.status === 'error' && <p className="rounded-xl bg-rose-50 p-3 text-xs font-semibold text-rose-700">{state.error}</p>}
       {state.status === 'ready' && (
         <>
-          <div>
-            <h2 className="text-lg font-black text-brand-text">{state.month.person.name}</h2>
-            <p className="text-xs text-brand-text-variant">{[state.month.person.title, state.month.person.location].filter(Boolean).join(' · ')}</p>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-black text-brand-text">{state.month.person.name}</h2>
+              <p className="text-xs text-brand-text-variant">{[state.month.person.title, state.month.person.location].filter(Boolean).join(' · ')}</p>
+            </div>
+            <CashierStatementButton personnelId={personnelId} />
           </div>
           <CashierSummary month={state.month} />
           <CashierSettingsForm key={`${personnelId}|${period}`} month={state.month} onSaved={changed} />
@@ -93,6 +97,7 @@ export default function CashiersView() {
                 <th className={`${th} text-right`}>Capital</th>
                 <th className={`${th} text-right`}>Cash held</th>
                 <th className={`${th} text-right`}>Expenses</th>
+                <th className={`${th} text-right`}>Income</th>
                 <th className={`${th} text-right`}>Profit</th>
                 <th className={th}>Reports</th>
               </tr>
@@ -115,6 +120,7 @@ export default function CashiersView() {
                     <td className={`${td} text-right text-brand-text`}>{tzs(s.capital)}</td>
                     <td className={`${td} text-right text-brand-text`}>{tzs(s.held)}</td>
                     <td className={`${td} text-right text-brand-text`}>{tzs(s.expenses)}</td>
+                    <td className={`${td} text-right text-emerald-700`}>{tzs(s.income)}</td>
                     <td className={`${td} text-right font-bold ${s.profit >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{signedTzs(s.profit)}</td>
                     <td className={td}>
                       {s.pendingReports > 0

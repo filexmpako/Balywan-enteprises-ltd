@@ -57,6 +57,22 @@ async function readSetup(supabase: any) {
   return { db, server, registries: await server.loadCashierRegistries(db) };
 }
 
+/** The cashier a request is about: the caller's own for a cashier, the chosen one for staff. */
+async function readPerson(supabase: any, userId: string, requested: string | undefined) {
+  const caller = await resolveCaller(supabase, userId);
+  const personnelId = caller.staff ? requested : caller.personnelId;
+  if (!personnelId) throw new Error('Choose a cashier.');
+  const setup = await readSetup(supabase);
+  const p = setup.registries.personnel.find(x => String(x.id) === personnelId);
+  if (!p) throw new Error('That personnel profile no longer exists.');
+  const people = await setup.server.listCashierPeople(setup.db, setup.registries);
+  const person = people.find(x => x.personnelId === personnelId) ?? {
+    personnelId, name: String(p.name || personnelId), title: String(p.title || ''), location: String(p.location || ''),
+    till: String(p.assignedTill || ''), hasAccount: !caller.staff,
+  };
+  return { ...setup, person };
+}
+
 /** Every cashier's month for staff: settings, volume vs target and cash summary. */
 export const fetchCashierBoard = createServerFn({ method: 'GET' })
   .middleware([requireSupabaseAuth])
@@ -89,15 +105,7 @@ export const fetchCashierMonth = createServerFn({ method: 'GET' })
   .handler(async ({ data, context }) => {
     const supabase = context.supabase as any;
     try {
-      const caller = await resolveCaller(supabase, context.userId);
-      const personnelId = caller.staff ? data.personnelId : caller.personnelId;
-      if (!personnelId) throw new Error('Choose a cashier.');
-      const { db, server, registries } = await readSetup(supabase);
-      const p = registries.personnel.find(x => String(x.id) === personnelId);
-      if (!p) throw new Error('That personnel profile no longer exists.');
-      const people = await server.listCashierPeople(db, registries);
-      const person = people.find(x => x.personnelId === personnelId) ??
-        { personnelId, name: String(p.name || personnelId), title: String(p.title || ''), location: String(p.location || ''), till: String(p.assignedTill || ''), hasAccount: !caller.staff };
+      const { db, server, registries, person } = await readPerson(supabase, context.userId, data.personnelId);
       return { setupRequired: false as const, month: await server.loadCashierMonth(db, registries, person, data.period) };
     } catch (err: any) {
       const { CashierSetupError } = await import('./cashier.server');
@@ -216,22 +224,22 @@ export const reviewCashierReport = createServerFn({ method: 'POST' })
     }),
   );
 
-/** Cashier: records an expense paid from the cash they hold. */
+/** Cashier: records an expense paid from the cash they hold, or income brought in for the company. */
 export const addCashierExpense = createServerFn({ method: 'POST' })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { expenseDate: string; description: string; amount: number }) => {
-    if (!DAY.test(String(input?.expenseDate || ''))) throw new Error('Choose the expense date.');
+  .inputValidator((input: { expenseDate: string; description: string; amount: number; kind?: 'expense' | 'income' }) => {
+    if (!DAY.test(String(input?.expenseDate || ''))) throw new Error('Choose the date.');
     const description = String(input.description ?? '').trim();
-    if (!description) throw new Error('Describe the expense.');
+    if (!description) throw new Error(input.kind === 'income' ? 'Say where the income came from.' : 'Describe the expense.');
     const amount = Number(String(input.amount ?? '').replace(/,/g, ''));
     if (!Number.isFinite(amount) || amount <= 0) throw new Error('The amount must be more than zero.');
-    return { expenseDate: input.expenseDate, description, amount };
+    return { expenseDate: input.expenseDate, description, amount, kind: input.kind === 'income' ? 'income' as const : 'expense' as const };
   })
   .handler(async ({ data, context }) =>
     friendly(async () => {
       const supabase = context.supabase as any;
       const caller = await resolveCaller(supabase, context.userId);
-      if (caller.staff) throw new Error('Expenses are recorded by the cashier.');
+      if (caller.staff) throw new Error('Expenses and income are recorded by the cashier.');
       const { error } = await supabase.from('cashier_expenses').insert({
         personnel_id: caller.personnelId,
         expense_date: data.expenseDate,
@@ -239,14 +247,19 @@ export const addCashierExpense = createServerFn({ method: 'POST' })
         amount: data.amount,
         status: 'submitted',
         created_by: context.userId,
+        // Sent only for income so expenses keep working before the income column exists.
+        ...(data.kind === 'income' ? { kind: 'income' } : {}),
       });
+      if (error && data.kind === 'income' && /kind/.test(String(error.message))) {
+        throw new Error('Income needs a small database update first. Ask the admin to run the cashier income SQL.');
+      }
       if (error) throw new Error(`cashier_expenses: ${error.message}`);
-      await audit(supabase, context.userId, 'CASHIER_EXPENSE_ADD', { personnelId: caller.personnelId, ...data });
+      await audit(supabase, context.userId, data.kind === 'income' ? 'CASHIER_INCOME_ADD' : 'CASHIER_EXPENSE_ADD', { personnelId: caller.personnelId, ...data });
       return { ok: true as const };
     }),
   );
 
-/** Removes an expense: the cashier's own until approved; staff any. */
+/** Removes an expense or income entry: the cashier's own until approved; staff any. */
 export const deleteCashierExpense = createServerFn({ method: 'POST' })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { expenseId: string }) => {
@@ -264,3 +277,22 @@ export const deleteCashierExpense = createServerFn({ method: 'POST' })
       return { ok: true as const };
     }),
   );
+
+/** Everything one cashier did from `fromPeriod` (default: their first record) up to today, for printing. */
+export const fetchCashierStatement = createServerFn({ method: 'GET' })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { personnelId?: string; fromPeriod?: string }) => {
+    if (input?.fromPeriod && !MONTH.test(input.fromPeriod)) throw new Error('fromPeriod must be YYYY-MM');
+    return { personnelId: input?.personnelId || undefined, fromPeriod: input?.fromPeriod || undefined };
+  })
+  .handler(async ({ data, context }) => {
+    const supabase = context.supabase as any;
+    try {
+      const { db, server, registries, person } = await readPerson(supabase, context.userId, data.personnelId);
+      return { setupRequired: false as const, statement: await server.loadCashierStatement(db, registries, person, data.fromPeriod) };
+    } catch (err: any) {
+      const { CashierSetupError } = await import('./cashier.server');
+      if (err instanceof CashierSetupError) return { setupRequired: true as const, statement: null };
+      throw err;
+    }
+  });

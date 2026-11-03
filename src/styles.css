@@ -143,3 +143,22 @@
     color: var(--color-foreground);
   }
 }
+
+/* Cashier statement: printing shows only the statement (CashierStatement.tsx). */
+@media print {
+  body.printing-statement > *:not(#cashier-statement-print) {
+    display: none !important;
+  }
+  html:has(body.printing-statement),
+  body.printing-statement {
+    background: #fff !important;
+  }
+  body.printing-statement #cashier-statement-print {
+    position: static !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  @page {
+    margin: 12mm;
+  }
+}
