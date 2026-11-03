@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { ViewType, Owner, WakalaEntry, BaseWakala } from '../types';
-import { formatDate } from '../utils/dateFormat';
-import { buildOwnerWakalaMap } from '../utils/wakalaMapping';
+import { formatDate, toIsoDay } from '../utils/dateFormat';
+import { applyWakalaEntryEdits, buildOwnerWakalaMap } from '../utils/wakalaMapping';
+import { normalizeMsisdn } from '../utils/msisdn';
 import { getOwnerPortfolio } from '../utils/ownerPortfolio';
 import { getActivityRules } from '../utils/activityRules';
 import { ownersList } from '../data';
@@ -50,7 +51,7 @@ import FloatManagementPanel from './FloatManagementPanel';
 import { getFloatRequestsForOwner } from '../utils/floatManagement';
 import { getDailyServicingRows } from '../utils/indexedDB';
 import { useClassifiedMonth } from '../hooks/useClassifiedMonth';
-import { useIopReport } from '../hooks/useIopReport';
+import { useIopAgents, useIopReport } from '../hooks/useIopReport';
 import { IopReportCard } from './IopReportCards';
 import { iopRewardByOwner } from '../utils/iopReportClient';
 import { formatPeriodDisplay } from '../utils/periodUtils';
@@ -304,7 +305,31 @@ export default function OwnerDetailsView({
     }
   }, [tempAvatarData, tempAvatarPhotoId, editForm.name]);
 
+  // Base wakalas from the Base Wakala Index are rebuilt from the index on
+  // every load, so their edits are written to the index record itself.
+  const syncIndexWakalaEdits = (entries: WakalaEntry[]) => {
+    const edited = new Map(entries.filter(w => w.source === 'bulk-import').map(w => [w.id, w]));
+    if (!edited.size) return;
+    try {
+      const index: BaseWakala[] = JSON.parse(localStorage.getItem('baseWakalaIndex') || '[]');
+      let changed = false;
+      const next = index.map(record => {
+        const entry = edited.get(`bwi-${record.msisdn}`);
+        const updated = entry ? applyWakalaEntryEdits(record, entry) : null;
+        if (!updated) return record;
+        changed = true;
+        return updated;
+      });
+      if (!changed) return;
+      localStorage.setItem('baseWakalaIndex', JSON.stringify(next));
+      window.dispatchEvent(new Event('base-wakala-updated'));
+    } catch (e) {
+      console.error('Error updating the Base Wakala Index:', e);
+    }
+  };
+
   const updateWakalasInLocalStorage = (updatedBase: WakalaEntry[], updatedIop: WakalaEntry[]) => {
+    syncIndexWakalaEdits(updatedBase);
     const saved = localStorage.getItem('ownersList');
     if (saved) {
       try {
@@ -725,6 +750,10 @@ export default function OwnerDetailsView({
     };
   }, [localOwner, servicingRows, tillsList, manualTargetsList, currentPeriod, monthlyKpi, iopReward]);
 
+  const iopOwnerId = ownerMtdData.ownerId || localOwner?.id;
+  // The agents behind the IOP report, read only while the Wakala tab is open.
+  const iopAgents = useIopAgents(currentPeriod, activeTab === 'wakalas' ? iopOwnerId : undefined);
+
   const { user } = useAuth();
   const isAdmin = user?.role === 'Admin';
 
@@ -1134,7 +1163,7 @@ export default function OwnerDetailsView({
       {activeTab === 'wakalas' && (
         <>
           {localOwner?.id && (
-            <IopReportCard report={iopReport} ownerId={ownerMtdData.ownerId || localOwner.id} periodLabel={formatPeriodDisplay(currentPeriod)} />
+            <IopReportCard report={iopReport} agents={iopAgents} ownerId={iopOwnerId} periodLabel={formatPeriodDisplay(currentPeriod)} />
           )}
 
           {/* Portfolio Snapshot */}
@@ -1644,15 +1673,8 @@ function WakalaManagementSection({
   };
 
   const formatExcelDate = (val: any) => {
-    if (!val) return '—';
-    if (typeof val === 'number' || (!isNaN(Number(val)) && !isNaN(parseFloat(val)))) {
-      // Excel dates are days since Dec 30, 1899
-      const date = new Date((Number(val) - 25569) * 86400 * 1000);
-      if (!isNaN(date.getTime())) {
-        return formatDate(date);
-      }
-    }
-    return val;
+    const day = toIsoDay(val);
+    return day ? formatDate(`${day}T00:00:00`) : val || '—';
   };
 
   const handleAddBase = (e: React.FormEvent) => {
@@ -1766,6 +1788,7 @@ function WakalaManagementSection({
       ...editWakalaData,
       name: (editWakalaData.name || wakala.name).trim(),
       msisdn: (editWakalaData.msisdn || wakala.msisdn).replace(/\D/g, ''),
+      alternateNumber: normalizeMsisdn(editWakalaData.alternateNumber ?? wakala.alternateNumber) || undefined,
       photoId: editWakalaData.photoId || wakala.photoId,
       photoUrl: editWakalaData.photoUrl || wakala.photoUrl,
       location: editWakalaData.location || wakala.location,
@@ -2097,7 +2120,7 @@ function WakalaManagementSection({
                           <th className="py-2.5">Agent Name</th>
                           <th className="py-2.5">MSISDN</th>
                           <th className="py-2.5">Region / Location</th>
-                          <th className="py-2.5">Date Added</th>
+                          <th className="py-2.5">Created Date</th>
                           <th className="py-2.5 text-right">Action</th>
                         </tr>
                       </thead>
@@ -2307,7 +2330,7 @@ function WakalaManagementSection({
                     <th className="py-2.5">Agent Name</th>
                     <th className="py-2.5">MSISDN</th>
                     <th className="py-2.5">Region</th>
-                    <th className="py-2.5">Date Added</th>
+                    <th className="py-2.5">Created Date</th>
                     <th className="py-2.5 text-right">Action</th>
                   </tr>
                 </thead>
@@ -2451,7 +2474,7 @@ function WakalaManagementSection({
                       </span>
                     </div>
                     <div>
-                      <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Date Added</span>
+                      <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Created Date</span>
                       <span className="font-semibold text-slate-800">
                         {formatExcelDate(selectedWakala.wakala.dateAdded)}
                       </span>
@@ -2566,7 +2589,9 @@ function WakalaManagementSection({
                         required
                         value={editWakalaData.msisdn || ''}
                         onChange={e => setEditWakalaData({ ...editWakalaData, msisdn: e.target.value })}
-                        className="w-full rounded-lg border border-slate-200 p-2 text-xs text-brand-text focus:outline-none focus:border-brand-primary font-mono"
+                        readOnly={editWakalaData.source === 'bulk-import'}
+                        title={editWakalaData.source === 'bulk-import' ? 'Change this number in the Base Wakala Index' : undefined}
+                        className="w-full rounded-lg border border-slate-200 p-2 text-xs text-brand-text focus:outline-none focus:border-brand-primary font-mono read-only:bg-slate-50 read-only:text-slate-500"
                       />
                     </div>
                     <div>
@@ -2629,6 +2654,15 @@ function WakalaManagementSection({
                         onChange={e => setEditWakalaData({ ...editWakalaData, alternateNumber: e.target.value })}
                         placeholder="e.g. 255755123456"
                         className="w-full rounded-lg border border-slate-200 p-2 text-xs text-brand-text focus:outline-none focus:border-brand-primary font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-brand-text-variant uppercase mb-1">Created Date</label>
+                      <input
+                        type="date"
+                        value={toIsoDay(editWakalaData.dateAdded)}
+                        onChange={e => setEditWakalaData({ ...editWakalaData, dateAdded: e.target.value })}
+                        className="w-full rounded-lg border border-slate-200 p-2 text-xs text-brand-text focus:outline-none focus:border-brand-primary"
                       />
                     </div>
                   </div>

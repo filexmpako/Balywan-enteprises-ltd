@@ -9,6 +9,14 @@ async function isStaff(supabase: any, userId: string): Promise<boolean> {
   return data === true;
 }
 
+/** True for staff; for anyone else, throws unless they own `ownerId`. */
+async function canReadOwner(supabase: any, userId: string, ownerId: string | undefined): Promise<boolean> {
+  if (await isStaff(supabase, userId)) return true;
+  const { data: owns } = ownerId ? await supabase.rpc('owns_owner', { _owner_id: ownerId }) : { data: false };
+  if (owns !== true) throw new Error("Not allowed to read this owner's IOP report.");
+  return false;
+}
+
 /** Uploads (replaces) one month's IOP report. Staff only. */
 export const uploadIopReport = createServerFn({ method: 'POST' })
   .middleware([requireSupabaseAuth])
@@ -61,13 +69,7 @@ export const fetchIopReport = createServerFn({ method: 'GET' })
   })
   .handler(async ({ data, context }) => {
     const supabase = context.supabase as any;
-    const staff = await isStaff(supabase, context.userId);
-    if (!staff) {
-      const { data: owns } = data.ownerId
-        ? await supabase.rpc('owns_owner', { _owner_id: data.ownerId })
-        : { data: false };
-      if (owns !== true) throw new Error("Not allowed to read this owner's IOP report.");
-    }
+    const staff = await canReadOwner(supabase, context.userId, data.ownerId);
     const [{ privilegedClient }, { loadIopReportSummary }] = await Promise.all([
       import('./privilegedClient.server'),
       import('./iopReport.server'),
@@ -88,4 +90,22 @@ export const fetchIopReport = createServerFn({ method: 'GET' })
         byOwner: own,
       },
     };
+  });
+
+/** One owner's REWARD / CLAWBACK agents for the month with their earlier CICO values. Staff, or that owner. */
+export const fetchIopAgents = createServerFn({ method: 'GET' })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { month: string; ownerId: string }) => {
+    if (!MONTH.test(String(input?.month || ''))) throw new Error('month must be YYYY-MM');
+    if (!input.ownerId) throw new Error('ownerId is required');
+    return { month: input.month, ownerId: String(input.ownerId) };
+  })
+  .handler(async ({ data, context }) => {
+    const supabase = context.supabase as any;
+    await canReadOwner(supabase, context.userId, data.ownerId);
+    const [{ privilegedClient }, { loadIopOwnerAgents }] = await Promise.all([
+      import('./privilegedClient.server'),
+      import('./iopReport.server'),
+    ]);
+    return loadIopOwnerAgents(await privilegedClient(supabase), data.month, data.ownerId);
   });
