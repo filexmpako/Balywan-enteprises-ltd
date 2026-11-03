@@ -127,8 +127,6 @@ export interface FloatRequest {
   requestRejectedByManagerId?: string;
   requestRejectedByManagerName?: string;
   requestRejectionReason?: string;
-  /** One-time permission from a float manager to request again while this float is open. */
-  requestException?: { byId: string; byName: string; at: string };
   /** Last time a float manager reminded the owner to return this float. */
   reminder?: { byName: string; at: string };
 }
@@ -152,6 +150,8 @@ export interface LoanRecord {
   repaymentRejectedAt?: string;
   repaymentRejectedByManagerId?: string;
   repaymentRejectedByManagerName?: string;
+  /** Last time a float manager reminded the owner to pay this loan. */
+  reminder?: { byName: string; at: string };
 }
 
 export interface Owner {

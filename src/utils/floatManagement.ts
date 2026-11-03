@@ -2,6 +2,7 @@ import { FloatRequest, FloatReturnEntry, LoanRecord } from '../types';
 import { fetchFloatData, fetchFloatReceiptUrl, runFloatActionFn, uploadFloatReceipt } from '../lib/float.functions';
 import type { FloatAction } from '../lib/float.server';
 import { getPhoto } from './db';
+import { floatOwed, floatReturned, floatShortfall } from './floatOutstanding';
 
 /**
  * Float requests and loans. The browser keeps a read cache (filled at sign-in
@@ -108,11 +109,9 @@ export const markLoanPaid = (loanId: string, managerId: string, managerName: str
 export const rejectLoanRepayment = (loanId: string, managerId: string, managerName: string) =>
   run({ type: 'rejectRepayment', loanId, managerId, managerName });
 
-export const grantFloatRequestException = (requestId: string, managerId: string, managerName: string) =>
-  run({ type: 'grantException', requestId, managerId, managerName });
-
-export const remindFloatReturn = (requestId: string, managerId: string, managerName: string) =>
-  run({ type: 'remind', requestId, managerId, managerName });
+/** Reminds the owner to return / pay everything they still owe. */
+export const remindOwnerToPay = (ownerId: string, managerId: string, managerName: string) =>
+  run({ type: 'remind', ownerId, managerId, managerName });
 
 /** Uploads a return receipt photo (data URL) to cloud storage; returns its receipt id. */
 export async function uploadReceipt(requestId: string, dataUrl: string): Promise<string> {
@@ -164,19 +163,10 @@ export function startFloatAutoRefresh(): () => void {
   };
 }
 
-export function getTotalReturned(request: FloatRequest): number {
-  return (request.returnEntries || []).reduce((sum, e) => sum + e.amount, 0);
-}
-
-/** What the owner owes back: the amount the Float Manager sent, else the amount requested. */
-export function getFloatAmount(request: FloatRequest): number {
-  return Number(request.sentAmount) > 0 ? Number(request.sentAmount) : request.requestedAmount;
-}
-
-/** Amount still missing after the owner's return (0 when fully returned). */
-export function getShortfall(request: FloatRequest): number {
-  return Math.max(0, getFloatAmount(request) - getTotalReturned(request));
-}
+// Amount rules shared with the server (floatOutstanding.ts).
+export const getTotalReturned = floatReturned;
+export const getFloatAmount = floatOwed;
+export const getShortfall = floatShortfall;
 
 /**
  * A short return counts as a loan for the owner; it waits here until the

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FloatRequest, FloatReturnEntry, FloatReturnChannel, FLOAT_RETURN_CHANNELS, Personnel, LoanRecord } from '../types';
 import { formatDate } from '../utils/dateFormat';
-import { ownerFloatBlock } from '../utils/floatBlock';
+import { outstandingByOwner } from '../utils/floatOutstanding';
 import {
   getFloatRequestsForOwner, createFloatRequest, confirmFloatRequest,
   submitFloatReturn, completeFloatRequest, rejectFloatReturn, getPendingDays,
@@ -120,10 +120,12 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
     };
   }, [ownerId]);
 
-  const pendingRequest = requests.find(r => r.status === 'Pending');
-  const confirmedRequest = requests.find(r => r.status === 'Confirmed');
-  const floatBlock = ownerFloatBlock(requests, ownerId);
-  const reminder = floatBlock.blocking.find(r => r.reminder)?.reminder;
+  // Several floats can be out at once; the oldest is returned first.
+  const confirmedRequests = requests.filter(r => r.status === 'Confirmed');
+  const confirmedRequest = confirmedRequests[confirmedRequests.length - 1];
+  // What the owner still owes. It never blocks a new request; it is shown as a reminder to pay.
+  const owed = outstandingByOwner(requests, loans).find(o => o.ownerId === ownerId);
+  const owedBy = (kind: 'float' | 'shortReturn' | 'loan') => (owed?.items ?? []).filter(i => i.kind === kind).reduce((s, i) => s + i.amount, 0);
   const unpaidLoans = loans.filter(l => l.status !== 'Paid');
   // Short returns count as this owner's loan, awaiting the Float Manager's approval.
   const pendingLoanRequests = requests.filter(isLoanPendingApproval);
@@ -356,17 +358,25 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
           {/* TAB 1: Request Float */}
           {activeFloatTab === 'request' && (
             <div className="space-y-4">
-              {floatBlock.exceptionOn && (
-                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-900">
-                  Exception granted by {floatBlock.exceptionOn.requestException!.byName}: you may submit one new request while your previous float is still open.
+              {owed && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-900 space-y-1.5">
+                  <p className="font-bold">You have an outstanding balance of TZS {owed.total.toLocaleString()}. Please return / pay it.</p>
+                  <ul className="space-y-0.5 text-[11px]">
+                    {owedBy('float') > 0 && <li>Float not returned: TZS {owedBy('float').toLocaleString()}</li>}
+                    {owedBy('shortReturn') > 0 && <li>Short returns: TZS {owedBy('shortReturn').toLocaleString()}</li>}
+                    {owedBy('loan') > 0 && <li>Loans: TZS {owedBy('loan').toLocaleString()}</li>}
+                  </ul>
+                  {owed.lastReminder && <p className="text-[11px]">{owed.lastReminder.byName} reminded you on {formatDate(owed.lastReminder.at)}.</p>}
+                  <div className="flex flex-wrap gap-2 pt-0.5">
+                    {confirmedRequest && (
+                      <button onClick={() => setActiveFloatTab('return')} className="px-3 py-1.5 bg-brand-primary hover:bg-brand-primary-light text-white font-bold rounded-lg cursor-pointer">Return float</button>
+                    )}
+                    {owedBy('loan') + owedBy('shortReturn') > 0 && (
+                      <button onClick={() => setActiveFloatTab('loans')} className="px-3 py-1.5 bg-white border border-rose-300 text-rose-800 font-bold rounded-lg cursor-pointer">Pay loans</button>
+                    )}
+                  </div>
                 </div>
               )}
-              {reminder && (
-                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-900">
-                  {reminder.byName} reminded you on {formatDate(reminder.at)} to return your float.
-                </div>
-              )}
-              {floatBlock.canRequest ? (
                 <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
                   <div>
                     <label className="text-xs font-bold text-brand-text block mb-1">Requested Amount (TZS)</label>
@@ -397,33 +407,6 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                     </button>
                   </div>
                 </div>
-              ) : (
-                <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200 space-y-3 text-xs">
-                  <div className="flex items-start gap-2.5">
-                    <Clock className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-bold text-amber-900">
-                        {pendingRequest
-                          ? `You have a pending float request of TZS ${pendingRequest.requestedAmount.toLocaleString()} awaiting manager confirmation.`
-                          : confirmedRequest
-                          ? `You have an active confirmed float of TZS ${getFloatAmount(confirmedRequest).toLocaleString()} currently in use.`
-                          : `You have an active float request in progress.`}
-                      </p>
-                      <p className="text-[11px] text-amber-800 mt-1">
-                        Only one active float cycle is permitted at a time. Once returned and reconciled, you can request fresh float.
-                      </p>
-                    </div>
-                  </div>
-                  {confirmedRequest && (
-                    <button
-                      onClick={() => setActiveFloatTab('return')}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-primary hover:bg-brand-primary-light text-white font-bold text-xs rounded-lg transition-colors cursor-pointer"
-                    >
-                      Go to Return Float
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
           )}
 
