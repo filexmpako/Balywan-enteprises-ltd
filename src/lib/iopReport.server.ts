@@ -8,22 +8,20 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadWorkspace, workspaceToSnapshot } from './hasidadi/repo.server';
 import { runWithSnapshot } from './hasidadi/engine-context.server';
 import {
-  iopAgentsForOwner, iopCicoByAgent, summarizeIopReport,
-  type IopAgentHistoryLine, type IopAgentLine, type IopOwnerAgentsView, type IopRegistries, type IopReportRow, type IopReportSummary,
+  iopAgentsForOwner, iopCicoByAgent, summarizeIopReport, unpackIopRow as unpack,
+  type IopAgentHistoryLine, type IopAgentLine, type IopOwnerAgentsView, type IopRegistries, type IopReportSummary, type PackedIopRow,
 } from '../utils/iopReport';
 
 type DB = SupabaseClient<any, any, any>;
 
 const PREFIX = 'iopReport:';
 
-type StoredRow = [string, string, 'R' | 'C', string, number, number, number];
-
 interface StoredReport {
   month: string;
   fileName: string;
   uploadedAt: string;
   uploadedBy: string | null;
-  rows: StoredRow[];
+  rows: PackedIopRow[];
 }
 
 export interface IopReportMeta {
@@ -32,22 +30,17 @@ export interface IopReportMeta {
   uploadedAt: string;
 }
 
-const pack = (r: IopReportRow): StoredRow =>
-  [r.till, r.agent, r.status === 'REWARD' ? 'R' : 'C', r.tillName, r.cicoValue, r.cicoRatio, r.revisedAmount];
-const unpack = ([till, agent, s, tillName, cicoValue, cicoRatio, revisedAmount]: StoredRow): IopReportRow =>
-  ({ till, agent, status: s === 'R' ? 'REWARD' : 'CLAWBACK', tillName, cicoValue, cicoRatio, revisedAmount });
-
 /** Replaces the month's report. */
 export async function saveIopReport(
   supabase: DB,
-  input: { month: string; fileName: string; rows: IopReportRow[]; userId: string },
+  input: { month: string; fileName: string; rows: PackedIopRow[]; userId: string },
 ): Promise<number> {
   const value: StoredReport = {
     month: input.month,
     fileName: input.fileName,
     uploadedAt: new Date().toISOString(),
     uploadedBy: input.userId,
-    rows: input.rows.map(pack),
+    rows: input.rows,
   };
   const { error } = await supabase
     .from('app_settings')

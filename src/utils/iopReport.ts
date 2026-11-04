@@ -29,6 +29,15 @@ export interface IopReportRow {
   revisedAmount: number;
 }
 
+/** A row in compact form, as stored and as sent to the server: [till, agent, R|C, till name, CICO value, CICO ratio, revised]. */
+export type PackedIopRow = [string, string, 'R' | 'C', string, number, number, number];
+
+export const packIopRow = (r: IopReportRow): PackedIopRow =>
+  [r.till, r.agent, r.status === 'REWARD' ? 'R' : 'C', r.tillName, r.cicoValue, r.cicoRatio, r.revisedAmount];
+
+export const unpackIopRow = ([till, agent, s, tillName, cicoValue, cicoRatio, revisedAmount]: PackedIopRow): IopReportRow =>
+  ({ till, agent, status: s === 'R' ? 'REWARD' : 'CLAWBACK', tillName, cicoValue, cicoRatio, revisedAmount });
+
 /** Owner key for amounts no registered owner carries (counted in company totals). */
 export const IOP_UNASSIGNED = '__unassigned__';
 

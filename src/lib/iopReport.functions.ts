@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start';
 import { requireSupabaseAuth } from '@/integrations/supabase/auth-middleware';
-import type { IopReportRow } from '../utils/iopReport';
+import type { PackedIopRow } from '../utils/iopReport';
 
 const MONTH = /^\d{4}-\d{2}$/;
 
@@ -20,10 +20,14 @@ async function canReadOwner(supabase: any, userId: string, ownerId: string | und
 /** Uploads (replaces) one month's IOP report. Staff only. */
 export const uploadIopReport = createServerFn({ method: 'POST' })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { month: string; fileName: string; rows: IopReportRow[] }) => {
+  .inputValidator((input: { month: string; fileName: string; rows: PackedIopRow[] }) => {
     if (!MONTH.test(String(input?.month || ''))) throw new Error('month must be YYYY-MM');
     if (!Array.isArray(input.rows) || !input.rows.length) throw new Error('The file has no REWARD or CLAWBACK rows.');
-    return { month: input.month, fileName: String(input.fileName || 'IOP report'), rows: input.rows };
+    // Rows arrive packed (see packIopRow); keep only well-formed ones.
+    const rows = input.rows.filter(r => Array.isArray(r) && r.length === 7 && (r[2] === 'R' || r[2] === 'C') && String(r[1] || '').trim())
+      .map(r => [String(r[0] ?? ''), String(r[1]), r[2], String(r[3] ?? ''), Number(r[4]) || 0, Number(r[5]) || 0, Number(r[6]) || 0] as PackedIopRow);
+    if (!rows.length) throw new Error('The file has no REWARD or CLAWBACK rows.');
+    return { month: input.month, fileName: String(input.fileName || 'IOP report'), rows };
   })
   .handler(async ({ data, context }) => {
     const supabase = context.supabase as any;
