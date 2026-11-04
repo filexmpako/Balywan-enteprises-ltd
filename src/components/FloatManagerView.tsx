@@ -26,10 +26,11 @@ import {
   loadReceiptImage,
   remindOwnerToPay,
   remindAllToPay,
+  cancelDuplicateRequest,
   type FloatResult
 } from '../utils/floatManagement';
 import { ownersList } from '../data';
-import { floatViewStatus, loanBalance, loanPaid, outstandingByOwner, type FloatViewStatus, type OutstandingKind } from '../utils/floatOutstanding';
+import { floatViewStatus, loanBalance, loanPaid, outstandingByOwner, sameDayRequests, type FloatViewStatus, type OutstandingKind } from '../utils/floatOutstanding';
 import { 
   Banknote, 
   Search, 
@@ -81,6 +82,10 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
   // Reject confirmation modal state (denying a still-Pending request outright)
   const [confirmDenyTarget, setConfirmDenyTarget] = useState<FloatRequest | null>(null);
   const [denyReasonInput, setDenyReasonInput] = useState('');
+
+  // Cancel-as-duplicate modal state (pending or confirmed requests with nothing returned yet)
+  const [duplicateTarget, setDuplicateTarget] = useState<FloatRequest | null>(null);
+  const [duplicateReason, setDuplicateReason] = useState('');
 
   // Load data
   const loadData = () => {
@@ -324,6 +329,16 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
     setConfirmDenyTarget(null);
     setDenyReasonInput('');
     await act(target.id, () => rejectFloatRequest(target.id, mId, mName, reason));
+  };
+
+  const handleCancelDuplicate = async () => {
+    if (!duplicateTarget || !duplicateReason.trim()) return;
+    const { mId, mName } = managerIdentity();
+    const target = duplicateTarget;
+    const reason = duplicateReason;
+    setDuplicateTarget(null);
+    setDuplicateReason('');
+    await act(target.id, () => cancelDuplicateRequest(target.id, mId, mName, reason));
   };
 
   const handleRejectRepayment = (loan: LoanRecord) => {
@@ -794,6 +809,21 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                                 ) : null
                               )}
                             </div>
+                            {(r.status === 'Pending' || r.status === 'Confirmed') && (() => {
+                              const others = sameDayRequests(requests, r);
+                              if (!others.length) return null;
+                              return (
+                                <p className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 border border-amber-200 px-2.5 py-1 text-[11px] font-bold text-amber-800">
+                                  <AlertTriangle className="h-3.5 w-3.5" />
+                                  Possible duplicate: {others.length} other request(s) from this owner the same day ({formatCurrency(others.reduce((sum, o) => sum + o.requestedAmount, 0))})
+                                </p>
+                              );
+                            })()}
+                            {r.cancelledAsDuplicate && (
+                              <p className="text-[11px] font-semibold text-slate-500">
+                                Cancelled as duplicate by {r.cancelledAsDuplicate.byName} on {formatDate(r.cancelledAsDuplicate.at)}: {r.cancelledAsDuplicate.reason}
+                              </p>
+                            )}
                           </div>
 
                           {/* Right column (right-aligned): */}
@@ -868,6 +898,17 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                                     Reject Request
                                   </button>
                                 </>
+                              )}
+
+                              {!readOnly && r.status === 'Confirmed' && !r.returnEntries?.length && sameDayRequests(requests, r).length > 0 && (
+                                <button
+                                  onClick={() => { setDuplicateReason(''); setDuplicateTarget(r); }}
+                                  title="This request repeats another one: cancel it so it is not owed"
+                                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs bg-white hover:bg-amber-50 text-amber-800 border border-amber-300 transition-colors cursor-pointer shadow-xs"
+                                >
+                                  <XCircle className="h-4 w-4 text-amber-600" />
+                                  Cancel – duplicate
+                                </button>
                               )}
 
                               {r.status === 'Returned' && !r.loanId && (
@@ -1387,6 +1428,49 @@ export default function FloatManagerView({ onLogout, readOnly = false }: FloatMa
                   className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 font-bold text-xs text-white cursor-pointer"
                 >
                   Confirm Rejection
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Cancel-as-duplicate Modal */}
+        {duplicateTarget && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl"
+            >
+              <h3 className="font-bold text-base text-brand-text">Cancel as duplicate?</h3>
+              <p className="text-sm text-brand-text-variant">
+                {getOwnerName(duplicateTarget.ownerId)}'s request for {formatCurrency(getFloatAmount(duplicateTarget))} (requested {formatDate(duplicateTarget.requestedAt)}) will be cancelled and no longer counted as owed.
+                Only do this if the money was not sent for this request. It is recorded in the audit log.
+              </p>
+              <div>
+                <label className="block text-xs font-bold text-brand-text mb-1">Reason <span className="text-rose-600">*</span></label>
+                <textarea
+                  rows={2}
+                  value={duplicateReason}
+                  onChange={(e) => setDuplicateReason(e.target.value)}
+                  placeholder="e.g. Same request sent 4 times; only one transfer of TZS 4,000,000 was made"
+                  className="w-full text-xs rounded-xl border border-slate-300 bg-white p-2.5 focus:outline-none focus:border-brand-primary"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={() => setDuplicateTarget(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 font-bold text-xs text-slate-700 cursor-pointer"
+                >
+                  Keep it
+                </button>
+                <button
+                  onClick={handleCancelDuplicate}
+                  disabled={!duplicateReason.trim()}
+                  className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 font-bold text-xs text-white cursor-pointer disabled:opacity-50"
+                >
+                  Cancel as duplicate
                 </button>
               </div>
             </motion.div>

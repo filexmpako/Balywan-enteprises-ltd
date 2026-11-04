@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FloatRequest, FloatReturnEntry, FloatReturnChannel, FLOAT_RETURN_CHANNELS, Personnel, LoanRecord } from '../types';
 import { formatDate } from '../utils/dateFormat';
 import { loanBalance, loanPaid, outstandingByOwner } from '../utils/floatOutstanding';
@@ -130,11 +130,28 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
   // Short returns count as this owner's loan, awaiting the Float Manager's approval.
   const pendingLoanRequests = requests.filter(isLoanPendingApproval);
 
+  // Shown on the page (not a pop-up) so the owner can see the request went through.
+  const [requestNotice, setRequestNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  // Blocks a second tap before the first one has re-rendered the button as disabled.
+  const submittingRef = useRef(false);
   const handleSubmitRequest = async () => {
     const amt = parseFloat(amountInput);
-    if (!amt || amt <= 0 || isSaving) return;
-    if (await actOrAlert(() => createFloatRequest(ownerId, amt))) setAmountInput('');
+    if (!amt || amt <= 0 || isSaving || submittingRef.current) return;
+    submittingRef.current = true;
+    setRequestNotice(null);
+    try {
+      const result = await act(() => createFloatRequest(ownerId, amt));
+      if (result.ok) {
+        setAmountInput('');
+        setRequestNotice({ ok: true, text: `Request for TZS ${amt.toLocaleString()} sent. It is waiting for the float manager; no need to send it again.` });
+      } else {
+        setRequestNotice({ ok: false, text: result.error });
+      }
+    } finally {
+      submittingRef.current = false;
+    }
   };
+  const waitingRequests = requests.filter(r => r.status === 'Pending');
 
   const handleRowReceiptFile = (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -377,6 +394,19 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                   </div>
                 </div>
               )}
+              {waitingRequests.length > 0 && (
+                <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-1">
+                  <p className="font-bold">Waiting for the float manager ({waitingRequests.length})</p>
+                  {waitingRequests.map(r => (
+                    <p key={r.id} className="text-[11px]">TZS {r.requestedAmount.toLocaleString()} · sent {formatDate(r.requestedAt)} {new Date(r.requestedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</p>
+                  ))}
+                </div>
+              )}
+              {requestNotice && (
+                <p role="status" className={`p-3 rounded-xl border text-xs font-semibold ${requestNotice.ok ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`}>
+                  {requestNotice.text}
+                </p>
+              )}
                 <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
                   <div>
                     <label className="text-xs font-bold text-brand-text block mb-1">Requested Amount (TZS)</label>
@@ -403,7 +433,7 @@ export default function FloatManagementPanel({ ownerId, isAdmin, embedded = fals
                       disabled={isSaving || !amountInput || parseFloat(amountInput) <= 0}
                       className="flex-1 rounded-lg bg-brand-primary hover:bg-brand-primary-light disabled:opacity-50 text-white text-xs font-bold py-2 transition-all cursor-pointer shadow-xs"
                     >
-                      Submit Request
+                      {isSaving ? 'Sending…' : 'Submit Request'}
                     </button>
                   </div>
                 </div>

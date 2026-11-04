@@ -98,6 +98,29 @@ export function outstandingByOwner(requests: FloatRequest[], loans: LoanRecord[]
   return Array.from(byOwner.values()).sort((a, b) => a.since.localeCompare(b.since));
 }
 
+/** How long a request blocks an identical one (same owner, same amount). */
+export const DUPLICATE_WINDOW_MINUTES = 10;
+
+/** The calendar day in Tanzania (UTC+3) of an ISO timestamp. */
+export const tanzaniaDay = (iso: string) => new Date(new Date(iso).getTime() + 3 * 3600_000).toISOString().slice(0, 10);
+
+/**
+ * An earlier request this one would repeat: same owner and amount, asked in
+ * the last few minutes and not rejected. Stops repeated taps / resends.
+ */
+export function recentDuplicate(requests: FloatRequest[], ownerId: string, amount: number, now: Date): FloatRequest | null {
+  const since = now.getTime() - DUPLICATE_WINDOW_MINUTES * 60_000;
+  return requests.find(r =>
+    r.ownerId === ownerId && r.requestedAmount === amount && r.status !== 'Rejected' && new Date(r.requestedAt).getTime() >= since,
+  ) ?? null;
+}
+
+/** The owner's other requests on the same Tanzania day (rejected ones left out), for the float manager's warning. */
+export function sameDayRequests(requests: FloatRequest[], r: FloatRequest): FloatRequest[] {
+  const day = tanzaniaDay(r.requestedAt);
+  return requests.filter(o => o.id !== r.id && o.ownerId === r.ownerId && o.status !== 'Rejected' && tanzaniaDay(o.requestedAt) === day);
+}
+
 /** The visible float-manager status for a request (one meaning per filter). */
 export type FloatViewStatus = 'Pending' | 'Not returned' | 'Returned' | 'Completed' | 'Loan' | 'Rejected';
 

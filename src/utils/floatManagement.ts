@@ -110,6 +110,10 @@ export const acceptLoanRepayment = (loanId: string, managerId: string, managerNa
 export const rejectLoanRepayment = (loanId: string, managerId: string, managerName: string) =>
   run({ type: 'rejectRepayment', loanId, managerId, managerName });
 
+/** Cancels a pending or confirmed (nothing returned yet) request that repeats another one. */
+export const cancelDuplicateRequest = (requestId: string, managerId: string, managerName: string, reason: string) =>
+  run({ type: 'cancelDuplicate', requestId, managerId, managerName, reason });
+
 /** Reminds every owner who owes anything. */
 export const remindAllToPay = (managerId: string, managerName: string) =>
   run({ type: 'remindAll', managerId, managerName });
