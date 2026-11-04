@@ -129,6 +129,8 @@ export interface FloatRequest {
   requestRejectionReason?: string;
   /** Last time a float manager reminded the owner to return this float. */
   reminder?: { byName: string; at: string };
+  /** Set when a float manager cancelled this request as a duplicate of another (status becomes Rejected). */
+  cancelledAsDuplicate?: { byName: string; at: string; reason: string };
 }
 
 export interface LoanRecord {

@@ -43,6 +43,16 @@ export const runFloatActionFn = createServerFn({ method: 'POST' })
     friendly(async () => {
       const { runFloatAction } = await import('./float.server');
       await runFloatAction(context.supabase as any, getAdminDb, await actorFor(context), data.action);
+      if (data.action.type === 'cancelDuplicate') {
+        const { appendAuditLog } = await import('./hasidadi/repo.server');
+        await appendAuditLog(context.supabase as any, {
+          userId: context.userId,
+          actorName: data.action.managerName,
+          action: 'FLOAT_CANCEL_DUPLICATE',
+          entity: 'float_requests',
+          details: { requestId: data.action.requestId, reason: data.action.reason },
+        }).catch(err => console.warn('[float] audit log not written', err));
+      }
       return { ok: true as const };
     }),
   );

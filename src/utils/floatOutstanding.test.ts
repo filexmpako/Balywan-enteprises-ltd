@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { floatViewStatus, loanBalance, outstandingByOwner } from './floatOutstanding';
+import { floatViewStatus, loanBalance, outstandingByOwner, recentDuplicate, sameDayRequests } from './floatOutstanding';
 import type { FloatRequest, LoanRecord } from '../types';
 
 const req = (o: Partial<FloatRequest>): FloatRequest => ({ id: 'r', ownerId: 'A', requestedAmount: 100, requestedAt: '2026-11-01', status: 'Confirmed', ...o });
@@ -38,4 +38,24 @@ test('confirmed loan repayments reduce what is still owed', () => {
 test('confirmed float shows as Not returned; loan wins over status', () => {
   assert.equal(floatViewStatus(req({})), 'Not returned');
   assert.equal(floatViewStatus(req({ status: 'Returned', loanId: 'L' })), 'Loan');
+});
+
+test('a repeat of the same request within 10 minutes is a duplicate', () => {
+  const first = req({ id: 'f', status: 'Pending', requestedAmount: 4_000_000, requestedAt: '2026-11-04T05:16:21Z' });
+  const now = new Date('2026-11-04T05:16:36Z');
+  assert.equal(recentDuplicate([first], 'A', 4_000_000, now)?.id, 'f');
+  assert.equal(recentDuplicate([first], 'A', 5_000_000, now), null);
+  assert.equal(recentDuplicate([first], 'B', 4_000_000, now), null);
+  assert.equal(recentDuplicate([{ ...first, status: 'Rejected' }], 'A', 4_000_000, now), null);
+  assert.equal(recentDuplicate([first], 'A', 4_000_000, new Date('2026-11-04T05:27:00Z')), null);
+});
+test("same-day requests use Tanzania's day and skip rejected ones", () => {
+  const r = req({ id: 'x', requestedAt: '2026-11-04T05:16:00Z' });
+  const others = [
+    req({ id: 'y', requestedAt: '2026-11-04T20:30:00Z' }), // 23:30 Tanzania, same day
+    req({ id: 'z', requestedAt: '2026-11-04T21:30:00Z' }), // 00:30 next day in Tanzania
+    req({ id: 'w', requestedAt: '2026-11-04T06:00:00Z', status: 'Rejected' }),
+    req({ id: 'v', ownerId: 'B', requestedAt: '2026-11-04T06:00:00Z' }),
+  ];
+  assert.deepEqual(sameDayRequests([r, ...others], r).map(o => o.id), ['y']);
 });

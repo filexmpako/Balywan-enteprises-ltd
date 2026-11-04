@@ -3,7 +3,7 @@ import { FLOAT_RETURN_CHANNELS, type FloatRequest, type FloatReturnEntry, type L
 import { fromRow, getMapper, toRow, type CollectionMapper } from './hasidadi/collections';
 import { loadCollection } from './hasidadi/repo.server';
 import { ensurePrivateBucket, ImageUploadError, parseImageDataUrl } from './storageImages.server';
-import { floatOwed, floatReturned, loanBalance, outstandingItems } from '../utils/floatOutstanding';
+import { DUPLICATE_WINDOW_MINUTES, floatOwed, floatReturned, loanBalance, outstandingItems, recentDuplicate } from '../utils/floatOutstanding';
 
 /**
  * Float requests and loans, written one record at a time.
@@ -36,6 +36,7 @@ export type FloatAction =
   | { type: 'create'; ownerId: string; amount: number }
   | { type: 'confirm'; requestId: string; managerId: string; managerName: string; sentAmount?: number }
   | { type: 'rejectRequest'; requestId: string; managerId: string; managerName: string; reason?: string }
+  | { type: 'cancelDuplicate'; requestId: string; managerId: string; managerName: string; reason: string }
   | { type: 'submitReturn'; requestId: string; entries: FloatReturnEntry[]; shortfallReason?: string }
   | { type: 'complete'; requestId: string; managerId: string; managerName: string }
   | { type: 'rejectReturn'; requestId: string; managerId: string; managerName: string }
@@ -49,6 +50,7 @@ export type FloatAction =
 const STAFF_ACTIONS = new Set<FloatAction['type']>([
   'confirm',
   'rejectRequest',
+  'cancelDuplicate',
   'complete',
   'rejectReturn',
   'approveLoan',
@@ -147,6 +149,15 @@ export async function runFloatAction(
       if (!(amount > 0)) throw new FloatActionError('Enter an amount greater than 0.');
       if (!ownsRecord(action.ownerId)) throw new FloatActionError('You can only request float for your own account.');
       // An outstanding balance does not stop a new request; the owner is reminded to pay instead.
+      // A repeat of the same request a few minutes later (double tap, resend) is refused.
+      const earlier = recentDuplicate(await loadOwnerRequests(userDb, action.ownerId), action.ownerId, amount, now);
+      if (earlier) {
+        const minutes = Math.max(1, Math.round((now.getTime() - new Date(earlier.requestedAt).getTime()) / 60_000));
+        throw new FloatActionError(
+          `You already requested TZS ${amount.toLocaleString()} ${minutes} minute(s) ago. It is ${earlier.status === 'Pending' ? 'waiting for the float manager' : 'already confirmed'}; ` +
+          `to ask for the same amount again, wait ${DUPLICATE_WINDOW_MINUTES} minutes.`,
+        );
+      }
       const request: FloatRequest = {
         id: newId('float'),
         ownerId: action.ownerId,
@@ -205,6 +216,25 @@ export async function runFloatAction(
         requestRejectedByManagerId: action.managerId,
         requestRejectedByManagerName: action.managerName,
         requestRejectionReason: action.reason?.trim() || undefined,
+      });
+      return;
+    }
+
+    case 'cancelDuplicate': {
+      // Removes a request that repeats another one. Allowed until the owner has returned anything.
+      const r = await readOne<FloatRequest>(userDb, FLOAT, action.requestId);
+      expectStatus(r.status, ['Pending', 'Confirmed'], 'request');
+      if (r.returnEntries?.length) throw new FloatActionError('The owner has already returned float on this request, so it cannot be cancelled.');
+      const reason = action.reason?.trim();
+      if (!reason) throw new FloatActionError('Say why this request is a duplicate.');
+      await writeOne(userDb, FLOAT, {
+        ...r,
+        status: 'Rejected',
+        requestRejectedAt: at,
+        requestRejectedByManagerId: action.managerId,
+        requestRejectedByManagerName: action.managerName,
+        requestRejectionReason: `Duplicate: ${reason}`,
+        cancelledAsDuplicate: { byName: action.managerName, at, reason },
       });
       return;
     }
