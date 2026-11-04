@@ -10,8 +10,8 @@ import { ownersList as initialOwners } from '../data';
 import OwnerSyncDashboard from './OwnerSyncDashboard';
 import DailyMgtMappingEngine from './DailyMgtMappingEngine';
 import { useReportingPeriod } from './ReportingPeriodContext';
-import { toIsoPeriod } from '../utils/periodUtils';
-import { parseIopReportRows } from '../utils/iopReport';
+import { formatPeriodDisplay, toIsoPeriod } from '../utils/periodUtils';
+import { packIopRow, parseIopReportRows, type IopReportRow } from '../utils/iopReport';
 import { uploadIopReport } from '../lib/iopReport.functions';
 import { IOP_REPORT_EVENT } from '../utils/iopReportClient';
 import { 
@@ -443,40 +443,21 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
     }
   };
 
-  /** Month-end IOP report: stored for the month picked above (re-uploading replaces it). */
-  const parseIopReportFile = async (data: any, fileName: string) => {
+  /**
+   * Month-end IOP report upload, shown step by step on the page (no pop-ups:
+   * installed phone apps can block them, which made the upload look dead).
+   */
+  type IopUpload =
+    | { step: 'saving'; fileName: string; month: string; rowCount: number }
+    | { step: 'chooseMonth'; fileName: string; rows: IopReportRow[]; fileMonth: string; pickedMonth: string }
+    | { step: 'done'; fileName: string; month: string; reward: number; rewardRows: number; clawback: number; clawbackRows: number }
+    | { step: 'error'; fileName: string; message: string; retry?: { rows: IopReportRow[]; month: string } };
+  const [iopUpload, setIopUpload] = useState<IopUpload | null>(null);
+
+  const saveIopReport = async (fileName: string, rows: IopReportRow[], month: string) => {
+    setIopUpload({ step: 'saving', fileName, month, rowCount: rows.length });
     try {
-      const workbook = XLSX.read(data, { type: 'array' });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = parseIopReportRows(XLSX.utils.sheet_to_json(sheet, { defval: '' }) as Record<string, unknown>[]);
-      if (!rows.length) {
-        alert('No REWARD or CLAWBACK rows were found in this file.');
-        setSelectedFile(null);
-        return;
-      }
-      const month = toIsoPeriod(uploadMonth);
-      // MAX_DATE (an Excel date number or text) names the month the bank closed.
-      const maxDates = (XLSX.utils.sheet_to_json(sheet, { defval: '', raw: true }) as Record<string, unknown>[])
-        .map(r => Object.entries(r).find(([k]) => k.replace(/[^a-z]/gi, '').toLowerCase() === 'maxdate')?.[1])
-        .filter(v => v !== undefined && v !== '');
-      const fileMonths = new Set(maxDates.map(v => {
-        if (typeof v === 'number') {
-          const d = XLSX.SSF.parse_date_code(v);
-          return d ? `${d.y}-${String(d.m).padStart(2, '0')}` : '';
-        }
-        return String(v).slice(0, 7);
-      }).filter(Boolean));
-      if (fileMonths.size && !fileMonths.has(month)) {
-        const ok = window.confirm(`This file's MAX_DATE is in ${Array.from(fileMonths).join(', ')}, but you picked ${uploadMonth}. Save it for ${uploadMonth} anyway?`);
-        if (!ok) {
-          setSelectedFile(null);
-          return;
-        }
-      }
-      const reward = rows.filter(r => r.status === 'REWARD');
-      const clawback = rows.filter(r => r.status === 'CLAWBACK');
-      const sum = (list: typeof rows) => list.reduce((s, r) => s + r.revisedAmount, 0);
-      await uploadIopReport({ data: { month, fileName, rows } });
+      await uploadIopReport({ data: { month, fileName, rows: rows.map(packIopRow) } });
       window.dispatchEvent(new Event(IOP_REPORT_EVENT));
       onAddAuditReport?.({
         id: `iop_report_${Date.now()}`,
@@ -488,14 +469,53 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
         status: 'Success',
         iopMonth: month,
       });
-      alert(
-        `IOP report saved for ${uploadMonth}.\n` +
-        `REWARD: ${reward.length} rows · TZS ${sum(reward).toLocaleString()}\n` +
-        `CLAWBACK: ${clawback.length} rows · TZS ${sum(clawback).toLocaleString()}`,
-      );
+      const total = (st: IopReportRow['status']) => rows.filter(r => r.status === st);
+      setIopUpload({
+        step: 'done', fileName, month,
+        reward: total('REWARD').reduce((sum, r) => sum + r.revisedAmount, 0), rewardRows: total('REWARD').length,
+        clawback: total('CLAWBACK').reduce((sum, r) => sum + r.revisedAmount, 0), clawbackRows: total('CLAWBACK').length,
+      });
     } catch (err) {
       console.error('IOP report upload failed:', err);
-      alert(`The IOP report could not be saved: ${err instanceof Error ? err.message : String(err)}`);
+      const message = err instanceof Error ? err.message : String(err);
+      setIopUpload({
+        step: 'error', fileName, retry: { rows, month },
+        message: /failed to fetch|network|load failed/i.test(message)
+          ? 'The connection dropped before the server answered. Check the internet connection and try again.'
+          : message,
+      });
+    }
+  };
+
+  const parseIopReportFile = async (data: any, fileName: string) => {
+    try {
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = parseIopReportRows(XLSX.utils.sheet_to_json(sheet, { defval: '' }) as Record<string, unknown>[]);
+      if (!rows.length) {
+        setIopUpload({ step: 'error', fileName, message: 'No REWARD or CLAWBACK rows were found in this file.' });
+        return;
+      }
+      const month = toIsoPeriod(uploadMonth);
+      // MAX_DATE (an Excel date number or text) names the month the bank closed.
+      const maxDates = (XLSX.utils.sheet_to_json(sheet, { defval: '', raw: true }) as Record<string, unknown>[])
+        .map(r => Object.entries(r).find(([k]) => k.replace(/[^a-z]/gi, '').toLowerCase() === 'maxdate')?.[1])
+        .filter(v => v !== undefined && v !== '');
+      const fileMonths = Array.from(new Set(maxDates.map(v => {
+        if (typeof v === 'number') {
+          const d = XLSX.SSF.parse_date_code(v);
+          return d ? `${d.y}-${String(d.m).padStart(2, '0')}` : '';
+        }
+        return String(v).slice(0, 7);
+      }).filter(m => /^\d{4}-\d{2}$/.test(m))));
+      if (fileMonths.length === 1 && fileMonths[0] !== month) {
+        setIopUpload({ step: 'chooseMonth', fileName, rows, fileMonth: fileMonths[0], pickedMonth: month });
+        return;
+      }
+      await saveIopReport(fileName, rows, month);
+    } catch (err) {
+      console.error('IOP report read failed:', err);
+      setIopUpload({ step: 'error', fileName, message: `The file could not be read: ${err instanceof Error ? err.message : String(err)}` });
     } finally {
       setSelectedFile(null);
     }
@@ -1346,6 +1366,8 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
     if (e.target.files && e.target.files[0]) {
       processSelectedFile(e.target.files[0]);
     }
+    // Cleared so picking the same file again (after a failed or cancelled upload) still works.
+    e.target.value = '';
   };
 
   const processSelectedFile = (file: File) => {
@@ -1455,6 +1477,7 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
       };
       reader.readAsArrayBuffer(file);
     } else if (reportType === 'iop_report') {
+      setIopUpload(null);
       const reader = new FileReader();
       reader.onload = (e) => {
         setUploadProgress(100);
@@ -1954,6 +1977,59 @@ export default function UploadReportsView({ onNavigate, onAddAuditReport }: Uplo
                       </>
                     )}
                   </div>
+
+                  {reportType === 'iop_report' && iopUpload && (
+                    <div
+                      role="status"
+                      className={`rounded-2xl border p-4 text-xs space-y-2 ${
+                        iopUpload.step === 'error' ? 'border-rose-300 bg-rose-50 text-rose-900'
+                          : iopUpload.step === 'done' ? 'border-emerald-300 bg-emerald-50 text-emerald-900'
+                          : 'border-amber-300 bg-amber-50 text-amber-900'
+                      }`}
+                    >
+                      <p className="font-bold break-all">{iopUpload.fileName}</p>
+                      {iopUpload.step === 'saving' && (
+                        <p className="flex items-center gap-2">
+                          <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-600 border-t-transparent" />
+                          Saving {iopUpload.rowCount.toLocaleString()} rows for {formatPeriodDisplay(iopUpload.month)}… keep this page open.
+                        </p>
+                      )}
+                      {iopUpload.step === 'chooseMonth' && (
+                        <>
+                          <p>
+                            This file's MAX_DATE is <b>{formatPeriodDisplay(iopUpload.fileMonth)}</b>, but the month picked above is{' '}
+                            <b>{formatPeriodDisplay(iopUpload.pickedMonth)}</b>. Which month is this report for?
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <button type="button" onClick={() => void saveIopReport(iopUpload.fileName, iopUpload.rows, iopUpload.fileMonth)} className="rounded-lg bg-brand-primary px-3 py-2 font-bold text-white cursor-pointer">
+                              Save for {formatPeriodDisplay(iopUpload.fileMonth)}
+                            </button>
+                            <button type="button" onClick={() => void saveIopReport(iopUpload.fileName, iopUpload.rows, iopUpload.pickedMonth)} className="rounded-lg border border-amber-400 bg-white px-3 py-2 font-bold text-amber-900 cursor-pointer">
+                              Save for {formatPeriodDisplay(iopUpload.pickedMonth)}
+                            </button>
+                            <button type="button" onClick={() => setIopUpload(null)} className="rounded-lg px-3 py-2 font-bold text-amber-800 cursor-pointer">Cancel</button>
+                          </div>
+                        </>
+                      )}
+                      {iopUpload.step === 'done' && (
+                        <>
+                          <p>Saved for <b>{formatPeriodDisplay(iopUpload.month)}</b>.</p>
+                          <p>REWARD: {iopUpload.rewardRows.toLocaleString()} rows · TZS {Math.round(iopUpload.reward).toLocaleString()}</p>
+                          <p>CLAWBACK: {iopUpload.clawbackRows.toLocaleString()} rows · TZS {Math.round(iopUpload.clawback).toLocaleString()}</p>
+                        </>
+                      )}
+                      {iopUpload.step === 'error' && (
+                        <>
+                          <p>The IOP report was not saved. {iopUpload.message}</p>
+                          {iopUpload.retry && (
+                            <button type="button" onClick={() => void saveIopReport(iopUpload.fileName, iopUpload.retry!.rows, iopUpload.retry!.month)} className="rounded-lg bg-rose-600 px-3 py-2 font-bold text-white cursor-pointer">
+                              Try again
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
 
                   {/* Uploading progress indicator */}
                   {isUploading && selectedFile && (
