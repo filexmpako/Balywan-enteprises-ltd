@@ -186,6 +186,153 @@ export type Database = {
           },
         ]
       }
+      cashier_daily_reports: {
+        Row: {
+          lines: Json
+          notes: string | null
+          personnel_id: string
+          report_date: string
+          report_id: string
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          submitted_at: string
+          submitted_by: string | null
+          total: number
+        }
+        Insert: {
+          lines?: Json
+          notes?: string | null
+          personnel_id: string
+          report_date: string
+          report_id?: string
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_at?: string
+          submitted_by?: string | null
+          total?: number
+        }
+        Update: {
+          lines?: Json
+          notes?: string | null
+          personnel_id?: string
+          report_date?: string
+          report_id?: string
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_at?: string
+          submitted_by?: string | null
+          total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cashier_daily_reports_personnel_id_fkey"
+            columns: ["personnel_id"]
+            isOneToOne: false
+            referencedRelation: "personnel"
+            referencedColumns: ["personnel_id"]
+          },
+        ]
+      }
+      cashier_expenses: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          description: string
+          expense_date: string
+          expense_id: string
+          kind: string
+          personnel_id: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          description: string
+          expense_date: string
+          expense_id?: string
+          kind?: string
+          personnel_id: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          expense_date?: string
+          expense_id?: string
+          kind?: string
+          personnel_id?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cashier_expenses_personnel_id_fkey"
+            columns: ["personnel_id"]
+            isOneToOne: false
+            referencedRelation: "personnel"
+            referencedColumns: ["personnel_id"]
+          },
+        ]
+      }
+      cashier_months: {
+        Row: {
+          capital: number
+          notes: string | null
+          period: string
+          personnel_id: string
+          returned_amount: number | null
+          returned_at: string | null
+          updated_at: string
+          updated_by: string | null
+          volume_target: number
+        }
+        Insert: {
+          capital?: number
+          notes?: string | null
+          period: string
+          personnel_id: string
+          returned_amount?: number | null
+          returned_at?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          volume_target?: number
+        }
+        Update: {
+          capital?: number
+          notes?: string | null
+          period?: string
+          personnel_id?: string
+          returned_amount?: number | null
+          returned_at?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          volume_target?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cashier_months_personnel_id_fkey"
+            columns: ["personnel_id"]
+            isOneToOne: false
+            referencedRelation: "personnel"
+            referencedColumns: ["personnel_id"]
+          },
+        ]
+      }
       classification_audit_records: {
         Row: {
           amount: number
@@ -1601,6 +1748,7 @@ export type Database = {
     }
     Functions: {
       current_owner_id: { Args: never; Returns: string }
+      current_personnel_id: { Args: never; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1608,12 +1756,13 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_cashier: { Args: { _user_id: string }; Returns: boolean }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
       owns_owner: { Args: { _owner_id: string }; Returns: boolean }
       resolve_login_email: { Args: { _username: string }; Returns: string }
     }
     Enums: {
-      app_role: "admin" | "float_manager" | "owner"
+      app_role: "admin" | "float_manager" | "owner" | "cashier"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1741,7 +1890,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "float_manager", "owner"],
+      app_role: ["admin", "float_manager", "owner", "cashier"],
     },
   },
 } as const
