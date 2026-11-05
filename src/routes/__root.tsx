@@ -132,6 +132,19 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
+  // Temporary maintenance lock: blocks every user, including admins.
+  const MAINTENANCE_LOCK = true;
+  if (MAINTENANCE_LOCK) {
+    return (
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-background p-6">
+        <div className="max-w-md rounded-xl border border-destructive bg-card p-8 text-center shadow-lg">
+          <h1 className="text-2xl font-bold text-destructive">Server down</h1>
+          <p className="mt-3 text-lg text-foreground">server down contact IT Support</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
