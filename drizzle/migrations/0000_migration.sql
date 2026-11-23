@@ -1,0 +1,1 @@
+DROP POLICY IF EXISTS "company snap read" ON public.company_performance_snapshots;
