@@ -58,6 +58,7 @@ import {
 } from 'lucide-react';
 import MetricCard from './MetricCard';
 import DailyMgtSummary from './DailyMgtSummary';
+import DataHealthCard from './DataHealthCard';
 import WeeklyReportTable from './WeeklyReportTable';
 import type { DetailFilter } from '../utils/weeklyReport';
 import {
@@ -637,6 +638,7 @@ export default function DashboardView({ onNavigate }: DashboardViewProps) {
             </div>
           </div>
 
+          <DataHealthCard period={currentPeriod} />
           <DailyMgtSummary classified={classifiedDaily} period={currentPeriod} periodLabel={displayPeriod} />
 
           {/* Monthly Goal Progress Card */}

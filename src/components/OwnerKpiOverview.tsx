@@ -107,12 +107,13 @@ export default function OwnerKpiOverview({ ownerId, ownerName, period, kpi1, reg
       if (r.is_served === true) served.add(k);
       if (r.is_active) active.add(k);
     });
-    let normalServed = 0, priorityServed = 0;
+    let normalServed = 0, priorityServed = 0, activeCount = 0;
     portfolio.wakalas.forEach(w => {
-      if (!served.has(normalizeMsisdn(w.msisdn) || w.msisdn)) return;
+      const k = normalizeMsisdn(w.msisdn) || w.msisdn;
+      if (active.has(k)) activeCount++;
+      if (!served.has(k)) return;
       if (w.isPriority) priorityServed++; else normalServed++;
     });
-    const activeCount = rows ? active.size : latest?.breakdown?.active ?? 0;
     return { normalServed, priorityServed, active: activeCount };
   }, [rows, portfolio, latest]);
 
@@ -125,6 +126,15 @@ export default function OwnerKpiOverview({ ownerId, ownerName, period, kpi1, reg
     activeBase: base, active: counts.active,
   });
   const name = ownerName.toUpperCase();
+  // Wait for both the owner's wakala list and the week's status rows, so a
+  // half-loaded list can't produce a different score on each visit.
+  if (latest && (rows === null || base === 0)) {
+    return (
+      <div className="rounded-2xl border border-brand-gray-border bg-brand-card p-5 font-sans text-xs text-brand-text-variant shadow-ambient">
+        Loading KPI overview…
+      </div>
+    );
+  }
   const totalTarget = kpi1.baseTarget + kpi1.iopTarget;
 
   return (

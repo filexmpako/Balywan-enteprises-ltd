@@ -153,6 +153,7 @@ export const fetchWakalaStatusHistory = createServerFn({ method: 'GET' })
         .from('wakala_status_history')
         .select('*')
         .order('reporting_week', { ascending: true })
+        .order('id', { ascending: true })
         .range(from, from + PAGE - 1);
       if (data?.reportingWeek) query = query.eq('reporting_week', data.reportingWeek);
       if (data?.reportingMonth) query = query.eq('reporting_month', data.reportingMonth);
