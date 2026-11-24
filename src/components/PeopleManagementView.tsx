@@ -723,14 +723,8 @@ export default function PeopleManagementView({
   const [personTitle, setPersonTitle] = useState('All');
 
   // Dynamic values derived from roleMappings
-  const mappedOwners = useMemo(() => {
-    return owners.filter(o => {
-      const titleClean = (o.title || '').trim();
-      const matchedKey = Object.keys(roleMappings).find(k => k.toLowerCase() === titleClean.toLowerCase());
-      const role = matchedKey ? roleMappings[matchedKey] : 'Personnel';
-      return role === 'Owner';
-    });
-  }, [owners, roleMappings]);
+  // Every record in the owners registry is an owner, whatever its title.
+  const mappedOwners = owners;
 
   const mappedPersonnel = useMemo(() => {
     return personnel.filter(p => {
